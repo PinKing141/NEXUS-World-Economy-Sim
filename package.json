@@ -1,0 +1,18 @@
+{
+  "name": "nexus-world-economy-sim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXUS World Economy Simulator (static prototype)",
+  "scripts": {
+    "dev": "http-server -c-1 -p 5173 .",
+    "build:names": "powershell -ExecutionPolicy Bypass -File scripts/build-name-pools.ps1",
+    "build:map": "powershell -ExecutionPolicy Bypass -File scripts/build-inline-world-map.ps1",
+    "build:assets": "npm run build:names && npm run build:map"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

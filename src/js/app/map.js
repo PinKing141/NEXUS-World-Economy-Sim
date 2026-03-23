@@ -289,14 +289,16 @@
     var tip = document.getElementById("map-tip");
     var bloc = App.store.getBlocByCountry(iso);
     var currency = App.utils.getCurrency(iso);
+    var countryFlag = App.utils.getCountryFlag(iso);
     var people = App.store.getCountryPeople(iso);
     var businesses = App.store.getCountryBusinesses(iso);
     var fxChange = bloc && bloc.prevRate ? ((bloc.rate - bloc.prevRate) / bloc.prevRate) * 100 : 0;
+    var countryLabel = countryFlag ? (countryFlag + " " + App.store.getCountryName(iso)) : App.store.getCountryName(iso);
 
     tip.style.display = "block";
     moveTip(event);
     tip.innerHTML = [
-      "<strong>" + App.store.getCountryName(iso) + "</strong>",
+      "<strong>" + countryLabel + "</strong>",
       bloc ? (bloc.flag + " " + bloc.name) : "Unassigned bloc",
       "Currency: <span style='color:var(--cyan)'>" + currency.sym + " " + currency.code + "</span>",
       "Citizens: " + people.length + " | Firms: " + businesses.length,

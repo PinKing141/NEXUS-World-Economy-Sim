@@ -441,6 +441,7 @@
       "<div class='brow'>Founder<span>" + renderPersonLink(founder) + "</span></div>",
       "<div class='brow'>Owner<span>" + renderPersonLink(owner) + "</span></div>",
       "<div class='brow'>CEO<span>" + renderPersonLink(ceo && ceo.person ? ceo.person : owner) + "</span></div>",
+      "<div class='brow'>Founded<span>" + App.utils.fmtDay(business.foundedDay != null ? business.foundedDay : App.store.simDay) + "</span></div>",
       "<div class='brow'>Succession Count<span>" + business.successionCount + "</span></div>",
       "</div>",
       "<div class='mc'><div class='mcl'>Revenue History</div><canvas id='rch' height='50'></canvas></div>",
@@ -451,11 +452,13 @@
   function renderPersonDetail(person){
     var el = document.getElementById("dc");
     var bloc = App.store.getBloc(person.blocId);
+    var countryFlag = App.utils.getCountryFlag(person.countryISO);
     var ownedBusiness = App.store.getBusiness(person.businessId);
     var business = App.store.getAssociatedBusiness(person);
     var employmentBusiness = App.store.getEmploymentBusiness ? App.store.getEmploymentBusiness(person) : null;
     var currency = App.utils.getCurrency(person.countryISO);
     var location = App.utils.locationLabel(person, false);
+    var birthDay = person.birthDay != null ? person.birthDay : App.store.simDay;
     var fxChange = bloc.prevRate ? ((bloc.rate - bloc.prevRate) / bloc.prevRate) * 100 : 0;
     var fxDir = fxChange >= 0 ? "d" : "u";
     var spouse = App.store.getSpouse(person);
@@ -474,7 +477,7 @@
 
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
-      "<div class='cflag'>" + bloc.flag + "</div>",
+      "<div class='cflag'>" + countryFlag + "</div>",
       "<div class='cinfo'>",
       "<div class='cname2' style='color:" + bloc.label + "'>" + location + "</div>",
       "<div class='cfx'>" + currency.sym + " " + currency.code + " - " + currency.name +
@@ -483,6 +486,7 @@
       "<div>",
       "<div class='dname'>" + person.name + "</div>",
       "<div class='dtitle'>" + notes.join(" - ") + "</div>",
+      "<div class='country-note'>Born: <strong>" + App.utils.fmtDay(birthDay) + "</strong></div>",
       (person.nativeDisplayName ? "<div class='country-note'>Other name: <strong>" + person.nativeDisplayName + "</strong></div>" : ""),
       (employmentBusiness && person.jobTitle ? "<div class='country-note'>Current role: <strong>" + person.jobTitle + "</strong> at " + renderBusinessLink(employmentBusiness) + ".</div>" : ""),
       "<div class='prbadges detail-badges'>" + renderBadgeRow(App.utils.getPersonRoles(person), "rbadge") + "</div>",
@@ -521,6 +525,7 @@
   function renderBusinessDetail(business){
     var el = document.getElementById("dc");
     var bloc = App.store.getBloc(business.blocId);
+    var countryFlag = App.utils.getCountryFlag(business.countryISO);
     var currency = App.utils.getCurrency(business.countryISO);
     var founder = App.store.getPerson(business.founderId);
     var owner = App.store.getPerson(business.ownerId);
@@ -530,7 +535,7 @@
 
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
-      "<div class='cflag'>" + bloc.flag + "</div>",
+      "<div class='cflag'>" + countryFlag + "</div>",
       "<div class='cinfo'>",
       "<div class='cname2' style='color:" + bloc.label + "'>" + App.store.getCountryName(business.countryISO) + "</div>",
       "<div class='cfx'>" + currency.sym + " " + currency.code + " - " + currency.name + " - " + business.industry + "</div>",
@@ -543,6 +548,7 @@
         "detail",
         "brand-lockup-hero"
       ),
+      "<div class='country-note'>Founded: <strong>" + App.utils.fmtDay(business.foundedDay != null ? business.foundedDay : App.store.simDay) + "</strong></div>",
       "<div class='sg sg3'>",
       "<div class='sbox'><div class='sl'>Revenue</div><div class='sv b'>" + App.utils.fmtCountry(business.revenueGU, business.countryISO) + "</div></div>",
       "<div class='sbox'><div class='sl'>Profit</div><div class='sv " + (business.profitGU >= 0 ? "g" : "r") + "'>" + App.utils.fmtCountry(business.profitGU, business.countryISO) + "</div></div>",
@@ -587,6 +593,7 @@
   function renderCountryDetail(iso){
     var el = document.getElementById("dc");
     var bloc = App.store.getBlocByCountry(iso);
+    var countryFlag = App.utils.getCountryFlag(iso);
     var currency = App.utils.getCurrency(iso);
     var people = App.store.getCountryPeople(iso);
     var publicPeople = App.store.getPublicCountryPeople(iso);
@@ -623,7 +630,7 @@
 
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
-      "<div class='cflag'>" + bloc.flag + "</div>",
+      "<div class='cflag'>" + countryFlag + "</div>",
       "<div class='cinfo'>",
       "<div class='cname2' style='color:" + bloc.label + "'>" + App.store.getCountryName(iso) + "</div>",
       "<div class='cfx'>" + iso + " - " + currency.sym + " " + currency.code + " - " + currency.name + "</div>",
@@ -693,7 +700,7 @@
     document.getElementById("fv").textContent = App.store.businesses.length;
     document.getElementById("pv").textContent = App.store.getLivingCount();
     document.getElementById("ct").textContent = App.utils.fmtDay(App.store.simDay);
-    document.getElementById("cy").textContent = "DAY " + App.store.simDay;
+    document.getElementById("cy").textContent = App.utils.fmtYear(App.store.simDay);
   }
 
   function updateFxBar(){

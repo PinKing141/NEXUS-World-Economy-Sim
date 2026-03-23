@@ -108,6 +108,14 @@
     return usMapData.state_specific[code] && usMapData.state_specific[code].hide !== "yes";
   });
   var MAP_VIEWBOX = { width:1000, height:507.209 };
+  var CALENDAR = {
+    startYear:2026,
+    startMonthIndex:0,
+    startDay:1,
+    daysPerMonth:30,
+    daysPerYear:360,
+    monthNames:["January","February","March","April","May","June","July","August","September","October","November","December"]
+  };
 
   var BLOCS_TEMPLATE = [
     {id:"NA",name:"North America",flag:"🇺🇸",currency:"USD",symbol:"$",baseRate:1.0,rate:1.0,prevRate:1.0,color:"#1e3a5f",label:"#4a9edd",
@@ -115,9 +123,9 @@
     {id:"SA",name:"South America",flag:"🇧🇷",currency:"BRL",symbol:"R$",baseRate:5.0,rate:5.0,prevRate:5.0,color:"#1f2a0f",label:"#8bc34a",
       members:["BR","AR","CO","VE","CL","PE","EC","BO","PY","UY","GY","SR"]},
     {id:"EU",name:"Europe",flag:"🇪🇺",currency:"EUR",symbol:"€",baseRate:0.92,rate:0.92,prevRate:0.92,color:"#0f2a1a",label:"#4caf50",
-      members:["DE","FR","GB","IT","ES","PL","RO","NL","BE","CZ","GR","PT","SE","HU","AT","CH","BY","UA","RS","BG","DK","FI","SK","NO","HR","MD","BA","AL","LT","SI","MK","LV","EE","LU","ME","IS","IE","CY","GE","AM","AD","MT","SM","VA","LI","MC","XK","FO","AX","SJ","GI","IM","JE","GG"]},
+      members:["DE","FR","GB","IT","ES","PL","RO","NL","BE","CZ","GR","PT","SE","HU","AT","CH","BY","UA","RS","BG","TR","DK","FI","SK","NO","HR","MD","BA","AL","LT","SI","MK","LV","EE","LU","ME","IS","IE","CY","GE","AM","AD","MT","SM","VA","LI","MC","XK","FO","AX","SJ","GI","IM","JE","GG"]},
     {id:"AF",name:"Africa & M.East",flag:"🇳🇬",currency:"NGN",symbol:"₦",baseRate:1580,rate:1580,prevRate:1580,color:"#1a2208",label:"#cddc39",
-      members:["NG","ZA","EG","ET","KE","GH","TZ","UG","RW","SN","CI","CM","ML","BF","NE","TD","SD","SS","SO","MZ","ZM","ZW","MW","MG","AO","GA","CG","CD","CF","GN","SL","LR","GM","GW","BJ","TG","GQ","ER","DJ","BW","NA","LS","SZ","MA","DZ","TN","LY","EH","SA","AE","IQ","IR","SY","YE","OM","JO","IL","PS","LB","KW","QA","PK","AF","AZ","KM","MU","SC","RE","YT","SH","ST","CV"]},
+      members:["NG","ZA","EG","ET","KE","GH","TZ","UG","RW","SN","CI","CM","ML","BF","NE","TD","SD","SS","SO","MZ","ZM","ZW","MW","MG","AO","GA","CG","CD","CF","GN","SL","LR","GM","GW","BJ","TG","GQ","ER","DJ","BW","NA","LS","SZ","MA","DZ","TN","LY","EH","MR","SA","AE","IQ","IR","SY","YE","OM","JO","IL","PS","LB","KW","QA","PK","AF","AZ","KM","MU","SC","RE","YT","SH","ST","CV"]},
     {id:"AS",name:"Asia-Pacific",flag:"🇨🇳",currency:"CNY",symbol:"¥",baseRate:7.1,rate:7.1,prevRate:7.1,color:"#2a0f0f",label:"#ef5350",
       members:["CN","JP","KR","IN","ID","PH","VN","TH","MY","BD","NP","LK","BT","MM","KH","LA","TW","KP","MN","AU","NZ","PG","FJ","SB","VU","WS","TO","KI","TV","NR","PW","FM","MH","GU","AS","CK","NU","TK","PN","WF","NC","PF","CX","CC","HK","MO","SG","BN","TL","MP","UM","MV"]},
     {id:"RU",name:"Russia & C.Asia",flag:"🇷🇺",currency:"RUB",symbol:"₽",baseRate:88,rate:88,prevRate:88,color:"#1a0f2a",label:"#ab47bc",
@@ -231,6 +239,7 @@
     US_STATE_NAMES:US_STATE_NAMES,
     US_STATE_CODES:US_STATE_CODES,
     MAP_VIEWBOX:MAP_VIEWBOX,
+    CALENDAR:CALENDAR,
     INDUSTRIES:INDUSTRIES,
     TRAITS:TRAITS,
     BIZ_SFX:BIZ_SFX,

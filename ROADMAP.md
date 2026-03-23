@@ -11,6 +11,16 @@ Everything below is aimed at making outcomes emerge from systems rather than pla
 - [ ] Reduce "pure randomness" over time. More events should emerge from conditions, incentives, and relationships.
 - [ ] Connect all major layers: people -> households -> firms -> industries -> countries -> blocs -> world events.
 - [ ] Make history persistent. The world should feel like it remembers what happened.
+- [ ] Define a clear "feels alive" finish line so depth does not outpace observability.
+
+## Minimum Viable World Definition
+
+Lock this before adding more economic depth. The sim should pass this loop test:
+
+- [ ] Pick one person at birth and follow them through education, work, relationships, business outcomes, family, aging, and death.
+- [ ] The life should feel causally explainable in the inspector and timeline, not random noise.
+- [ ] Cross-generational continuity should be visible (heirs, sibling divergence, estate outcomes, family status shifts).
+- [ ] Macro conditions should visibly affect this person's path (employment, migration pressure, war or crisis, opportunity windows).
 
 ## Start Here
 
@@ -26,6 +36,26 @@ These are the highest-impact additions because they connect systems that current
   - Add personality dimensions beyond traits: risk tolerance, greed, patience, discipline, loyalty, status-seeking, family attachment, adaptability, ethics.
   - Add temporary states: grief, burnout, confidence, stress, illness, resentment, ambition spikes.
   - Business v1 now uses those variables for succession, hiring, layoffs, expansion posture, cash preservation, and scandal response.
+- [ ] Trait mechanical pass (before Build 1)
+  - Ensure every existing trait already in the sim has at least two measurable gameplay effects before adding new traits.
+  - Cover currently underwired traits in business outcomes, social mobility, deal access, and family outcomes.
+  - Add simple explainability tags so trait impact is visible in decision/event reasoning.
+- [ ] Build 0 foundation: versioned save schema and migrations
+  - Introduce snapshot schema versioning immediately, before more model fields land.
+  - Add migration hooks so person, business, bloc, and country data can evolve safely across builds.
+  - Keep replay, scenario presets, and long-run saves compatible as systems expand.
+- [ ] Global population layer (two-tier model, priority bridge system)
+  - Add per-country anonymous `PopProfile` state under named citizens.
+  - Track: population, labor force, employed, unemployment, median wage, consumer demand, birth rate, death rate, net migration, inequality, education index, institution score.
+  - Make named citizens and company headcount draw from and return to country labor pools.
+  - Ground local-market business ceilings in country demand and globally-oriented sectors in bloc demand.
+  - Implement in phases:
+    - Phase 1: population, employed, consumer demand, workforce wiring.
+    - Phase 2: birth and death pressure tied to conditions.
+    - Phase 3: migration pressure and talent drift.
+    - Phase 4: inequality feedback into social pressure and institutional drift.
+- [ ] Event significance schema (design now, implement with observational tools)
+  - Define significance weighting and narrative pacing rules now so event noise does not bury meaningful moments.
 - [ ] Household economy
   - Track wages, spending, savings, debt, housing cost, childcare burden, and inheritance pressure.
   - Let household finances shape life outcomes, not just founder net worth.
@@ -35,10 +65,24 @@ These are the highest-impact additions because they connect systems that current
   - Let wealthy families and strong institutions improve access to education.
   - Let education influence employability, leadership potential, and founder odds.
 
+## Build Design Gates (Required Before Each Build)
+
+- [ ] Explicit feedback-loop design brief
+  - For each build, define at least one upward loop (micro -> macro) and one downward loop (macro -> micro).
+  - Example upward loop: unemployment spike -> weaker demand -> firm stress -> lower GDP and currency pressure.
+  - Example downward loop: currency shock -> import costs -> household stress -> fertility/migration shifts.
+- [ ] Stability and failure-mode checklist
+  - Define degenerate-state risks for each build and mitigation knobs before implementation.
+  - Require soft governors rather than hard resets when the world drifts toward collapse or stagnation.
+
 ## Tier 1 - Deepen Existing Systems
 
 These extend what already exists in the sim and should feel natural immediately.
 
+- [ ] Simulation health governors
+  - Detect stagnation and collapse patterns: no new launches, empty business ecosystems, aging lock, currency convergence, prolonged unemployment traps.
+  - Apply gentle corrective pressure: seeded entrepreneurs, temporary capital easing, migration relief, hiring incentives, or calibrated arrival boosts.
+  - Log every governor intervention for observability and balancing.
 - [ ] Inheritance disputes
   - If multiple children are viable heirs and no clear successor exists, trigger disputes.
   - Model favoritism, eldest-child bias, competence bias, and sibling rivalry.
@@ -163,6 +207,10 @@ These extend what already exists in the sim and should feel natural immediately.
 
 - [ ] Use country population data for weighting
   - Replace hardcoded country importance where appropriate with population- and institution-aware weights.
+- [ ] Population pressure model (Build 1-2 priority, not late-tier only)
+  - Add per-country population pressure that rises with growth/opportunity and falls with conflict/instability.
+  - Wire pressure directly into arrival frequency, fertility behavior, and migration intensity.
+  - Make visible demographic shifts emerge from world conditions rather than fixed caps.
 - [ ] Add country development profiles
   - Track education quality, corruption, infrastructure, labor cost, social mobility, fertility norms, and business friendliness.
 - [ ] Institutional quality
@@ -224,6 +272,10 @@ These extend what already exists in the sim and should feel natural immediately.
 
 These are crucial because the user is watching, not controlling.
 
+- [ ] Event significance weighting and narrative pacing
+  - Score events by impact, rarity, legacy depth, and cross-generational consequence.
+  - Give major events differentiated presentation (priority placement, pause-worthy styling, stronger context).
+  - Keep routine events visible without crowding out structural and dynasty-defining moments.
 - [ ] Family tree viewer
   - Visual lineage browser for parents, spouses, children, grandchildren, heirs, and branch splits.
 - [ ] Historical timeline
@@ -256,6 +308,7 @@ These are crucial because the user is watching, not controlling.
 
 - [ ] Simulation save and load
   - Preserve long-running worlds.
+  - Build this on top of the Build 0 versioned schema and migration path.
 - [ ] Deterministic seeds
   - Same seed should reproduce the same broad history for debugging and comparison.
 - [ ] Scenario presets
@@ -276,8 +329,8 @@ These are crucial because the user is watching, not controlling.
   - View hidden values like stress, education, reputation, leverage, and institutional quality.
 - [ ] Profiling and scale testing
   - Make sure deeper systems still run well with much larger populations.
-- [ ] Serialization format
-  - Design a stable save schema before systems explode in complexity.
+- [ ] Save compatibility and migration audits
+  - Validate schema migrations against old snapshots and replay data as models evolve.
 - [ ] Tests for simulation invariants
   - No duplicate family links.
   - No impossible ages.
@@ -290,21 +343,25 @@ These are crucial because the user is watching, not controlling.
 
 If you want a realistic implementation order, build in this sequence:
 
-- [ ] Build 1: Corporate ladders + unemployment + wages + hiring
-- [ ] Build 2: Education + skills + worker-to-founder pipeline
-- [ ] Build 3: Household budgets + class mobility + fertility pressure
-- [ ] Build 4: Inheritance disputes + family politics + personal reputation
+- [ ] Build 0: Versioned save schema + migration hooks + snapshot compatibility baseline
+- [ ] Build 1: Trait mechanical pass + simulation health governors + population layer phase 1 + unemployment + wages + hiring
+- [ ] Build 2: Education + skills + worker-to-founder pipeline + population layer phase 2 (birth and death pressure)
+- [ ] Build 3: Household budgets + class mobility + fertility pressure + population layer phase 3 (migration pressure)
+- [ ] Build 4: Inheritance disputes + family politics + personal reputation + population layer phase 4 (inequality feedback)
 - [ ] Build 5: Company reputation + industry-specific behavior
 - [ ] Build 6: Supply chains + debt + credit + bankruptcy stages
 - [ ] Build 7: Central banks + inflation + rates + housing sensitivity
 - [ ] Build 8: Stock market + outside investors + M&A
 - [ ] Build 9: Country institutions + migration + regional detail
 - [ ] Build 10: Elections + sanctions + wars + treaty outcomes
-- [ ] Build 11: Explainability layer + family tree + timeline + follow modes
-- [ ] Build 12: Save/load + seeds + replay + scenario presets
+- [ ] Build 11: Explainability layer + family tree + timeline + follow modes + event significance weighting
+- [ ] Build 12: Save/load UX + deterministic seeds + replay + scenario presets
 
-## Most Important Single Addition
+## Most Important Next Addition
 
+- [ ] Global population layer (anonymous population beneath named citizens)
+  - This is the core bridge between 120 named citizens and country/bloc-scale economics.
+  - It turns business headcount, demand, migration, and demographic change into real world-level consequences.
+  - It makes named citizens the visible top layer of a much deeper simulated world.
 - [x] Corporate ladders (v1 leadership roster shipped)
-  - This first pass closes the gap between people and firms by making named leaders part of the citizen simulation.
-  - A later pass can deepen this further by converting the wider employee base into fully simulated workers.
+  - This remains a prerequisite bridge between people and firms that the population layer should build on.

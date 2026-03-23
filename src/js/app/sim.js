@@ -1,6 +1,6 @@
 (function(global){
   var App = global.Nexus || (global.Nexus = {});
-  var YEAR_DAYS = 360;
+  var YEAR_DAYS = (App.data && App.data.CALENDAR && App.data.CALENDAR.daysPerYear) ? App.data.CALENDAR.daysPerYear : 360;
   var lastFrameTime = performance.now();
   var ENTREPRENEURIAL_TRAITS = {
     Ambitious:true,
@@ -703,6 +703,7 @@
       currentDecision:null,
       decisionHistory:[],
       stage:"startup",
+      foundedDay:App.store.simDay,
       age:0,
       successionCount:0,
       inheritedAtDay:null,

@@ -17,8 +17,49 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function simDayToDate(day){
+    var calendar = (App.data && App.data.CALENDAR) ? App.data.CALENDAR : null;
+    if (!calendar) {
+      return { year:0, monthIndex:0, day:1, monthName:"January" };
+    }
+
+    var daysPerYear = calendar.daysPerYear || 360;
+    var daysPerMonth = calendar.daysPerMonth || 30;
+    var monthNames = calendar.monthNames || [];
+    var startYear = calendar.startYear || 0;
+    var startMonth = calendar.startMonthIndex || 0;
+    var startDay = calendar.startDay || 1;
+
+    var totalDays = Math.floor(day || 0) + (startDay - 1) + (startMonth * daysPerMonth);
+    var yearOffset = Math.floor(totalDays / daysPerYear);
+    var year = startYear + yearOffset;
+    var dayOfYear = totalDays - (yearOffset * daysPerYear);
+
+    if (dayOfYear < 0) {
+      dayOfYear += daysPerYear;
+      year -= 1;
+    }
+
+    var monthIndex = Math.floor(dayOfYear / daysPerMonth);
+    var dayOfMonth = (dayOfYear % daysPerMonth) + 1;
+    var monthName = monthNames[monthIndex] || ("Month " + (monthIndex + 1));
+
+    return {
+      year:year,
+      monthIndex:monthIndex,
+      day:dayOfMonth,
+      monthName:monthName
+    };
+  }
+
   function fmtDay(day){
-    return "Y" + (Math.floor(day / 360) + 1) + " Q" + (Math.floor((day % 360) / 90) + 1);
+    var date = simDayToDate(day);
+    return date.day + " " + date.monthName + " " + date.year;
+  }
+
+  function fmtYear(day){
+    var date = simDayToDate(day);
+    return "Year " + date.year;
   }
 
   function blendHex(first, second, ratio){
@@ -47,6 +88,17 @@
 
   function getCurrency(iso){
     return App.data.CURRENCY_MAP[iso] || { code:"USD", name:"USD", sym:"$" };
+  }
+
+  function getCountryFlag(iso){
+    if (!iso || typeof iso !== "string") return "";
+    var code = iso.trim().toUpperCase();
+    if (code === "UK") code = "GB";
+    if (code.length !== 2) return "";
+    var first = code.charCodeAt(0) - 65;
+    var second = code.charCodeAt(1) - 65;
+    if (first < 0 || first > 25 || second < 0 || second > 25) return "";
+    return String.fromCodePoint(0x1F1E6 + first, 0x1F1E6 + second);
   }
 
   function compactMoney(value, prefix){
@@ -170,9 +222,12 @@
     pick:pick,
     clamp:clamp,
     fmtDay:fmtDay,
+    fmtYear:fmtYear,
+    simDayToDate:simDayToDate,
     blendHex:blendHex,
     latLngToSVG:latLngToSVG,
     getCurrency:getCurrency,
+    getCountryFlag:getCountryFlag,
     fmtCountry:fmtCountry,
     fmtUSD:fmtUSD,
     fmtL:fmtL,

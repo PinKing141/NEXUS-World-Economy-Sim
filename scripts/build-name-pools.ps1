@@ -1,5 +1,6 @@
 param(
   [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+  [string]$RequirementsPath = (Join-Path $Root "requirements\\data"),
   [int]$TopForenames = 36,
   [int]$TopSurnames = 48
 )
@@ -57,15 +58,15 @@ public static class NexusNameDataBuilder
     private static readonly Dictionary<string, BucketCollector> SurnameBuckets =
         new Dictionary<string, BucketCollector>(StringComparer.OrdinalIgnoreCase);
 
-    public static int Build(string root, int topForenames, int topSurnames)
+    public static int Build(string root, string requirementsPath, int topForenames, int topSurnames)
     {
         ValidCountries.Clear();
         ForenameBuckets.Clear();
         SurnameBuckets.Clear();
 
-        string countryCodesPath = Path.Combine(root, "country_codes.csv");
-        string forenamesPath = Path.Combine(root, "forenames.csv");
-        string surnamesPath = Path.Combine(root, "surnames.csv");
+        string countryCodesPath = ResolveInputPath(requirementsPath, root, "country_codes.csv");
+        string forenamesPath = ResolveInputPath(requirementsPath, root, "forenames.csv");
+        string surnamesPath = ResolveInputPath(requirementsPath, root, "surnames.csv");
         string outputPath = Path.Combine(root, "src", "js", "app", "name-data.js");
 
         LoadCountryCodes(countryCodesPath);
@@ -84,6 +85,31 @@ public static class NexusNameDataBuilder
             bool hasSurname = surname != null && surname.Entries.Count > 0;
             return hasMale || hasFemale || hasSurname;
         });
+    }
+
+    private static string ResolveInputPath(string requirementsPath, string root, string fileName)
+    {
+        string normalizedRequirements = string.IsNullOrWhiteSpace(requirementsPath) ? string.Empty : requirementsPath;
+        if (!string.IsNullOrWhiteSpace(normalizedRequirements))
+        {
+            string preferred = Path.Combine(normalizedRequirements, fileName);
+            if (File.Exists(preferred))
+            {
+                return preferred;
+            }
+        }
+
+        string fallback = Path.Combine(root, fileName);
+        if (File.Exists(fallback))
+        {
+            return fallback;
+        }
+
+        throw new FileNotFoundException(
+            "Missing required CSV '" + fileName + "'. Place it in '" +
+            (string.IsNullOrWhiteSpace(normalizedRequirements) ? "(requirements not set)" : normalizedRequirements) +
+            "' or '" + root + "'.",
+            fileName);
     }
 
     private static void LoadCountryCodes(string path)
@@ -394,5 +420,5 @@ public static class NexusNameDataBuilder
 }
 "@
 
-$poolCount = [NexusNameDataBuilder]::Build($Root, $TopForenames, $TopSurnames)
+$poolCount = [NexusNameDataBuilder]::Build($Root, $RequirementsPath, $TopForenames, $TopSurnames)
 Write-Host ("Wrote {0} country pools to {1}" -f $poolCount, (Join-Path $Root "src\\js\\app\\name-data.js"))
