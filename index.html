@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS - World Economy Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/styles/app.css">
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">NEXUS <span>WORLD</span></div>
+  <div id="ticker-wrap"><div id="ticker-inner"></div></div>
+  <div id="macros">GDP <span class="v" id="gv">-</span> | FIRMS <span class="v" id="fv">0</span> | PEOPLE <span class="v" id="pv">0</span></div>
+  <div id="clock"><div id="ct">Y1 Q1</div><div class="yr" id="cy">DAY 0</div></div>
+</div>
+<div id="fxbar"></div>
+
+<div id="layout">
+  <div id="middle">
+    <div class="panel">
+      <div class="ph">CITIZENS <div class="dot" style="background:var(--amber)"></div></div>
+      <div id="plist"></div>
+    </div>
+
+    <div class="panel" id="map-panel">
+      <div id="map-header">
+        WORLD MAP | SCROLL TO ZOOM | DRAG TO PAN
+        <div class="dot" style="background:var(--cyan)"></div>
+      </div>
+      <div id="map-container" role="img" aria-label="World map"></div>
+      <div id="map-tip"></div>
+      <div id="map-legend"></div>
+      <div id="zoom-ctrl">
+        <button class="zb" id="zin" title="Zoom in">+</button>
+        <button class="zb" id="zreset" title="Reset">R</button>
+        <button class="zb" id="zout" title="Zoom out">-</button>
+      </div>
+      <div id="spd-ctrl">
+        <button class="sb act" data-speed="1">1x</button>
+        <button class="sb" data-speed="2">2x</button>
+        <button class="sb" data-speed="4">4x</button>
+      </div>
+    </div>
+
+    <div class="panel" id="dpanel">
+      <div class="ph">INSPECTOR <div class="dot" style="background:var(--green)"></div></div>
+      <div id="dc">
+        <div class="empty"><div class="big">O</div><div>Click any citizen<br>or country to inspect</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom">
+    <div class="panel" id="news-panel">
+      <div class="ph">LIVE FEED - GEOPOLITICAL & MARKET EVENTS <div class="dot" style="background:var(--red)"></div></div>
+      <div id="ns"></div>
+    </div>
+    <div class="panel">
+      <div id="ctabs"></div>
+      <canvas id="econ-canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script src="./src/svg-pan-zoom.min.js" defer></script>
+<script src="./src/js/app/us-state-map-data.js" defer></script>
+<script src="./src/js/app/name-data.js" defer></script>
+<script src="./src/js/app/world-map-inline.js" defer></script>
+<script src="./src/js/app/data.js" defer></script>
+<script src="./src/js/app/utils.js" defer></script>
+<script src="./src/js/app/state.js" defer></script>
+<script src="./src/js/app/map.js" defer></script>
+<script src="./src/js/app/ui.js" defer></script>
+<script src="./src/js/app/sim.js" defer></script>
+<script src="./src/js/main.js" defer></script>
+</body>
+</html>
