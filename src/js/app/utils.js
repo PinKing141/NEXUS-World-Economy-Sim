@@ -103,15 +103,34 @@
 
   function compactMoney(value, prefix){
     var negative = value < 0;
-    var abs = Math.abs(value);
+    var abs = Math.abs(Number(value) || 0);
     var formatted;
+    var suffixes = [
+      { value:1e24, suffix:"Sp" },
+      { value:1e21, suffix:"Sx" },
+      { value:1e18, suffix:"Qi" },
+      { value:1e15, suffix:"Qa" },
+      { value:1e12, suffix:"T" },
+      { value:1e9, suffix:"B" },
+      { value:1e6, suffix:"M" },
+      { value:1e3, suffix:"K" }
+    ];
+    var entry;
 
-    if (abs >= 1e12) formatted = (abs / 1e12).toFixed(1) + "T";
-    else if (abs >= 1e9) formatted = (abs / 1e9).toFixed(1) + "B";
-    else if (abs >= 1e6) formatted = (abs / 1e6).toFixed(1) + "M";
-    else if (abs >= 1e3) formatted = (abs / 1e3).toFixed(0) + "K";
-    else formatted = abs.toFixed(0);
+    if (!Number.isFinite(abs)) {
+      return (negative ? "-" : "") + prefix + "0";
+    }
 
+    for (var i = 0; i < suffixes.length; i += 1) {
+      entry = suffixes[i];
+      if (abs >= entry.value) {
+        formatted = (abs / entry.value).toFixed(abs >= entry.value * 10 ? 1 : 2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") + entry.suffix;
+        return (negative ? "-" : "") + prefix + formatted;
+      }
+    }
+
+    formatted = abs >= 100 ? abs.toFixed(0) : abs.toFixed(abs >= 10 ? 1 : 2);
+    formatted = formatted.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
     return (negative ? "-" : "") + prefix + formatted;
   }
 

@@ -5,8 +5,14 @@
     blocs: [],
     isoToBloc: {},
     people: [],
+    households: [],
     businesses: [],
     newsItems: [],
+    eventHistory: [],
+    eventWindowStats: {},
+    eventSeq: 0,
+    pauseReasonEventId: null,
+    traitEffectStats: {},
     econHist: {},
     tickerData: {},
     selectedBlocId: "NA",
@@ -15,6 +21,8 @@
     simDay: 0,
     accumulator: 0,
     countryNames: {},
+    countryData: {},
+    countryProfiles: {},
     mapObject: null,
     mapSvg: null,
     mapDocument: null,
@@ -72,8 +80,14 @@
     store.blocs = App.data.createBlocs();
     store.isoToBloc = {};
     store.people = [];
+    store.households = [];
     store.businesses = [];
     store.newsItems = [];
+    store.eventHistory = [];
+    store.eventWindowStats = {};
+    store.eventSeq = 0;
+    store.pauseReasonEventId = null;
+    store.traitEffectStats = {};
     store.econHist = {};
     store.tickerData = {};
     store.selectedBlocId = "NA";
@@ -82,6 +96,8 @@
     store.simDay = 0;
     store.accumulator = 0;
     store.countryNames = {};
+    store.countryData = {};
+    store.countryProfiles = {};
     store.mapObject = null;
     store.mapSvg = null;
     store.mapDocument = null;
@@ -143,6 +159,41 @@
     return store.businesses.find(function(business){ return business.id === id; }) || null;
   };
 
+  store.getHousehold = function(id){
+    return store.households.find(function(household){
+      return household && household.id === id;
+    }) || null;
+  };
+
+  store.getPersonHousehold = function(personOrId){
+    var person = typeof personOrId === "string" ? store.getPerson(personOrId) : personOrId;
+    if (!person || !person.householdId) return null;
+    return store.getHousehold(person.householdId);
+  };
+
+  store.getHouseholdAdults = function(household){
+    var target = typeof household === "string" ? store.getHousehold(household) : household;
+    if (!target || !Array.isArray(target.adultIds)) return [];
+    return target.adultIds.map(function(id){
+      return store.getPerson(id);
+    }).filter(Boolean);
+  };
+
+  store.getHouseholdChildren = function(household){
+    var target = typeof household === "string" ? store.getHousehold(household) : household;
+    if (!target || !Array.isArray(target.childIds)) return [];
+    return target.childIds.map(function(id){
+      return store.getPerson(id);
+    }).filter(Boolean);
+  };
+
+  store.syncHouseholds = function(){
+    if (App.sim && typeof App.sim.syncHouseholds === "function") {
+      return App.sim.syncHouseholds();
+    }
+    return store.households || [];
+  };
+
   store.getBusinessLeadership = function(business){
     var target = typeof business === "string" ? store.getBusiness(business) : business;
 
@@ -192,6 +243,32 @@
     return store.countryNames[iso] || iso;
   };
 
+  store.setCountryData = function(iso, data){
+    if (!iso) return;
+    store.countryData[iso] = Object.assign({ iso:iso }, data || {});
+  };
+
+  store.getCountryData = function(iso){
+    return store.countryData[iso] || null;
+  };
+
+  store.setCountryProfile = function(iso, profile){
+    if (!iso) return;
+    store.countryProfiles[iso] = Object.assign({ iso:iso }, profile || {});
+  };
+
+  store.getCountryProfile = function(iso){
+    return store.countryProfiles[iso] || null;
+  };
+
+  store.getBlocProfiles = function(blocId){
+    return Object.keys(store.countryProfiles).map(function(iso){
+      return store.countryProfiles[iso];
+    }).filter(function(profile){
+      return profile && profile.blocId === blocId;
+    });
+  };
+
   store.selectPerson = function(id){
     var person = store.getPerson(id);
     if (!person) return;
@@ -223,7 +300,65 @@
   };
 
   store.setSimSpeed = function(speed){
-    store.simSpeed = speed;
+    store.simSpeed = Math.max(0, Math.min(8, Number(speed) || 0));
+    if (Number(speed) > 0) {
+      store.pauseReasonEventId = null;
+    }
+  };
+
+  store.getEventById = function(id){
+    if (!id) return null;
+    return store.eventHistory.find(function(item){
+      return item && item.id === id;
+    }) || store.newsItems.find(function(item){
+      return item && item.id === id;
+    }) || null;
+  };
+
+  store.getFeedItems = function(limit){
+    var items = (store.newsItems || []).filter(Boolean);
+    return limit == null ? items.slice() : items.slice(0, Math.max(0, Number(limit) || 0));
+  };
+
+  store.getEventHistory = function(limit){
+    var items = (store.eventHistory || []).filter(Boolean);
+    return limit == null ? items.slice() : items.slice(0, Math.max(0, Number(limit) || 0));
+  };
+
+  store.getEventsForEntity = function(entityType, id, limit){
+    var keyMap = {
+      person:"personIds",
+      business:"businessIds",
+      country:"countryIsos",
+      bloc:"blocIds"
+    };
+    var entityKey = keyMap[entityType];
+    var items;
+
+    if (!entityKey || !id) return [];
+
+    items = (store.eventHistory || []).filter(function(item){
+      var entities = item && item.entities ? item.entities : {};
+      return Array.isArray(entities[entityKey]) && entities[entityKey].indexOf(id) !== -1;
+    });
+
+    return limit == null ? items.slice() : items.slice(0, Math.max(0, Number(limit) || 0));
+  };
+
+  store.getPersonEventHistory = function(id, limit){
+    return store.getEventsForEntity("person", id, limit);
+  };
+
+  store.getBusinessEventHistory = function(id, limit){
+    return store.getEventsForEntity("business", id, limit);
+  };
+
+  store.getCountryEventHistory = function(id, limit){
+    return store.getEventsForEntity("country", id, limit);
+  };
+
+  store.getBlocEventHistory = function(id, limit){
+    return store.getEventsForEntity("bloc", id, limit);
   };
 
   store.getSpouse = function(person){

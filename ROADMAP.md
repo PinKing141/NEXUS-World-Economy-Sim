@@ -36,11 +36,11 @@ These are the highest-impact additions because they connect systems that current
   - Add personality dimensions beyond traits: risk tolerance, greed, patience, discipline, loyalty, status-seeking, family attachment, adaptability, ethics.
   - Add temporary states: grief, burnout, confidence, stress, illness, resentment, ambition spikes.
   - Business v1 now uses those variables for succession, hiring, layoffs, expansion posture, cash preservation, and scandal response.
-- [ ] Trait mechanical pass (before Build 1)
-  - Ensure every existing trait already in the sim has at least two measurable gameplay effects before adding new traits.
-  - Cover currently underwired traits in business outcomes, social mobility, deal access, and family outcomes.
-  - Add simple explainability tags so trait impact is visible in decision/event reasoning.
-- [ ] Build 0 foundation: versioned save schema and migrations
+- [x] Trait mechanical pass (before Build 1)
+  - [x] Ensure every existing trait already in the sim has at least two measurable gameplay effects before adding new traits.
+  - [x] Cover currently underwired traits in business outcomes, social mobility, deal access, and family outcomes.
+  - [x] Add simple explainability tags so trait impact is visible in decision/event reasoning.
+- [x] Build 0 foundation: versioned save schema and migrations
   - Introduce snapshot schema versioning immediately, before more model fields land.
   - Add migration hooks so person, business, bloc, and country data can evolve safely across builds.
   - Keep replay, scenario presets, and long-run saves compatible as systems expand.
@@ -50,10 +50,10 @@ These are the highest-impact additions because they connect systems that current
   - Make named citizens and company headcount draw from and return to country labor pools.
   - Ground local-market business ceilings in country demand and globally-oriented sectors in bloc demand.
   - Implement in phases:
-    - Phase 1: population, employed, consumer demand, workforce wiring.
-    - Phase 2: birth and death pressure tied to conditions.
-    - Phase 3: migration pressure and talent drift.
-    - Phase 4: inequality feedback into social pressure and institutional drift.
+    - [x] Phase 1: population, employed, consumer demand, workforce wiring.
+    - [ ] Phase 2: birth and death pressure tied to conditions.
+    - [ ] Phase 3: migration pressure and talent drift.
+    - [ ] Phase 4: inequality feedback into social pressure and institutional drift.
 - [ ] Event significance schema (design now, implement with observational tools)
   - Define significance weighting and narrative pacing rules now so event noise does not bury meaningful moments.
 - [ ] Household economy
@@ -343,7 +343,7 @@ These are crucial because the user is watching, not controlling.
 
 If you want a realistic implementation order, build in this sequence:
 
-- [ ] Build 0: Versioned save schema + migration hooks + snapshot compatibility baseline
+- [x] Build 0: Versioned save schema + migration hooks + snapshot compatibility baseline
 - [ ] Build 1: Trait mechanical pass + simulation health governors + population layer phase 1 + unemployment + wages + hiring
 - [ ] Build 2: Education + skills + worker-to-founder pipeline + population layer phase 2 (birth and death pressure)
 - [ ] Build 3: Household budgets + class mobility + fertility pressure + population layer phase 3 (migration pressure)

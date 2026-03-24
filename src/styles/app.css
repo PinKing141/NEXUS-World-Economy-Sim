@@ -930,6 +930,25 @@ html,body{
   white-space:nowrap;
 }
 
+.tag-tier{
+  border:1px solid transparent;
+}
+
+.tag-tier-routine{background:rgba(111,130,150,.2);color:#a4b7c9;border-color:rgba(164,183,201,.3);}
+.tag-tier-notable{background:rgba(0,212,255,.14);color:#7fe7ff;border-color:rgba(127,231,255,.35);}
+.tag-tier-major{background:rgba(245,166,35,.18);color:#ffd58a;border-color:rgba(255,213,138,.35);}
+.tag-tier-critical{background:rgba(231,76,60,.2);color:#ff8a7d;border-color:rgba(255,138,125,.35);}
+.tag-rollup{background:rgba(90,122,154,.22);color:#bdd0e3;}
+
+.ni-rollup .ntxt{
+  color:#b7c6d5;
+}
+
+.ni-critical{
+  border-left:2px solid rgba(231,76,60,.8);
+  background:rgba(231,76,60,.06);
+}
+
 .tag-ipo{background:rgba(52,152,219,.2);color:var(--blue);}
 .tag-bankruptcy{background:rgba(231,76,60,.2);color:var(--red);}
 .tag-deal{background:rgba(46,204,113,.2);color:var(--green);}

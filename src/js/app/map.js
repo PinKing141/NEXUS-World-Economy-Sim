@@ -478,6 +478,7 @@
     if (!person) return;
 
     var bloc = App.store.getBloc(person.blocId);
+    var countryFlag = App.utils.getCountryFlag(person.countryISO) || bloc.flag;
     var business = App.store.getAssociatedBusiness(person);
     var currency = App.utils.getCurrency(person.countryISO);
     var spouse = App.store.getSpouse(person);
@@ -489,7 +490,7 @@
     tip.style.display = "block";
     moveTip(event);
     tip.innerHTML = [
-      bloc.flag + " <strong>" + person.name + "</strong>",
+      countryFlag + " <strong>" + person.name + "</strong>",
       roleLabel + App.utils.getLifeStageLabel(person) + " - " + App.utils.locationLabel(person, false) + " - " + currency.sym + " " + currency.code,
       business ? business.name : "No business",
       spouse ? ((person.sex === "male" ? "Spouse: " : "Spouse: ") + spouse.name) : "Spouse: none",

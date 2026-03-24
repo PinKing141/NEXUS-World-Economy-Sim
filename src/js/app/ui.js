@@ -36,6 +36,22 @@
     }).join("");
   }
 
+  function renderTraitEffectTags(effects, className){
+    return (effects || []).map(function(effect){
+      if (!effect) return "";
+      return "<span class='" + (className || "trait decision-trait") + "'>" + (effect.label || "") + "</span>";
+    }).join("");
+  }
+
+  function renderTraitEffectBlock(title, effects, emptyText){
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>" + title + "</div>",
+      effects && effects.length ? ("<div class='traits decision-tags'>" + renderTraitEffectTags(effects, "trait decision-trait") + "</div>") : ("<div class='country-note'>" + emptyText + "</div>"),
+      "</div>"
+    ].join("");
+  }
+
   function renderEntityLink(type, id, label){
     if (!id) return label || "Unknown";
     return "<span class='entity-link' data-" + type + "-id='" + id + "'>" + label + "</span>";
@@ -267,6 +283,7 @@
       "<div class='sbox'><div class='sl'>Cash Policy</div><div class='sv c'>" + formatDecisionValue(decision.cashPolicy) + "</div></div>",
       "<div class='sbox'><div class='sl'>Succession Bias</div><div class='sv b'>" + formatDecisionValue(decision.successionBias) + "</div></div>",
       "</div>",
+      (decision.traitEffects && decision.traitEffects.length ? ("<div class='traits decision-tags'>" + renderTraitEffectTags(decision.traitEffects, "trait decision-trait") + "</div>") : ""),
       (decision.reasons && decision.reasons.length ? "<div class='decision-note'>" + decision.reasons.map(function(reason){
         return "<div class='decision-line'>" + reason + "</div>";
       }).join("") + "</div>" : ""),
@@ -291,6 +308,7 @@
           "<div class='rname'>" + (entry.summary || "Decision recorded") + "</div>",
           "<div class='rmeta'>" + formatDecisionValue(entry.stance) + " - " + formatDecisionValue(entry.staffingAction) + " - " + App.utils.fmtDay(entry.madeAtDay || App.store.simDay) + "</div>",
           (entry.reasons && entry.reasons.length ? "<div class='decision-line decision-line-compact'>" + entry.reasons[0] + "</div>" : ""),
+          (entry.traitEffects && entry.traitEffects.length ? "<div class='traits decision-tags'>" + renderTraitEffectTags(entry.traitEffects.slice(0, 3), "trait state-trait") + "</div>" : ""),
           "</div>",
           "<div class='rwealth'>" + formatDecisionValue(entry.cashPolicy) + "</div>",
           "</div>"
@@ -303,6 +321,7 @@
   function renderPeopleList(){
     var html = App.store.getVisiblePeople().map(function(person){
       var bloc = App.store.getBloc(person.blocId);
+      var countryFlag = App.utils.getCountryFlag(person.countryISO) || bloc.flag;
       var business = App.store.getAssociatedBusiness(person);
       var currency = App.utils.getCurrency(person.countryISO);
       var selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
@@ -310,7 +329,7 @@
 
       return [
         "<div class='pr " + (selected ? "sel" : "") + "' data-person-id='" + person.id + "'>",
-        "<div class='prn'><span>" + bloc.flag + " " + person.name + "</span><span class='st s-" + person.status + "'>" + person.status + "</span></div>",
+        "<div class='prn'><span>" + countryFlag + " " + person.name + "</span><span class='st s-" + person.status + "'>" + person.status + "</span></div>",
         "<div class='prb'>" + App.utils.locationLabel(person, true) + " - " + currency.sym + " " + currency.code + (business ? " - " + business.name : " - independent") + "</div>",
         "<div class='prbadges'>" + renderBadgeRow([App.utils.getLifeStageLabel(person)], "lbadge") + renderBadgeRow(roles, "rbadge") + "</div>",
         "<div class='prw " + (person.netWorthGU >= 0 ? "wp" : "wn") + "'>" + App.utils.fmtCountry(person.netWorthGU, person.countryISO) + "</div>",
@@ -449,6 +468,58 @@
     ].join("");
   }
 
+  function renderHouseholdSummary(person){
+    var household = App.store.getPersonHousehold ? App.store.getPersonHousehold(person) : null;
+    var profile = App.store.getCountryProfile ? App.store.getCountryProfile(person.countryISO) : null;
+    var members;
+    var housingBurden;
+    var childcareBurden;
+    var mobilityLabel;
+    var stressClass;
+    var pressureLabel = "balanced";
+
+    if (!household) {
+      return "<div class='mc'><div class='mcl'>Household Economy</div><div class='country-note'>Household data is still being assembled.</div></div>";
+    }
+
+    members = (household.adultIds || []).length + (household.childIds || []).length;
+    housingBurden = household.monthlyExpensesGU > 0 ? Math.round(((household.housingCostGU || 0) / household.monthlyExpensesGU) * 100) : 0;
+    childcareBurden = household.monthlyExpensesGU > 0 ? Math.round(((household.childcareCostGU || 0) / household.monthlyExpensesGU) * 100) : 0;
+    mobilityLabel = household.mobilityScore > 8 ? "upward" : (household.mobilityScore < -8 ? "downward" : "stable");
+    stressClass = household.financialStress >= 72 ? "r" : (household.financialStress >= 48 ? "a" : "g");
+
+    if (profile) {
+      if ((profile.populationPressure || 0.5) >= 0.62) {
+        pressureLabel = "high-cost pressure";
+      } else if ((profile.populationPressure || 0.5) <= 0.42) {
+        pressureLabel = "lighter pressure";
+      }
+    }
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Household Economy</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Members</div><div class='sv b'>" + members + "</div></div>",
+      "<div class='sbox'><div class='sl'>Class Tier</div><div class='sv a'>" + String(household.classTier || "working").toUpperCase() + "</div></div>",
+      "<div class='sbox'><div class='sl'>Mobility</div><div class='sv c'>" + mobilityLabel.toUpperCase() + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Monthly Income</div><div class='sv g'>" + App.utils.fmtCountry(household.monthlyIncomeGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Monthly Expenses</div><div class='sv " + ((household.monthlyExpensesGU || 0) > (household.monthlyIncomeGU || 0) ? "r" : "a") + "'>" + App.utils.fmtCountry(household.monthlyExpensesGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Stress</div><div class='sv " + stressClass + "'>" + Math.round(household.financialStress || 0) + "/100</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Cash</div><div class='sv c'>" + App.utils.fmtCountry(household.cashOnHandGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Debt</div><div class='sv " + ((household.debtGU || 0) > 0 ? "r" : "g") + "'>" + App.utils.fmtCountry(household.debtGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Inheritance Pressure</div><div class='sv a'>" + App.utils.fmtCountry(household.inheritancePressureGU || 0, person.countryISO) + "</div></div>",
+      "</div>",
+      "<div class='country-note'>Housing burden: <strong>" + housingBurden + "%</strong> of monthly costs. Childcare burden: <strong>" + childcareBurden + "%</strong>.</div>",
+      (profile ? "<div class='country-note'>Median wage in " + App.store.getCountryName(person.countryISO) + ": <strong>" + App.utils.fmtCountry(profile.medianWageGU || 0, person.countryISO) + "</strong>. Household context currently reads as <strong>" + pressureLabel + "</strong>.</div>" : ""),
+      "</div>"
+    ].join("");
+  }
+
   function renderPersonDetail(person){
     var el = document.getElementById("dc");
     var bloc = App.store.getBloc(person.blocId);
@@ -467,6 +538,7 @@
       return second.age - first.age;
     });
     var heir = ownedBusiness && App.sim.getPotentialHeir ? App.sim.getPotentialHeir(person) : null;
+    var traitSnapshot = (person.lastTraitEffects && person.lastTraitEffects.length) ? person.lastTraitEffects : ((business && business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
     var notes = [
       "AGE " + App.utils.displayAge(person),
       App.utils.getLifeStageLabel(person).toUpperCase()
@@ -501,12 +573,14 @@
       "<div class='sbox'><div class='sl'>Lineage</div><div class='sv a'>" + person.lineageId.split("-")[0].toUpperCase() + "</div></div>",
       "</div>",
       (employmentBusiness && person.jobTitle ? "<div class='sg'><div class='sbox'><div class='sl'>Employer</div><div class='sv a'>" + renderBusinessLink(employmentBusiness, employmentBusiness.name) + "</div></div><div class='sbox'><div class='sl'>Salary (GU)</div><div class='sv c'>" + App.utils.fmtGU(person.salaryGU || 0) + "</div></div></div>" : ""),
+      renderHouseholdSummary(person),
       "<div class='sg'>",
       "<div class='sbox'><div class='sl'>Bloc GDP</div><div class='sv b'>" + App.utils.fmtL(bloc.gdp, bloc) + "</div></div>",
       "<div class='sbox'><div class='sl'>Geo Pressure</div><div class='sv " + (bloc.geoPressure > 1 ? "r" : "g") + "'>" + bloc.geoPressure.toFixed(1) + "</div></div>",
       "</div>",
       renderDecisionProfile(person),
       "<div class='traits'>" + (person.traits.length ? person.traits.map(function(trait){ return "<span class='trait'>" + trait + "</span>"; }).join("") : "<span class='country-note'>No defining traits yet.</span>") + "</div>",
+      renderTraitEffectBlock("Recent Trait Influence", traitSnapshot, "No recent trait influence recorded."),
       renderRelativeList("Spouse", spouse ? [spouse] : [], "No spouse recorded."),
       renderRelativeList("Parents", parents, "No parents recorded."),
       renderRelativeList("Children", children, "No children recorded."),
@@ -532,6 +606,7 @@
     var ceo = App.store.getBusinessLeader(business, "ceo");
     var leadership = App.store.getBusinessLeadership(business);
     var otherEmployees = Math.max(0, business.employees - leadership.length);
+    var businessTraitEffects = (business.lastTraitEffects && business.lastTraitEffects.length) ? business.lastTraitEffects : ((business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
 
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
@@ -543,7 +618,7 @@
       renderBusinessLockup(
         business,
         "<div class='dname'>" + business.name + "</div>",
-        "<div class='dtitle'>" + business.stage.toUpperCase() + " - AGE " + business.age + " TICKS</div>",
+        "<div class='dtitle'>" + business.stage.toUpperCase() + " - AGE " + (Number.isFinite(Number(business.age)) ? Number(business.age).toFixed(1) : "0.0") + " YRS</div>",
         58,
         "detail",
         "brand-lockup-hero"
@@ -576,6 +651,7 @@
       "<div class='brow'>Succession Count<span>" + business.successionCount + "</span></div>",
       "</div>",
       renderDecisionCore(business),
+      renderTraitEffectBlock("Recent Trait Influence", businessTraitEffects, "No recent trait influence recorded."),
       renderLeadershipList("Leadership Roster", leadership, "No active named leaders yet."),
       renderDecisionHistory(business),
       "<div class='mc'><div class='mcl'>Revenue History</div><canvas id='rch' height='50'></canvas></div>",
@@ -595,6 +671,7 @@
     var bloc = App.store.getBlocByCountry(iso);
     var countryFlag = App.utils.getCountryFlag(iso);
     var currency = App.utils.getCurrency(iso);
+    var profile = App.store.getCountryProfile ? App.store.getCountryProfile(iso) : null;
     var people = App.store.getCountryPeople(iso);
     var publicPeople = App.store.getPublicCountryPeople(iso);
     var allPeople = App.store.getCountryPeopleAll(iso);
@@ -614,6 +691,40 @@
       return dynasties[lineageId] > 1;
     }).length;
     var stateDirectory = "";
+    var employmentRate = profile && profile.laborForce > 0 ? (profile.employed / profile.laborForce) : null;
+    var pressureLabel = "stable pressure";
+    var populationPanel;
+
+    function fmtCount(value){
+      return Number.isFinite(value) ? new Intl.NumberFormat("en-US").format(Math.round(value)) : "--";
+    }
+
+    if (profile) {
+      if (profile.populationPressure >= 0.62) {
+        pressureLabel = "growing pressure";
+      } else if (profile.populationPressure <= 0.42) {
+        pressureLabel = "shrinking pressure";
+      }
+
+      populationPanel = [
+        "<div class='sg sg3'>",
+        "<div class='sbox'><div class='sl'>Real Population</div><div class='sv c'>" + fmtCount(profile.population) + "</div></div>",
+        "<div class='sbox'><div class='sl'>Employment Rate</div><div class='sv " + ((employmentRate != null && employmentRate >= 0.55) ? "g" : "a") + "'>" + (employmentRate != null ? Math.round(employmentRate * 100) + "%" : "--") + "</div></div>",
+        "<div class='sbox'><div class='sl'>Unemployed</div><div class='sv r'>" + fmtCount(profile.unemployed) + "</div></div>",
+        "</div>",
+        "<div class='sg sg3'>",
+        "<div class='sbox'><div class='sl'>Median Wage</div><div class='sv b'>" + App.utils.fmtCountry(profile.medianWageGU, iso) + "</div></div>",
+        "<div class='sbox'><div class='sl'>Consumer Demand</div><div class='sv g'>" + App.utils.fmtCountry(profile.consumerDemandGU, iso) + "</div></div>",
+        "<div class='sbox'><div class='sl'>Pressure Trend</div><div class='sv " + (pressureLabel.indexOf("growing") === 0 ? "g" : (pressureLabel.indexOf("shrinking") === 0 ? "r" : "a")) + "'>" + pressureLabel + "</div></div>",
+        "</div>"
+      ].join("");
+    } else {
+      populationPanel = [
+        "<div class='sg'>",
+        "<div class='sbox'><div class='sl'>Population Layer</div><div class='sv a'>Profile unavailable</div></div>",
+        "</div>"
+      ].join("");
+    }
 
     if (iso === "US") {
       stateDirectory = [
@@ -643,6 +754,7 @@
       "<div class='sbox'><div class='sl'>Minors</div><div class='sv a'>" + minors + "</div></div>",
       "<div class='sbox'><div class='sl'>Dynasties</div><div class='sv g'>" + activeDynasties + "</div></div>",
       "</div>",
+      populationPanel,
       "<div class='sg'>",
       "<div class='sbox'><div class='sl'>Bloc GDP</div><div class='sv g'>" + App.utils.fmtL(bloc.gdp, bloc) + "</div></div>",
       "<div class='sbox'><div class='sl'>Geo Pressure</div><div class='sv " + (bloc.geoPressure > 1 ? "r" : "a") + "'>" + bloc.geoPressure.toFixed(1) + "</div></div>",
@@ -696,11 +808,25 @@
 
   function updateTopBar(){
     var totalGdp = App.store.blocs.reduce(function(sum, bloc){ return sum + bloc.gdp; }, 0);
+    var pauseEvent;
+    var pauseLabel = "";
     document.getElementById("gv").textContent = App.utils.fmtGU(totalGdp);
     document.getElementById("fv").textContent = App.store.businesses.length;
     document.getElementById("pv").textContent = App.store.getLivingCount();
     document.getElementById("ct").textContent = App.utils.fmtDay(App.store.simDay);
-    document.getElementById("cy").textContent = App.utils.fmtYear(App.store.simDay);
+    pauseEvent = App.store.pauseReasonEventId && App.store.getEventById ? App.store.getEventById(App.store.pauseReasonEventId) : null;
+    if (pauseEvent) {
+      pauseLabel = " [PAUSED - " + (pauseEvent.significance && pauseEvent.significance.tier ? pauseEvent.significance.tier.toUpperCase() : "CRITICAL") + "]";
+    }
+    document.getElementById("cy").textContent = App.utils.fmtYear(App.store.simDay) + pauseLabel;
+  }
+
+  function syncSpeedButtons(){
+    var activeSpeed = Number(App.store.simSpeed);
+    Array.prototype.forEach.call(document.querySelectorAll(".sb"), function(node){
+      var nodeSpeed = Number(node.getAttribute("data-speed"));
+      node.classList.toggle("act", nodeSpeed === activeSpeed);
+    });
   }
 
   function updateFxBar(){
@@ -737,15 +863,114 @@
     }).join("") : "";
   }
 
-  function addNews(type, text){
-    App.store.newsItems.unshift({ type:type, text:text, time:App.utils.fmtDay(App.store.simDay) });
-    if (App.store.newsItems.length > 100) {
-      App.store.newsItems.pop();
+  function renderNews(){
+    document.getElementById("ns").innerHTML = (App.store.newsItems || []).map(function(item){
+      var tags = (item.tags || []).slice(0, 3);
+      var tagHtml = tags.map(function(tag){
+        return "<span class='ntag tag-default'>" + tag + "</span>";
+      }).join("");
+      var tier = item.significance && item.significance.tier ? item.significance.tier : null;
+      var tierHtml = tier ? ("<span class='ntag tag-tier tag-tier-" + tier + "'>" + tier.toUpperCase() + "</span>") : "";
+      var rollupCount = item.pacing && item.pacing.mode === "rollup" ? Math.max(1, Number(item.pacing.suppressedCount) || 1) : 0;
+      var modeHtml = item.pacing && item.pacing.mode === "rollup" ? "<span class='ntag tag-rollup'>ROLLUP x" + rollupCount + "</span>" : "";
+      var time = item.time || App.utils.fmtDay(item.day != null ? item.day : App.store.simDay);
+      var itemType = item.type || "market";
+      var itemClass = "ni" + (item.pacing && item.pacing.mode === "rollup" ? " ni-rollup" : "") + (tier ? (" ni-" + tier) : "");
+      return "<div class='" + itemClass + "'><span class='nt'>" + time + "</span><span class='ntag tag-" + itemType + "'>" + itemType.toUpperCase() + "</span>" + tierHtml + modeHtml + tagHtml + "<span class='ntxt'>" + item.text + "</span></div>";
+    }).join("");
+  }
+
+  function normalizeFeedItem(item){
+    var source = item && typeof item === "object" ? item : {};
+    var defaults = App.events && typeof App.events.getCanonicalDefaults === "function" ? App.events.getCanonicalDefaults(source.type, source) : null;
+    var day = source.day != null ? Number(source.day) : App.store.simDay;
+    var significance = source.significance || (defaults ? defaults.significance : {
+      score:35,
+      tier:"notable",
+      dimensions:{ impact:0.35, rarity:0.35, legacy:0.25, crossGen:0.20 },
+      adaptiveBoost:0,
+      baseFloor:35
+    });
+    var pacing = source.pacing || {
+      displayed:true,
+      mode:"direct",
+      rollupKey:null,
+      suppressedCount:0
+    };
+
+    return {
+      id:source.id || ("news-" + App.store.simDay + "-" + Math.floor(Math.random() * 1000000)),
+      day:Number.isFinite(day) ? day : App.store.simDay,
+      time:source.time || App.utils.fmtDay(Number.isFinite(day) ? day : App.store.simDay),
+      type:source.type || "market",
+      text:source.text || "",
+      tags:Array.isArray(source.tags) ? source.tags.filter(Boolean).slice(0, 3) : [],
+      category:source.category || (defaults ? defaults.category : "structural"),
+      scope:source.scope || (defaults ? defaults.scope : "global"),
+      entities:source.entities || (defaults ? defaults.entities : { personIds:[], businessIds:[], countryIsos:[], blocIds:[] }),
+      causes:Array.isArray(source.causes) ? source.causes.slice(0, 6) : [],
+      significance:significance,
+      pacing:pacing,
+      synthetic:!!source.synthetic
+    };
+  }
+
+  function getFeedRank(item){
+    var tier = item && item.significance ? item.significance.tier : null;
+    var mode = item && item.pacing ? item.pacing.mode : "direct";
+
+    if (mode === "rollup") return 3;
+    if (tier === "critical") return 0;
+    if (tier === "major") return 1;
+    if (tier === "notable") return 2;
+    return 3;
+  }
+
+  function findFeedInsertIndex(items, item){
+    var rank = getFeedRank(item);
+    var index;
+
+    for (index = 0; index < items.length; index += 1) {
+      if (rank <= getFeedRank(items[index])) {
+        return index;
+      }
     }
 
-    document.getElementById("ns").innerHTML = App.store.newsItems.map(function(item){
-      return "<div class='ni'><span class='nt'>" + item.time + "</span><span class='ntag tag-" + item.type + "'>" + item.type.toUpperCase() + "</span><span class='ntxt'>" + item.text + "</span></div>";
-    }).join("");
+    return items.length;
+  }
+
+  function addNews(typeOrItem, text, meta){
+    var item;
+    var existingIndex = -1;
+
+    if (!(typeOrItem && typeof typeOrItem === "object" && !Array.isArray(typeOrItem))) {
+      if (App.events && typeof App.events.emit === "function") {
+        return App.events.emit(typeOrItem, text, meta);
+      }
+      return null;
+    }
+
+    item = normalizeFeedItem(typeOrItem);
+    if (!item.text) return null;
+    if (!Array.isArray(App.store.newsItems)) App.store.newsItems = [];
+    existingIndex = App.store.newsItems.findIndex(function(existing){
+      return existing && existing.id === item.id;
+    });
+    if (existingIndex >= 0) {
+      if (item.pacing && item.pacing.mode === "rollup") {
+        App.store.newsItems.splice(existingIndex, 1, item);
+      } else {
+        App.store.newsItems.splice(existingIndex, 1);
+        App.store.newsItems.splice(findFeedInsertIndex(App.store.newsItems, item), 0, item);
+      }
+    } else {
+      App.store.newsItems.splice(findFeedInsertIndex(App.store.newsItems, item), 0, item);
+    }
+    if (App.store.newsItems.length > 100) {
+      App.store.newsItems.length = 100;
+    }
+    renderNews();
+    return item;
   }
 
   function drawLine(canvas, data, color){
@@ -871,8 +1096,10 @@
 
   function renderAll(){
     updateTopBar();
+    syncSpeedButtons();
     updateFxBar();
     updateTicker();
+    renderNews();
     renderLegend();
     renderSelection();
   }
@@ -913,11 +1140,11 @@
       var button = event.target.closest(".sb");
       if (!button) return;
       App.store.setSimSpeed(Number(button.getAttribute("data-speed")));
-      Array.prototype.forEach.call(document.querySelectorAll(".sb"), function(node){
-        node.classList.remove("act");
-      });
-      button.classList.add("act");
+      syncSpeedButtons();
     });
+
+    syncSpeedButtons();
+    renderNews();
   }
 
   App.ui = {
@@ -926,6 +1153,7 @@
     renderSelection:renderSelection,
     renderInspector:renderInspector,
     updateTopBar:updateTopBar,
+    renderNews:renderNews,
     updateFxBar:updateFxBar,
     updateTicker:updateTicker,
     addNews:addNews,

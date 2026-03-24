@@ -108,6 +108,83 @@
     return usMapData.state_specific[code] && usMapData.state_specific[code].hide !== "yes";
   });
   var MAP_VIEWBOX = { width:1000, height:507.209 };
+  var COUNTRY_DATA_PATH = "./src/country-data.json";
+  var countryDataPromise = null;
+  var countryDataCache = null;
+  var POP_PROFILE_HEURISTICS = {
+    NA:{
+      laborForceParticipation:0.63,
+      unemploymentRate:0.05,
+      medianWageGU:52000,
+      birthRatePer1000:11,
+      deathRatePer1000:8,
+      netMigrationRatePer1000:1.5,
+      giniCoefficient:0.36,
+      educationIndex:0.85,
+      institutionScore:0.82,
+      populationFallback:12000000
+    },
+    EU:{
+      laborForceParticipation:0.61,
+      unemploymentRate:0.07,
+      medianWageGU:43000,
+      birthRatePer1000:9,
+      deathRatePer1000:10,
+      netMigrationRatePer1000:0.9,
+      giniCoefficient:0.33,
+      educationIndex:0.83,
+      institutionScore:0.84,
+      populationFallback:9000000
+    },
+    AS:{
+      laborForceParticipation:0.62,
+      unemploymentRate:0.08,
+      medianWageGU:28000,
+      birthRatePer1000:14,
+      deathRatePer1000:7,
+      netMigrationRatePer1000:0.3,
+      giniCoefficient:0.39,
+      educationIndex:0.74,
+      institutionScore:0.66,
+      populationFallback:18000000
+    },
+    SA:{
+      laborForceParticipation:0.60,
+      unemploymentRate:0.10,
+      medianWageGU:18000,
+      birthRatePer1000:15,
+      deathRatePer1000:7,
+      netMigrationRatePer1000:-0.2,
+      giniCoefficient:0.47,
+      educationIndex:0.70,
+      institutionScore:0.60,
+      populationFallback:14000000
+    },
+    AF:{
+      laborForceParticipation:0.57,
+      unemploymentRate:0.13,
+      medianWageGU:9000,
+      birthRatePer1000:26,
+      deathRatePer1000:9,
+      netMigrationRatePer1000:-0.9,
+      giniCoefficient:0.45,
+      educationIndex:0.56,
+      institutionScore:0.44,
+      populationFallback:20000000
+    },
+    RU:{
+      laborForceParticipation:0.60,
+      unemploymentRate:0.08,
+      medianWageGU:22000,
+      birthRatePer1000:11,
+      deathRatePer1000:10,
+      netMigrationRatePer1000:0.2,
+      giniCoefficient:0.39,
+      educationIndex:0.73,
+      institutionScore:0.61,
+      populationFallback:8000000
+    }
+  };
   var CALENDAR = {
     startYear:2026,
     startMonthIndex:0,
@@ -232,6 +309,155 @@
     });
   }
 
+  function clampNumber(value, min, max){
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeCountryData(dataset){
+    var normalized = {};
+
+    Object.keys(dataset || {}).forEach(function(key){
+      if (!/^[A-Z]{2}$/.test(key)) return;
+      normalized[key] = {
+        iso:key,
+        name:(dataset[key] && dataset[key].name) || key,
+        population:Math.max(0, Number(dataset[key] && dataset[key].population) || 0),
+        region:(dataset[key] && dataset[key].region) || null
+      };
+    });
+
+    return normalized;
+  }
+
+  function loadCountryData(){
+    if (countryDataPromise) return countryDataPromise;
+
+    if (typeof fetch !== "function") {
+      countryDataCache = countryDataCache || {};
+      countryDataPromise = Promise.resolve(countryDataCache);
+      return countryDataPromise;
+    }
+
+    countryDataPromise = fetch(COUNTRY_DATA_PATH, { cache:"no-store" }).then(function(response){
+      if (!response.ok) throw new Error("Country data request failed with status " + response.status + ".");
+      return response.json();
+    }).then(function(data){
+      countryDataCache = normalizeCountryData(data);
+      return countryDataCache;
+    }).catch(function(error){
+      console.warn("Country data load failed, using heuristic population defaults.", error);
+      countryDataCache = countryDataCache || {};
+      return countryDataCache;
+    });
+
+    return countryDataPromise;
+  }
+
+  function getCountryDataCache(){
+    return countryDataCache || {};
+  }
+
+  function getCountryPopulation(iso){
+    var entry = getCountryDataCache()[iso];
+    if (!entry) return null;
+    return Number(entry.population) || null;
+  }
+
+  function getBlocProfileHeuristics(blocId){
+    return POP_PROFILE_HEURISTICS[blocId] || POP_PROFILE_HEURISTICS.NA;
+  }
+
+  function getBlocMedianPopulation(blocId){
+    var bloc = BLOCS_TEMPLATE.find(function(item){
+      return item.id === blocId;
+    });
+    var populations = [];
+    var middle;
+
+    if (!bloc) return getBlocProfileHeuristics(blocId).populationFallback;
+
+    (bloc.members || []).forEach(function(iso){
+      var population = getCountryPopulation(iso);
+      if (population && population > 0) {
+        populations.push(population);
+      }
+    });
+
+    if (!populations.length) return getBlocProfileHeuristics(blocId).populationFallback;
+
+    populations.sort(function(first, second){
+      return first - second;
+    });
+    middle = Math.floor(populations.length / 2);
+    if (populations.length % 2 === 0) {
+      return Math.round((populations[middle - 1] + populations[middle]) / 2);
+    }
+    return populations[middle];
+  }
+
+  function createCountryProfile(iso, blocId, overrides){
+    var baseline = getBlocProfileHeuristics(blocId);
+    var givenOverrides = overrides || {};
+    var population = Number(givenOverrides.population != null ? givenOverrides.population : getCountryPopulation(iso));
+    var laborForceParticipation = Number(givenOverrides.laborForceParticipation != null ? givenOverrides.laborForceParticipation : baseline.laborForceParticipation);
+    var unemploymentRate = Number(givenOverrides.unemploymentRate != null ? givenOverrides.unemploymentRate : baseline.unemploymentRate);
+    var explicitLaborForce = Number(givenOverrides.laborForce);
+    var explicitEmployed = Number(givenOverrides.employed);
+    var explicitUnemployed = Number(givenOverrides.unemployed);
+    var laborForce;
+    var employed;
+    var unemployed;
+    var medianWageGU;
+
+    if (!Number.isFinite(population) || population <= 0) {
+      population = getBlocMedianPopulation(blocId);
+    }
+
+    laborForceParticipation = clampNumber(Number.isFinite(laborForceParticipation) ? laborForceParticipation : baseline.laborForceParticipation, 0.2, 0.9);
+    unemploymentRate = clampNumber(Number.isFinite(unemploymentRate) ? unemploymentRate : baseline.unemploymentRate, 0, 0.45);
+
+    laborForce = Number.isFinite(explicitLaborForce) && explicitLaborForce >= 0 ? Math.round(explicitLaborForce) : Math.round(population * laborForceParticipation);
+    employed = Number.isFinite(explicitEmployed) && explicitEmployed >= 0 ? Math.round(explicitEmployed) : Math.round(laborForce * (1 - unemploymentRate));
+    employed = clampNumber(employed, 0, laborForce);
+    if (!Number.isFinite(explicitEmployed) && Number.isFinite(explicitUnemployed) && explicitUnemployed >= 0) {
+      employed = clampNumber(laborForce - Math.round(explicitUnemployed), 0, laborForce);
+    }
+    unemployed = Math.max(0, laborForce - employed);
+    medianWageGU = Math.max(1500, Number(givenOverrides.medianWageGU != null ? givenOverrides.medianWageGU : baseline.medianWageGU));
+
+    return {
+      iso:iso,
+      blocId:blocId,
+      population:population,
+      laborForceParticipation:laborForceParticipation,
+      laborForce:laborForce,
+      employed:employed,
+      unemployed:unemployed,
+      medianWageGU:medianWageGU,
+      consumerDemandGU:Math.round(employed * medianWageGU * 0.72),
+      birthRatePer1000:Number(givenOverrides.birthRatePer1000 != null ? givenOverrides.birthRatePer1000 : baseline.birthRatePer1000),
+      deathRatePer1000:Number(givenOverrides.deathRatePer1000 != null ? givenOverrides.deathRatePer1000 : baseline.deathRatePer1000),
+      netMigrationRatePer1000:Number(givenOverrides.netMigrationRatePer1000 != null ? givenOverrides.netMigrationRatePer1000 : baseline.netMigrationRatePer1000),
+      giniCoefficient:clampNumber(Number(givenOverrides.giniCoefficient != null ? givenOverrides.giniCoefficient : baseline.giniCoefficient), 0.2, 0.7),
+      educationIndex:clampNumber(Number(givenOverrides.educationIndex != null ? givenOverrides.educationIndex : baseline.educationIndex), 0.1, 1),
+      institutionScore:clampNumber(Number(givenOverrides.institutionScore != null ? givenOverrides.institutionScore : baseline.institutionScore), 0.1, 1),
+      populationPressure:clampNumber(Number(givenOverrides.populationPressure != null ? givenOverrides.populationPressure : 0.5), 0, 1)
+    };
+  }
+
+  function createCountryProfiles(blocs, existingProfiles){
+    var profiles = {};
+    var prior = existingProfiles || {};
+
+    (blocs || []).forEach(function(bloc){
+      (bloc.members || []).forEach(function(iso){
+        profiles[iso] = createCountryProfile(iso, bloc.id, prior[iso]);
+      });
+    });
+
+    return profiles;
+  }
+
   App.data = {
     CURRENCY_MAP:CURRENCY_MAP,
     CENTROIDS:CENTROIDS,
@@ -247,8 +473,14 @@
     NAME_POOLS:NAME_POOLS,
     BLOC_NAME_POOLS:BLOC_NAME_POOLS,
     NAME_ORDER_COUNTRIES:NAME_ORDER_COUNTRIES,
+    POP_PROFILE_HEURISTICS:POP_PROFILE_HEURISTICS,
     STATUS_COLOR:STATUS_COLOR,
     TICK_MS:3000,
+    loadCountryData:loadCountryData,
+    getCountryDataCache:getCountryDataCache,
+    getCountryPopulation:getCountryPopulation,
+    createCountryProfile:createCountryProfile,
+    createCountryProfiles:createCountryProfiles,
     createBlocs:createBlocs,
     usMapData:usMapData
   };
