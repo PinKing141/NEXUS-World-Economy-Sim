@@ -66,8 +66,10 @@
     var source = value && typeof value === "object" ? value : {};
     var signalSnapshot = source.signalSnapshot && typeof source.signalSnapshot === "object" ? source.signalSnapshot : {};
     var interventionCounts = source.interventionCountsByDay && typeof source.interventionCountsByDay === "object" ? source.interventionCountsByDay : {};
+    var interventionLog = Array.isArray(source.interventionLog) ? source.interventionLog : [];
     var nowDay = Math.max(0, toInteger((App.store && App.store.simDay) || 0, 0));
     var filteredCounts = {};
+    var normalizedLog;
 
     Object.keys(interventionCounts).forEach(function(key){
       var numericDay = toInteger(key, NaN);
@@ -78,6 +80,21 @@
       if (!count) return;
       filteredCounts[String(numericDay)] = count;
     });
+
+    normalizedLog = interventionLog.map(function(item){
+      var entry = item && typeof item === "object" ? item : {};
+      return {
+        id:normalizeString(entry.id, "gov-log-" + nowDay + "-" + Math.floor(Math.random() * 1000000)),
+        day:Math.max(0, toInteger(entry.day, nowDay)),
+        key:normalizeString(entry.key, "intervention"),
+        text:normalizeString(entry.text, "Governor intervention applied."),
+        scope:normalizeString(entry.scope, "global"),
+        entities:entry.entities && typeof entry.entities === "object" ? deepClone(entry.entities) : {},
+        causes:Array.isArray(entry.causes) ? entry.causes.map(function(cause){ return normalizeString(cause, null); }).filter(Boolean).slice(0, 4) : []
+      };
+    }).filter(function(entry){
+      return Math.abs(nowDay - entry.day) <= 720;
+    }).slice(-200);
 
     return {
       enabled:source.enabled !== false,
@@ -90,9 +107,96 @@
       currencyConvergenceTicks:Math.max(0, toInteger(source.currencyConvergenceTicks, 0)),
       cooldowns:deepClone(source.cooldowns || {}),
       interventionCountsByDay:filteredCounts,
+      interventionLog:normalizedLog,
       signalSnapshot:deepClone(signalSnapshot),
       runCount:Math.max(0, toInteger(source.runCount, 0)),
       lastRunDay:Math.max(0, toInteger(source.lastRunDay, 0))
+    };
+  }
+
+  function normalizeStockMarketState(value, businesses, people, simDay){
+    var source = value && typeof value === "object" ? value : {};
+    var rawListings = source.listingsByBusinessId && typeof source.listingsByBusinessId === "object"
+      ? source.listingsByBusinessId
+      : (source.listings && typeof source.listings === "object" ? source.listings : {});
+    var businessesById = indexById(Array.isArray(businesses) ? businesses : []);
+    var peopleById = indexById(Array.isArray(people) ? people : []);
+    var listingsByBusinessId = {};
+    var nowDay = Math.max(0, toInteger(simDay, 0));
+    var tape = Array.isArray(source.tradeTape) ? source.tradeTape : [];
+
+    Object.keys(rawListings).forEach(function(key){
+      var sourceListing = rawListings[key] && typeof rawListings[key] === "object" ? rawListings[key] : {};
+      var businessId = normalizeString(sourceListing.businessId, normalizeString(key, null));
+      var business = businessId ? businessesById[businessId] : null;
+      var totalShares;
+      var price;
+      var treasuryShares;
+      var sharesByHolder = {};
+      var assigned = 0;
+
+      if (!businessId || !business) return;
+
+      totalShares = Math.max(1000, toInteger(sourceListing.totalShares, 1000000));
+      price = Math.max(0.05, toFiniteNumber(sourceListing.sharePriceGU, Math.max(0.05, toFiniteNumber(business.valuationGU, 0) / totalShares)));
+      treasuryShares = clamp(toInteger(sourceListing.treasuryShares, Math.floor(totalShares * 0.25)), 0, totalShares);
+      assigned += treasuryShares;
+
+      Object.keys(sourceListing.sharesByHolder && typeof sourceListing.sharesByHolder === "object" ? sourceListing.sharesByHolder : {}).forEach(function(holderId){
+        var cleanedHolderId = normalizeString(holderId, null);
+        var shares = Math.max(0, toInteger(sourceListing.sharesByHolder[holderId], 0));
+        var headroom;
+
+        if (!cleanedHolderId || !peopleById[cleanedHolderId] || !shares) return;
+        headroom = Math.max(0, totalShares - assigned);
+        if (!headroom) return;
+        shares = Math.min(shares, headroom);
+        sharesByHolder[cleanedHolderId] = shares;
+        assigned += shares;
+      });
+
+      if (assigned < totalShares) {
+        if (business.ownerId && peopleById[business.ownerId]) {
+          sharesByHolder[business.ownerId] = (sharesByHolder[business.ownerId] || 0) + (totalShares - assigned);
+        } else {
+          treasuryShares += totalShares - assigned;
+        }
+      }
+
+      listingsByBusinessId[businessId] = {
+        businessId:businessId,
+        symbol:normalizeString(sourceListing.symbol, business.name.slice(0, 4).toUpperCase()),
+        listedDay:Math.max(0, toInteger(sourceListing.listedDay, nowDay)),
+        totalShares:totalShares,
+        treasuryShares:Math.max(0, Math.min(totalShares, treasuryShares)),
+        sharesByHolder:sharesByHolder,
+        sharePriceGU:price,
+        annualDividendPerShareGU:Math.max(0, toFiniteNumber(sourceListing.annualDividendPerShareGU, 0)),
+        lastDividendPerShareGU:Math.max(0, toFiniteNumber(sourceListing.lastDividendPerShareGU, 0)),
+        lastDividendDay:Math.max(0, toInteger(sourceListing.lastDividendDay, 0)),
+        lastVolumeShares:Math.max(0, toInteger(sourceListing.lastVolumeShares, 0)),
+        rollingVolumeShares:Math.max(0, toInteger(sourceListing.rollingVolumeShares, 0)),
+        lastSessionNetDemand:toFiniteNumber(sourceListing.lastSessionNetDemand, 0)
+      };
+    });
+
+    return {
+      listingsByBusinessId:listingsByBusinessId,
+      lastDividendDay:Math.max(0, toInteger(source.lastDividendDay, 0)),
+      lastTradeDay:Math.max(0, toInteger(source.lastTradeDay, 0)),
+      lastIpoDay:Math.max(0, toInteger(source.lastIpoDay, 0)),
+      tradeTape:tape.map(function(entry){
+        var item = entry && typeof entry === "object" ? entry : {};
+        return {
+          day:Math.max(0, toInteger(item.day, nowDay)),
+          businessId:normalizeString(item.businessId, null),
+          priceGU:Math.max(0, toFiniteNumber(item.priceGU, 0)),
+          volumeShares:Math.max(0, toInteger(item.volumeShares, 0)),
+          movePct:toFiniteNumber(item.movePct, 0)
+        };
+      }).filter(function(entry){
+        return !!entry.businessId;
+      }).slice(-120)
     };
   }
 
@@ -430,6 +534,13 @@
       giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, toFiniteNumber(seed.giniCoefficient, 0.4)), 0.2, 0.7),
       educationIndex:clamp(toFiniteNumber(source.educationIndex, toFiniteNumber(seed.educationIndex, 0.6)), 0.1, 1),
       institutionScore:clamp(toFiniteNumber(source.institutionScore, toFiniteNumber(seed.institutionScore, 0.55)), 0.1, 1),
+      wagePressure:clamp(toFiniteNumber(source.wagePressure, toFiniteNumber(seed.wagePressure, 0)), -0.45, 0.45),
+      laborScarcity:clamp(toFiniteNumber(source.laborScarcity, toFiniteNumber(seed.laborScarcity, 0)), 0, 1),
+      longUnemploymentShare:clamp(toFiniteNumber(source.longUnemploymentShare, toFiniteNumber(seed.longUnemploymentShare, 0)), 0, 1),
+      talentShortageIndex:clamp(toFiniteNumber(source.talentShortageIndex, toFiniteNumber(seed.talentShortageIndex, 0)), 0, 1),
+      mobilityInflowAnnual:Math.max(0, toInteger(source.mobilityInflowAnnual, toInteger(seed.mobilityInflowAnnual, 0))),
+      mobilityOutflowAnnual:Math.max(0, toInteger(source.mobilityOutflowAnnual, toInteger(seed.mobilityOutflowAnnual, 0))),
+      prevConsumerDemandGU:Math.max(0, toFiniteNumber(source.prevConsumerDemandGU, toFiniteNumber(source.consumerDemandGU, consumerDemand))),
       populationPressure:0
     };
   }
@@ -903,12 +1014,62 @@
     person.pulse = toFiniteNumber(person.pulse, 0);
     person.spouseId = normalizeString(person.spouseId, null);
     person.householdId = normalizeString(person.householdId, null);
+    person.formerSpouseIds = normalizeStringArray(person.formerSpouseIds).filter(function(id){
+      return id !== person.id;
+    });
     person.parentIds = normalizeStringArray(person.parentIds).filter(function(id){
       return id !== person.id;
     });
     person.childrenIds = normalizeStringArray(person.childrenIds).filter(function(id){
       return id !== person.id;
     });
+    person.estrangedChildIds = normalizeStringArray(person.estrangedChildIds).filter(function(id){
+      return id !== person.id;
+    });
+    person.estrangedParentIds = normalizeStringArray(person.estrangedParentIds).filter(function(id){
+      return id !== person.id;
+    });
+    person.nonMaritalChildIds = normalizeStringArray(person.nonMaritalChildIds).filter(function(id){
+      return id !== person.id;
+    });
+    person.birthUnionType = normalizeString(person.birthUnionType, "marital");
+    if (person.birthUnionType !== "non_marital") {
+      person.birthUnionType = "marital";
+    }
+    person.groomedForBusinessById = normalizeString(person.groomedForBusinessById, null);
+    person.inheritanceDilution = Math.max(1, toInteger(person.inheritanceDilution, 1));
+    person.sharedPrivilege = clamp(toFiniteNumber(person.sharedPrivilege, 0), 0, 100);
+    person.siblingRivalry = clamp(toFiniteNumber(person.siblingRivalry, 0), 0, 100);
+    person.mentorId = normalizeString(person.mentorId, null);
+    if (person.mentorId === person.id) person.mentorId = null;
+    person.rivalIds = normalizeStringArray(person.rivalIds).filter(function(id){ return id !== person.id; });
+    person.closeFriendIds = normalizeStringArray(person.closeFriendIds).filter(function(id){ return id !== person.id; });
+    person.eliteCircleIds = normalizeStringArray(person.eliteCircleIds).filter(function(id){ return id !== person.id; });
+    person.schoolTieIds = normalizeStringArray(person.schoolTieIds).filter(function(id){ return id !== person.id; });
+    person.nepotismTieIds = normalizeStringArray(person.nepotismTieIds).filter(function(id){ return id !== person.id; });
+    person.advisorBusinessIds = normalizeStringArray(person.advisorBusinessIds).slice(0, 4);
+    person.boardBusinessIds = normalizeStringArray(person.boardBusinessIds).slice(0, 4);
+    person.retirementType = normalizeString(person.retirementType, null);
+    person.retirementInfluence = clamp(toFiniteNumber(person.retirementInfluence, 0), 0, 100);
+    person.workerLifecycleStage = normalizeString(person.workerLifecycleStage, null);
+    if (["child","student","worker","manager","executive","founder","professional","dependent","retiree","deceased"].indexOf(person.workerLifecycleStage) === -1) {
+      person.workerLifecycleStage = null;
+    }
+    person.occupationCategory = normalizeString(person.occupationCategory, null);
+    if (["factory_worker","engineer","accountant","sales","operator","executive","owner","investor","unemployed","dependent","deceased"].indexOf(person.occupationCategory) === -1) {
+      person.occupationCategory = null;
+    }
+    person.personalReputation = person.personalReputation && typeof person.personalReputation === "object" ? {
+      trust:clamp(toFiniteNumber(person.personalReputation.trust, 50), 0, 100),
+      prestige:clamp(toFiniteNumber(person.personalReputation.prestige, 35), 0, 100),
+      notoriety:clamp(toFiniteNumber(person.personalReputation.notoriety, 12), 0, 100),
+      scandalMemory:clamp(toFiniteNumber(person.personalReputation.scandalMemory, 0), 0, 100)
+    } : {
+      trust:50,
+      prestige:35,
+      notoriety:12,
+      scandalMemory:0
+    };
     person.lineageId = normalizeString(person.lineageId, "lineage-" + person.id.slice(0, 6));
     person.nameOrder = normalizeString(person.nameOrder, App.utils.getNameOrder(person.countryISO));
     person.nativeDisplayName = normalizeString(person.nativeDisplayName, null);
@@ -932,6 +1093,9 @@
     person.childhoodStage = normalizeChildhoodStage(person.childhoodStage, person.age);
     person.skillTrack = normalizeSkillTrack(person.skillTrack, person.age);
     person.skills = normalizePersonSkills(person.skills, person.educationIndex, person.age);
+    person.workExperienceYears = clamp(toFiniteNumber(person.workExperienceYears, 0), 0, 60);
+    person.unemploymentStreakDays = Math.max(0, toInteger(person.unemploymentStreakDays, 0));
+    person.lastEmployedDay = person.lastEmployedDay == null ? null : Math.max(0, toInteger(person.lastEmployedDay, 0));
     person.lastTraitEffects = normalizeTraitEffects(person.lastTraitEffects);
 
     return person;
@@ -1162,6 +1326,7 @@
     migratedState.econHist = normalizeEconHistory(previousState.econHist, migratedState.blocs);
     migratedState.tickerData = previousState.tickerData && typeof previousState.tickerData === "object" ? previousState.tickerData : {};
     migratedState.countryData = migrateCountryDataToV1(previousState.countryData, migratedState.countryNames, fromVersion);
+    migratedState.stockMarket = normalizeStockMarketState(previousState.stockMarket, migratedState.businesses, migratedState.people, migratedState.simDay);
     migratedState.isoToBloc = createIsoToBloc(migratedState.blocs);
 
     reconcileCrossReferences(migratedState);
@@ -1415,6 +1580,8 @@
       return next;
     });
 
+    migratedState.stockMarket = normalizeStockMarketState(previousState.stockMarket, migratedState.businesses, migratedState.people, migratedState.simDay);
+
     return buildSnapshotEnvelope(snapshot, 11, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
   }
 
@@ -1502,6 +1669,7 @@
       injectBusinessHeadcount:false
     });
     App.store.governor = normalizeGovernorState(state.governor);
+    App.store.stockMarket = normalizeStockMarketState(state.stockMarket, App.store.businesses, App.store.people, simDay);
     App.store.households = normalizeHouseholds(state.households, App.store.people, App.store.countryProfiles);
 
     App.store.households.forEach(function(household){
@@ -1564,7 +1732,8 @@
       countryNames:deepClone(App.store.countryNames || {}),
       countryData:deepClone(App.store.countryData || {}),
       countryProfiles:deepClone(App.store.countryProfiles || {}),
-      governor:normalizeGovernorState(App.store.governor)
+      governor:normalizeGovernorState(App.store.governor),
+      stockMarket:deepClone(App.store.stockMarket || {})
     };
     var migrated = migrateSnapshot({
       schemaVersion:0,

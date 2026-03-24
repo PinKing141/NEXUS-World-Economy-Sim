@@ -21,6 +21,15 @@
   var MAX_HOUSEHOLD_BALANCE_GU = 5e8;
   var MAX_COUNTRY_MEDIAN_WAGE_GU = 5e5;
   var MAX_COUNTRY_DEMAND_GU = 2e14;
+  var STOCK_MIN_LISTING_AGE_YEARS = 6;
+  var STOCK_MIN_LISTING_REVENUE_GU = 120000;
+  var STOCK_MIN_LISTING_VALUATION_GU = 250000;
+  var STOCK_MIN_LISTING_EMPLOYEES = 18;
+  var STOCK_TRADING_CADENCE_DAYS = 7;
+  var STOCK_DIVIDEND_CADENCE_DAYS = 90;
+  var STOCK_MAX_TAPE_ITEMS = 120;
+  var LONG_UNEMPLOYMENT_DAYS = 180;
+  var LABOR_MOBILITY_FLOW_CAP = 12;
   var CORE_LEADERSHIP_ROLES = {
     ceo:{ roleKey:"ceo", title:"CEO", department:"Executive", tier:"executive", importance:5 },
     coo:{ roleKey:"coo", title:"COO", department:"Operations", tier:"executive", importance:4 },
@@ -230,6 +239,18 @@
     Logistics:0.49,
     Energy:0.47
   };
+  var INDUSTRY_OCCUPATION_MIX = {
+    Technology:{ engineer:0.46, operator:0.08, sales:0.22, accountant:0.16, factory_worker:0.08 },
+    Finance:{ engineer:0.1, operator:0.06, sales:0.28, accountant:0.44, factory_worker:0.12 },
+    Manufacturing:{ engineer:0.18, operator:0.31, sales:0.14, accountant:0.12, factory_worker:0.25 },
+    Retail:{ engineer:0.05, operator:0.26, sales:0.43, accountant:0.1, factory_worker:0.16 },
+    "Real Estate":{ engineer:0.09, operator:0.19, sales:0.44, accountant:0.18, factory_worker:0.1 },
+    "F&B":{ engineer:0.04, operator:0.29, sales:0.32, accountant:0.1, factory_worker:0.25 },
+    Healthcare:{ engineer:0.2, operator:0.16, sales:0.2, accountant:0.2, factory_worker:0.24 },
+    Media:{ engineer:0.24, operator:0.18, sales:0.31, accountant:0.17, factory_worker:0.1 },
+    Logistics:{ engineer:0.11, operator:0.36, sales:0.18, accountant:0.14, factory_worker:0.21 },
+    Energy:{ engineer:0.22, operator:0.31, sales:0.12, accountant:0.13, factory_worker:0.22 }
+  };
   var HOUSEHOLD_CLASS_RANKS = {
     strained:0,
     working:1,
@@ -402,6 +423,20 @@
     technical:{ management:0.85, technical:1.4, social:0.9, financialDiscipline:0.95, creativity:1.15 },
     commercial:{ management:1.05, technical:0.85, social:1.35, financialDiscipline:1.2, creativity:0.9 },
     creative:{ management:0.8, technical:1.0, social:1.0, financialDiscipline:0.75, creativity:1.5 }
+  };
+  var OCCUPATION_SKILL_WEIGHTS = {
+    factory_worker:{ management:0.78, technical:1.08, social:0.82, financialDiscipline:0.9, creativity:0.72 },
+    engineer:{ management:0.86, technical:1.26, social:0.84, financialDiscipline:0.92, creativity:1.02 },
+    accountant:{ management:0.94, technical:0.92, social:0.88, financialDiscipline:1.3, creativity:0.78 },
+    sales:{ management:0.98, technical:0.76, social:1.34, financialDiscipline:1.04, creativity:0.94 },
+    operator:{ management:0.86, technical:1.02, social:0.92, financialDiscipline:0.95, creativity:0.86 },
+    executive:{ management:1.34, technical:0.88, social:1.2, financialDiscipline:1.16, creativity:1.0 },
+    owner:{ management:1.24, technical:0.94, social:1.08, financialDiscipline:1.18, creativity:1.06 },
+    investor:{ management:1.02, technical:0.9, social:1.0, financialDiscipline:1.3, creativity:0.9 },
+    unemployed:{ management:0.72, technical:0.68, social:0.74, financialDiscipline:0.72, creativity:0.82 },
+    dependent:{ management:0.74, technical:0.82, social:0.88, financialDiscipline:0.78, creativity:1.0 },
+    deceased:{ management:1.0, technical:1.0, social:1.0, financialDiscipline:1.0, creativity:1.0 },
+    default:{ management:1.0, technical:1.0, social:1.0, financialDiscipline:1.0, creativity:1.0 }
   };
 
   function randomId(){
@@ -1512,6 +1547,9 @@
     var age;
     var education;
     var baseByAge;
+    var rawExperience;
+    var rawUnemployment;
+    var rawLastEmployed;
 
     if (!person) return;
 
@@ -1532,6 +1570,21 @@
       }
     });
 
+    rawExperience = Number(person.workExperienceYears);
+    rawUnemployment = Number(person.unemploymentStreakDays);
+    rawLastEmployed = Number(person.lastEmployedDay);
+
+    person.workExperienceYears = App.utils.clamp(Number.isFinite(rawExperience) ? rawExperience : 0, 0, 60);
+    person.unemploymentStreakDays = Math.max(0, Math.floor(Number.isFinite(rawUnemployment) ? rawUnemployment : 0));
+    person.lastEmployedDay = Number.isFinite(rawLastEmployed) ? Math.max(0, Math.floor(rawLastEmployed)) : null;
+
+    if (person.businessId || person.employerBusinessId) {
+      person.unemploymentStreakDays = 0;
+      if (person.lastEmployedDay == null) {
+        person.lastEmployedDay = App.store.simDay;
+      }
+    }
+
     // Course and specialist-school pathways depend on track, so refresh education metadata here.
     ensureEducationInstitutionData(person);
   }
@@ -1539,14 +1592,26 @@
   function applySkillFormationYearly(person){
     var profile;
     var household;
+    var mentor;
+    var mentorSkillAverage;
+    var ownSkillAverage;
     var age;
     var stage;
     var stageMultiplier;
     var track;
     var trackWeights;
+    var occupationKey;
+    var occupationWeights;
     var educationFactor;
     var institutionFactor;
     var householdFactor;
+    var mentorBoost;
+    var workExperienceBoost;
+    var burnoutPenalty;
+    var agePenalty;
+    var unemploymentPenalty;
+    var burnout;
+    var unemploymentDays;
 
     if (!person || !person.alive) return;
 
@@ -1570,16 +1635,46 @@
 
     track = SKILL_TRACKS[person.skillTrack] ? person.skillTrack : "general";
     trackWeights = SKILL_TRACKS[track];
+    occupationKey = String(person.occupationCategory || "").toLowerCase();
+    occupationWeights = OCCUPATION_SKILL_WEIGHTS[occupationKey] || OCCUPATION_SKILL_WEIGHTS.default;
     educationFactor = (App.utils.clamp(Number(person.educationIndex) || 0, 0, 100) / 100) * 1.35;
     institutionFactor = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1) * 0.75;
     householdFactor = App.utils.clamp(getHouseholdEducationBoost(household) * 0.04, -0.25, 0.5);
 
+    mentorBoost = 0;
+    mentor = person.mentorId ? App.store.getPerson(person.mentorId) : null;
+    if (mentor && mentor.alive && mentor.id !== person.id) {
+      mentorSkillAverage = getPersonSkillAverage(mentor);
+      ownSkillAverage = getPersonSkillAverage(person);
+      mentorBoost = App.utils.clamp((mentorSkillAverage - ownSkillAverage) / 200, 0, 0.28);
+    }
+
+    if (age >= 18 && !person.retired && (person.businessId || person.employerBusinessId)) {
+      person.workExperienceYears = App.utils.clamp((Number(person.workExperienceYears) || 0) + App.utils.rand(0.7, 1.15), 0, 60);
+      person.unemploymentStreakDays = 0;
+      person.lastEmployedDay = App.store.simDay;
+    }
+
+    workExperienceBoost = App.utils.clamp((Number(person.workExperienceYears) || 0) / 55, 0, 0.36);
+    burnout = Number(person.temporaryStates && person.temporaryStates.burnout) || 0;
+    burnoutPenalty = App.utils.clamp((burnout - 56) / 105, 0, 0.42);
+    agePenalty = age > 57 ? App.utils.clamp((age - 57) * 0.018, 0, 0.36) : 0;
+    unemploymentDays = Math.max(0, Number(person.unemploymentStreakDays) || 0);
+    unemploymentPenalty = unemploymentDays > 120 ? App.utils.clamp((unemploymentDays - 120) / 520, 0, 0.55) : 0;
+
     SKILL_KEYS.forEach(function(key){
-      var growth = (0.22 + educationFactor + institutionFactor + householdFactor) * stageMultiplier;
+      var growth = (0.22 + educationFactor + institutionFactor + householdFactor + mentorBoost + workExperienceBoost) * stageMultiplier;
       growth *= App.utils.clamp(Number(trackWeights[key]) || 1, 0.7, 1.6);
+      growth *= App.utils.clamp(Number(occupationWeights[key]) || 1, 0.62, 1.48);
 
       if (age > 58) {
         growth -= 0.35;
+      }
+
+      growth -= agePenalty;
+      growth -= burnoutPenalty;
+      if (age >= 18 && !person.retired && !person.businessId && !person.employerBusinessId) {
+        growth -= unemploymentPenalty;
       }
 
       person.skills[key] = App.utils.clamp((Number(person.skills[key]) || 0) + growth, 0, 100);
@@ -1602,6 +1697,7 @@
     var demandPerCapita = profile.population > 0 ? ((employed * medianWage * 0.72) / Math.max(1, profile.population)) : 0;
     var demandScore = App.utils.clamp(demandPerCapita / 28000, 0, 1);
     var institutionScore = App.utils.clamp(Number(profile.institutionScore) || 0, 0, 1);
+    var scarcity = laborForce > 0 ? 1 - ((laborForce - employed) / laborForce) : 0;
 
     profile.laborForce = laborForce;
     profile.employed = employed;
@@ -1609,8 +1705,167 @@
     profile.medianWageGU = medianWage;
     profile.consumerDemandGU = App.utils.clamp(Math.round(employed * medianWage * 0.72), 0, MAX_COUNTRY_DEMAND_GU);
     profile.populationPressure = App.utils.clamp((employmentRate * 0.5) + (demandScore * 0.25) + (institutionScore * 0.25), 0, 1);
+    profile.laborScarcity = App.utils.clamp(Number(profile.laborScarcity) || scarcity, 0, 1);
+    profile.wagePressure = App.utils.clamp(Number(profile.wagePressure) || 0, -0.45, 0.45);
+    profile.longUnemploymentShare = App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
+    profile.talentShortageIndex = App.utils.clamp(Number(profile.talentShortageIndex) || 0, 0, 1);
+    profile.mobilityInflowAnnual = Math.max(0, floorInt(profile.mobilityInflowAnnual));
+    profile.mobilityOutflowAnnual = Math.max(0, floorInt(profile.mobilityOutflowAnnual));
+    profile.prevConsumerDemandGU = Math.max(0, Number(profile.prevConsumerDemandGU) || profile.consumerDemandGU || 0);
 
     return profile;
+  }
+
+  function getCountryLaborScarcity(iso){
+    var profile = ensureCountryProfile(iso);
+    var laborForce;
+    var available;
+
+    if (!profile) return 0;
+
+    refreshCountryProfileDerived(profile);
+    laborForce = Math.max(1, Number(profile.laborForce) || 0);
+    available = Math.max(0, laborForce - (Number(profile.employed) || 0));
+    return App.utils.clamp(1 - (available / laborForce), 0, 1);
+  }
+
+  function getCountryLongUnemploymentShare(iso){
+    var profile = ensureCountryProfile(iso);
+    var longUnemployed;
+
+    if (!profile) return 0;
+
+    longUnemployed = App.store.getLivingPeople().filter(function(person){
+      return person.countryISO === iso &&
+        person.age >= 18 &&
+        !person.retired &&
+        !person.businessId &&
+        !person.employerBusinessId &&
+        (Number(person.unemploymentStreakDays) || 0) >= LONG_UNEMPLOYMENT_DAYS;
+    }).length;
+
+    return App.utils.clamp(longUnemployed / Math.max(1, Number(profile.laborForce) || 1), 0, 1);
+  }
+
+  function getCountryWagePressure(iso){
+    var profile = ensureCountryProfile(iso);
+    return App.utils.clamp(Number(profile && profile.wagePressure) || 0, -0.45, 0.45);
+  }
+
+  function getIndustryLaborDemandPressure(iso, industry){
+    var profile = ensureCountryProfile(iso);
+    var laborForce;
+    var unemploymentRate;
+    var industryEmployees;
+
+    if (!profile) return 0;
+
+    laborForce = Math.max(1, Number(profile.laborForce) || 0);
+    unemploymentRate = laborForce > 0 ? ((Number(profile.unemployed) || 0) / laborForce) : 0.12;
+    industryEmployees = App.store.businesses.reduce(function(sum, business){
+      if (!business || business.countryISO !== iso) return sum;
+      if (industry && business.industry !== industry) return sum;
+      return sum + Math.max(1, Number(business.employees) || 1);
+    }, 0);
+
+    return App.utils.clamp((industryEmployees / laborForce) * 3.2 + Math.max(0, 0.25 - unemploymentRate) * 1.6, 0, 1.6);
+  }
+
+  function pullMobileLaborIntoCountry(iso, amount){
+    var request = Math.max(0, floorInt(amount));
+    var targetProfile = ensureCountryProfile(iso);
+    var bloc = App.store.getBlocByCountry ? App.store.getBlocByCountry(iso) : null;
+    var moved = 0;
+
+    if (!targetProfile || !bloc || request <= 0) return 0;
+
+    (bloc.members || []).filter(function(memberIso){
+      return memberIso && memberIso !== iso;
+    }).map(function(memberIso){
+      var source = ensureCountryProfile(memberIso);
+      var available = source ? Math.max(0, (Number(source.laborForce) || 0) - (Number(source.employed) || 0)) : 0;
+      return {
+        iso:memberIso,
+        profile:source,
+        available:available
+      };
+    }).filter(function(entry){
+      return entry.profile && entry.available > 0;
+    }).sort(function(first, second){
+      return second.available - first.available;
+    }).forEach(function(entry){
+      var source = entry.profile;
+      var sourcePopulation;
+      var targetPopulation;
+      var room;
+      var cap;
+      var flow;
+
+      if (moved >= request) return;
+
+      room = request - moved;
+      cap = Math.max(1, Math.floor(Math.min(entry.available * 0.2, LABOR_MOBILITY_FLOW_CAP)));
+      flow = Math.min(room, cap);
+      if (flow <= 0) return;
+
+      source.laborForce = Math.max(0, (Number(source.laborForce) || 0) - flow);
+      sourcePopulation = Math.max(1, Number(source.population) || 1);
+      source.population = Math.max(1, sourcePopulation - flow);
+      source.netMigrationRatePer1000 = App.utils.clamp((Number(source.netMigrationRatePer1000) || 0) - ((flow / sourcePopulation) * 1000), -50, 50);
+      source.mobilityOutflowAnnual = Math.max(0, Number(source.mobilityOutflowAnnual) || 0) + flow;
+      refreshCountryProfileDerived(source);
+
+      targetProfile.laborForce = Math.max(0, (Number(targetProfile.laborForce) || 0) + flow);
+      targetPopulation = Math.max(1, Number(targetProfile.population) || 1);
+      targetProfile.population = Math.max(1, targetPopulation + flow);
+      targetProfile.netMigrationRatePer1000 = App.utils.clamp((Number(targetProfile.netMigrationRatePer1000) || 0) + ((flow / targetPopulation) * 1000), -50, 50);
+      targetProfile.mobilityInflowAnnual = Math.max(0, Number(targetProfile.mobilityInflowAnnual) || 0) + flow;
+      moved += flow;
+    });
+
+    refreshCountryProfileDerived(targetProfile);
+    return moved;
+  }
+
+  function applyLaborMarketYearlyAdjustments(){
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var laborForce;
+      var unemploymentRate;
+      var laborScarcity;
+      var longUnemploymentShare;
+      var demandGrowth;
+      var wagePressure;
+      var talentShortageIndex;
+      var previousDemand;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+      laborForce = Math.max(1, Number(profile.laborForce) || 0);
+      unemploymentRate = laborForce > 0 ? ((Number(profile.unemployed) || 0) / laborForce) : 0.12;
+      laborScarcity = getCountryLaborScarcity(iso);
+      longUnemploymentShare = getCountryLongUnemploymentShare(iso);
+      previousDemand = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+      demandGrowth = ((Number(profile.consumerDemandGU) || 0) - previousDemand) / previousDemand;
+
+      wagePressure =
+        (laborScarcity * 0.75) +
+        (App.utils.clamp(demandGrowth, -0.25, 0.25) * 0.55) -
+        (unemploymentRate * 0.65) -
+        (longUnemploymentShare * 0.45);
+      wagePressure = App.utils.clamp(wagePressure, -0.32, 0.34);
+
+      talentShortageIndex = App.utils.clamp((laborScarcity * 0.58) + (Math.max(0, 0.24 - unemploymentRate) * 1.5) + (longUnemploymentShare * 0.22), 0, 1);
+
+      profile.wagePressure = wagePressure;
+      profile.longUnemploymentShare = longUnemploymentShare;
+      profile.laborScarcity = laborScarcity;
+      profile.talentShortageIndex = talentShortageIndex;
+      profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * (1 + (wagePressure * 0.12)), 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+      profile.prevConsumerDemandGU = Math.max(0, Number(profile.consumerDemandGU) || 0);
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function enforceFinancialBounds(){
@@ -1696,6 +1951,7 @@
   function updatePopulationProfilesYearly(){
     if (!App.store.countryProfiles) return;
     phase1UpdateLaborAndDemand();
+    applyLaborMarketYearlyAdjustments();
     phase2BirthDeathPressure();
     phase3MigrationPressure();
     phase4InequalityInstitutionFeedback();
@@ -1730,12 +1986,18 @@
     var profile = ensureCountryProfile(iso);
     var available;
     var reserved;
+    var moved;
 
     if (!profile || request <= 0) return 0;
 
     refreshCountryProfileDerived(profile);
     available = Math.max(0, profile.laborForce - profile.employed);
     reserved = Math.min(request, available);
+    if (reserved < request) {
+      moved = pullMobileLaborIntoCountry(iso, request - reserved);
+      available = Math.max(0, profile.laborForce - profile.employed);
+      reserved += Math.min(Math.max(0, moved), Math.max(0, available));
+    }
     profile.employed += reserved;
     refreshCountryProfileDerived(profile);
     return reserved;
@@ -2069,6 +2331,8 @@
 
     if (!person.alive) return "deceased";
     if (person.retired) return "retired";
+    if (person.occupationCategory === "unemployed") return "struggling";
+    if (person.occupationCategory === "investor") return "growing";
     if (!business) return "starting";
     if (business.profitGU > business.revenueGU * 0.2) return "thriving";
     if (business.profitGU > 0) return "growing";
@@ -2129,6 +2393,7 @@
     governor.currencyConvergenceTicks = Math.max(0, Number(governor.currencyConvergenceTicks) || 0);
     governor.cooldowns = governor.cooldowns && typeof governor.cooldowns === "object" ? governor.cooldowns : {};
     governor.interventionCountsByDay = governor.interventionCountsByDay && typeof governor.interventionCountsByDay === "object" ? governor.interventionCountsByDay : {};
+    governor.interventionLog = Array.isArray(governor.interventionLog) ? governor.interventionLog : [];
     governor.signalSnapshot = governor.signalSnapshot && typeof governor.signalSnapshot === "object" ? governor.signalSnapshot : {};
     governor.runCount = Math.max(0, Number(governor.runCount) || 0);
     governor.lastRunDay = Math.max(0, Number(governor.lastRunDay) || 0);
@@ -2197,9 +2462,11 @@
     return getGovernorInterventionsToday(governor) < GOVERNOR_CONFIG.maxInterventionsPerDay;
   }
 
-  function recordGovernorIntervention(governor, key){
+  function recordGovernorIntervention(governor, key, details){
     var currentDay = Math.max(0, Math.floor(App.store.simDay || 0));
     var dayKey = String(currentDay);
+    var payload = details && typeof details === "object" ? details : {};
+    var logEntry;
 
     Object.keys(governor.interventionCountsByDay || {}).forEach(function(existingKey){
       var numericDay = Number(existingKey);
@@ -2210,6 +2477,19 @@
     });
 
     governor.interventionCountsByDay[dayKey] = Math.max(0, Number(governor.interventionCountsByDay[dayKey]) || 0) + 1;
+    logEntry = {
+      id:"gov-log-" + currentDay + "-" + key + "-" + Math.floor(Math.random() * 1000000),
+      day:currentDay,
+      key:key,
+      text:String(payload.text || "Governor intervention applied."),
+      scope:String(payload.scope || "global"),
+      entities:payload.entities && typeof payload.entities === "object" ? JSON.parse(JSON.stringify(payload.entities)) : {},
+      causes:Array.isArray(payload.causes) ? payload.causes.slice(0, 4).map(function(cause){ return String(cause); }) : []
+    };
+    governor.interventionLog.unshift(logEntry);
+    if (governor.interventionLog.length > 200) {
+      governor.interventionLog.length = 200;
+    }
     setGovernorCooldown(governor, key);
   }
 
@@ -2383,7 +2663,20 @@
 
     governor.noLaunchYears = 0;
     governor.annualLaunches = Math.max(1, Number(governor.annualLaunches) || 0);
-    recordGovernorIntervention(governor, "seededEntrepreneur");
+    recordGovernorIntervention(governor, "seededEntrepreneur", {
+      text:(bloc ? bloc.flag + " " : "") + "Governor seeded a new founder: " + candidate.name + " launched " + business.name + ".",
+      scope:"bloc",
+      entities:{
+        personIds:[candidate.id],
+        businessIds:[business.id],
+        countryIsos:[business.countryISO],
+        blocIds:[business.blocId]
+      },
+      causes:[
+        reason || "Launch drought threatened business renewal.",
+        "Soft governor intervention seeded entrepreneurship momentum."
+      ]
+    });
 
     emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor seeded a new founder: <strong>" + candidate.name + "</strong> launched <strong>" + business.name + "</strong>.", {
       tag:"seed",
@@ -2435,7 +2728,19 @@
       totalInjection += injection;
     });
 
-    recordGovernorIntervention(governor, "capitalEasing");
+    recordGovernorIntervention(governor, "capitalEasing", {
+      text:(bloc ? bloc.flag + " " : "") + "Governor applied temporary capital easing to " + targets.length + " firms.",
+      scope:"bloc",
+      entities:{
+        businessIds:targets.map(function(item){ return item.business.id; }),
+        countryIsos:targets.map(function(item){ return item.business.countryISO; }),
+        blocIds:blocId ? [blocId] : []
+      },
+      causes:[
+        reason || "Business density and resilience dropped below healthy range.",
+        "Soft liquidity bridge stabilized near-term operations."
+      ]
+    });
     emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor applied temporary capital easing to <strong>" + targets.length + "</strong> firms.", {
       tag:"capital-easing",
       intensity:"soft",
@@ -2494,7 +2799,19 @@
 
     arrival = createArrivalForBloc(blocId, reason);
     if (!arrival) return false;
-    recordGovernorIntervention(governor, "migrationRelief");
+    recordGovernorIntervention(governor, "migrationRelief", {
+      text:"Governor opened migration relief and admitted " + arrival.name + ".",
+      scope:"bloc",
+      entities:{
+        personIds:[arrival.id],
+        countryIsos:[arrival.countryISO],
+        blocIds:[arrival.blocId]
+      },
+      causes:[
+        reason || "Labor and ecosystem replenishment needed in under-active markets.",
+        "Calibrated arrival boost added fresh labor and founder potential."
+      ]
+    });
     return true;
   }
 
@@ -2529,7 +2846,19 @@
 
     if (totalHires <= 0) return false;
 
-    recordGovernorIntervention(governor, "hiringIncentive");
+    recordGovernorIntervention(governor, "hiringIncentive", {
+      text:(bloc ? bloc.flag + " " : "") + "Governor hiring incentives unlocked " + totalHires + " new jobs.",
+      scope:"bloc",
+      entities:{
+        businessIds:targets.map(function(business){ return business.id; }),
+        countryIsos:targets.map(function(business){ return business.countryISO; }),
+        blocIds:blocId ? [blocId] : []
+      },
+      causes:[
+        reason || "Unemployment stayed elevated beyond healthy persistence.",
+        "Short-lived incentive nudged hiring without hard market overrides."
+      ]
+    });
     emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor hiring incentives unlocked <strong>" + totalHires + "</strong> new jobs.", {
       tag:"hiring-incentive",
       intensity:"soft",
@@ -2580,7 +2909,17 @@
     if (weakest.rateHistory.length > 60) weakest.rateHistory.shift();
     if (strongest.rateHistory.length > 60) strongest.rateHistory.shift();
 
-    recordGovernorIntervention(governor, "forexNudge");
+    recordGovernorIntervention(governor, "forexNudge", {
+      text:"Governor applied a soft currency divergence nudge between " + weakest.name + " and " + strongest.name + ".",
+      scope:"global",
+      entities:{
+        blocIds:[weakest.id, strongest.id]
+      },
+      causes:[
+        reason || "Bloc currencies were converging into low-volatility lock.",
+        "A bounded adjustment restored relative signal separation."
+      ]
+    });
     emitGovernorIntervention("Governor applied a soft currency divergence nudge between " + weakest.flag + " " + weakest.name + " and " + strongest.flag + " " + strongest.name + ".", {
       tag:"forex-nudge",
       intensity:"soft",
@@ -2776,6 +3115,386 @@
     }).length;
   }
 
+  function normalizeUniqueIdList(values, selfId){
+    var seen = {};
+
+    return (Array.isArray(values) ? values : []).map(function(id){
+      return String(id || "").trim();
+    }).filter(function(id){
+      if (!id || (selfId && id === selfId) || seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  }
+
+  function ensureFamilyDynamics(person){
+    if (!person) return;
+    person.formerSpouseIds = normalizeUniqueIdList(person.formerSpouseIds, person.id);
+    person.estrangedChildIds = normalizeUniqueIdList(person.estrangedChildIds, person.id);
+    person.estrangedParentIds = normalizeUniqueIdList(person.estrangedParentIds, person.id);
+    person.nonMaritalChildIds = normalizeUniqueIdList(person.nonMaritalChildIds, person.id);
+    if (person.birthUnionType !== "non_marital") {
+      person.birthUnionType = "marital";
+    }
+  }
+
+  function ensurePersonalReputation(person){
+    var source;
+
+    if (!person) return;
+    source = person.personalReputation && typeof person.personalReputation === "object" ? person.personalReputation : {};
+    person.personalReputation = {
+      trust:App.utils.clamp(Number(source.trust) || 50, 0, 100),
+      prestige:App.utils.clamp(Number(source.prestige) || 35, 0, 100),
+      notoriety:App.utils.clamp(Number(source.notoriety) || 12, 0, 100),
+      scandalMemory:App.utils.clamp(Number(source.scandalMemory) || 0, 0, 100)
+    };
+  }
+
+  function ensureSocialNetworkData(person){
+    if (!person) return;
+    person.mentorId = String(person.mentorId || "").trim() || null;
+    if (person.mentorId === person.id) person.mentorId = null;
+    person.rivalIds = normalizeUniqueIdList(person.rivalIds, person.id).slice(0, 8);
+    person.closeFriendIds = normalizeUniqueIdList(person.closeFriendIds, person.id).slice(0, 10);
+    person.eliteCircleIds = normalizeUniqueIdList(person.eliteCircleIds, person.id).slice(0, 8);
+    person.schoolTieIds = normalizeUniqueIdList(person.schoolTieIds, person.id).slice(0, 12);
+    person.nepotismTieIds = normalizeUniqueIdList(person.nepotismTieIds, person.id).slice(0, 10);
+    person.advisorBusinessIds = normalizeUniqueIdList(person.advisorBusinessIds || [], null).slice(0, 4);
+    person.boardBusinessIds = normalizeUniqueIdList(person.boardBusinessIds || [], null).slice(0, 4);
+    person.retirementType = String(person.retirementType || "").trim() || null;
+    person.retirementInfluence = App.utils.clamp(Number(person.retirementInfluence) || 0, 0, 100);
+    ensurePersonalReputation(person);
+  }
+
+  function getLifecycleEducationWeight(attainment){
+    var rank = {
+      none:0,
+      primary:1,
+      highschool:2,
+      bachelor:3,
+      masters:4,
+      doctorate:5
+    };
+
+    return rank[String(attainment || "none").toLowerCase()] || 0;
+  }
+
+  function getWorkerLifecycleStage(person){
+    var age;
+    var educationWeight;
+    var skillAverage;
+    var hasHighCapitalPath;
+
+    if (!person || !person.alive) return "deceased";
+    if (person.retired) return "retiree";
+    if (person.businessId) return "founder";
+
+    age = Number(person.age) || 0;
+    if (age < 13) return "child";
+
+    if (person.jobTier === "executive" || person.jobTier === "leadership") return "executive";
+    if (person.jobTier === "senior" || person.jobTier === "mid") return "manager";
+    if (person.employerBusinessId) return "worker";
+
+    educationWeight = getLifecycleEducationWeight(person.educationAttainment);
+    skillAverage = getPersonSkillAverage(person);
+    hasHighCapitalPath = (person.netWorthGU || 0) >= 60000 || ((person.personalReputation && person.personalReputation.prestige) || 0) >= 58;
+
+    if (age < 23) {
+      if (educationWeight >= 3 || skillAverage >= 50) return "student";
+      return "worker";
+    }
+
+    if ((educationWeight >= 3 && skillAverage >= 54) || (educationWeight >= 4) || (skillAverage >= 66 && hasHighCapitalPath)) {
+      return "professional";
+    }
+
+    if (age >= 70 && !person.employerBusinessId) return "dependent";
+    return "worker";
+  }
+
+  function getOccupationCategoryForPerson(person){
+    var stage = String(person && person.workerLifecycleStage || "dependent");
+    var employmentBusiness = person && App.store.getEmploymentBusiness ? App.store.getEmploymentBusiness(person) : null;
+    var industry = employmentBusiness ? employmentBusiness.industry : pickDemandIndustryForPerson(person);
+
+    if (stage === "deceased") return "deceased";
+    if (stage === "child" || stage === "student") return "dependent";
+    if (stage === "founder") return "owner";
+    if (stage === "executive") return "executive";
+    if (stage === "retiree") {
+      if (isInvestorOccupation(person)) return "investor";
+      return "dependent";
+    }
+    if (isInvestorOccupation(person)) return "investor";
+    if (isLikelyUnemployed(person)) return "unemployed";
+    return getIndustryOccupationForPerson(industry, person);
+  }
+
+  function ensureWorkerLifecycleData(person){
+    if (!person) return;
+
+    person.workerLifecycleStage = getWorkerLifecycleStage(person);
+    person.occupationCategory = getOccupationCategoryForPerson(person);
+  }
+
+  function isInvestorOccupation(person){
+    var netWorth;
+    var portfolioSummary;
+    var dividends;
+
+    if (!person || !person.alive) return false;
+    if (person.businessId) return false;
+    if (person.employerBusinessId && person.jobTier !== "executive" && person.jobTier !== "leadership") return false;
+
+    netWorth = Number(person.netWorthGU) || 0;
+    portfolioSummary = App.store.getPersonPortfolioSummary ? App.store.getPersonPortfolioSummary(person.id) : { holdings:0, annualDividendGU:0, marketValueGU:0 };
+    dividends = Number(portfolioSummary.annualDividendGU) || 0;
+
+    if ((portfolioSummary.holdings || 0) >= 2 && dividends >= 1800) return true;
+    if ((portfolioSummary.marketValueGU || 0) >= 38000 && (person.age || 0) >= 40) return true;
+    if (netWorth >= 130000 && (person.age || 0) >= 48) return true;
+    return false;
+  }
+
+  function getIndustryDemandWeights(){
+    var weights = {};
+
+    App.store.businesses.forEach(function(business){
+      var industry = String(business && business.industry || "Technology");
+      var headcount = Math.max(1, Number(business && business.employees) || 1);
+      var productivity = getIndustryValue(INDUSTRY_PRODUCTIVITY_MULTIPLIERS, industry, 2.6);
+      var weight = headcount * App.utils.clamp(productivity, 1, 8.5);
+
+      weights[industry] = (weights[industry] || 0) + weight;
+    });
+
+    return weights;
+  }
+
+  function pickDemandIndustryForPerson(person){
+    var weights = getIndustryDemandWeights();
+    var industries = Object.keys(weights);
+    var total;
+    var roll;
+    var running = 0;
+    var year = currentYear();
+    var chosen = null;
+
+    if (!person || !industries.length) return "Technology";
+
+    total = industries.reduce(function(sum, industry){
+      return sum + Math.max(0, Number(weights[industry]) || 0);
+    }, 0);
+    if (total <= 0) return "Technology";
+
+    roll = hashString(String(person.id || "") + "|" + year + "|industry-demand") % Math.max(1, Math.floor(total));
+    industries.forEach(function(industry){
+      if (running > roll) return;
+      running += Math.max(0, Number(weights[industry]) || 0);
+      if (running > roll) {
+        roll = -1;
+        chosen = industry;
+      }
+    });
+
+    return chosen || industries[0] || "Technology";
+  }
+
+  function getIndustryOccupationForPerson(industry, person){
+    var mix = INDUSTRY_OCCUPATION_MIX[industry] || INDUSTRY_OCCUPATION_MIX.Technology;
+    var weights = {
+      factory_worker:Math.max(0.001, Number(mix.factory_worker) || 0),
+      engineer:Math.max(0.001, Number(mix.engineer) || 0),
+      accountant:Math.max(0.001, Number(mix.accountant) || 0),
+      sales:Math.max(0.001, Number(mix.sales) || 0),
+      operator:Math.max(0.001, Number(mix.operator) || 0)
+    };
+    var technical = Number(person && person.skills && person.skills.technical) || 0;
+    var social = Number(person && person.skills && person.skills.social) || 0;
+    var finance = Number(person && person.skills && person.skills.financialDiscipline) || 0;
+    var management = Number(person && person.skills && person.skills.management) || 0;
+    var year = currentYear();
+    var picks = Object.keys(weights);
+    var total;
+    var roll;
+    var running = 0;
+    var chosen = "operator";
+
+    weights.engineer *= 1 + App.utils.clamp((technical - 48) / 55, -0.45, 0.95);
+    weights.accountant *= 1 + App.utils.clamp((finance - 46) / 52, -0.45, 0.9);
+    weights.sales *= 1 + App.utils.clamp((social - 44) / 50, -0.45, 0.9);
+    weights.operator *= 1 + App.utils.clamp((management - 50) / 80, -0.25, 0.4);
+    weights.factory_worker *= 1 + App.utils.clamp((56 - technical) / 85, -0.3, 0.45);
+
+    total = picks.reduce(function(sum, key){
+      return sum + Math.max(0.001, Number(weights[key]) || 0);
+    }, 0);
+
+    roll = hashString(String(person && person.id || "") + "|" + year + "|occupation|" + String(industry || "Technology")) % Math.max(1, Math.floor(total * 1000));
+
+    picks.forEach(function(key){
+      if (running > roll) return;
+      running += Math.max(1, Math.floor(weights[key] * 1000));
+      if (running > roll) {
+        chosen = key;
+        roll = -1;
+      }
+    });
+
+    return chosen;
+  }
+
+  function isLikelyUnemployed(person){
+    var profile;
+    var unemploymentRate;
+    var education;
+    var technical;
+    var social;
+    var finance;
+    var employability;
+    var threshold;
+    var modifier;
+    var unemploymentDurationPenalty;
+
+    if (!person || !person.alive) return false;
+    if (person.businessId || person.employerBusinessId) return false;
+    if (person.age < 18 || person.retired) return false;
+
+    profile = ensureCountryProfile(person.countryISO);
+    unemploymentRate = profile && profile.laborForce > 0 ? ((profile.unemployed || 0) / Math.max(1, profile.laborForce || 1)) : 0.12;
+    education = Number(person.educationIndex) || 0;
+    technical = Number(person.skills && person.skills.technical) || 0;
+    social = Number(person.skills && person.skills.social) || 0;
+    finance = Number(person.skills && person.skills.financialDiscipline) || 0;
+    unemploymentDurationPenalty = Math.min(18, Math.max(0, Number(person.unemploymentStreakDays) || 0) / 22);
+    employability = (education * 0.48) + (technical * 0.24) + (social * 0.18) + (finance * 0.1) - unemploymentDurationPenalty;
+    modifier = (hashString(String(person.id || "") + "|employment-signal") % 1000) / 1000;
+    threshold = App.utils.clamp((unemploymentRate * 100) + (modifier * 16) + 22, 16, 74);
+
+    return employability < threshold;
+  }
+
+  function getSocialProximityScore(person, target){
+    var score = 0;
+    var sameLineage;
+
+    if (!person || !target || person.id === target.id) return 0;
+    ensureSocialNetworkData(person);
+    sameLineage = person.lineageId && target.lineageId && person.lineageId === target.lineageId;
+
+    if (person.mentorId && person.mentorId === target.id) score += 9;
+    if (person.closeFriendIds.indexOf(target.id) !== -1) score += 6;
+    if (person.schoolTieIds.indexOf(target.id) !== -1) score += 5;
+    if (person.eliteCircleIds.indexOf(target.id) !== -1) score += 4;
+    if (person.nepotismTieIds.indexOf(target.id) !== -1) score += 6;
+    if (person.rivalIds.indexOf(target.id) !== -1) score -= 7;
+    if (sameLineage) score += 5;
+    if (person.spouseId && person.spouseId === target.id) score += 5;
+
+    return App.utils.clamp(score, -12, 18);
+  }
+
+  function adjustPersonalReputation(person, deltas){
+    var change = deltas || {};
+
+    if (!person) return;
+    ensurePersonalReputation(person);
+    person.personalReputation.trust = App.utils.clamp(person.personalReputation.trust + (Number(change.trust) || 0), 0, 100);
+    person.personalReputation.prestige = App.utils.clamp(person.personalReputation.prestige + (Number(change.prestige) || 0), 0, 100);
+    person.personalReputation.notoriety = App.utils.clamp(person.personalReputation.notoriety + (Number(change.notoriety) || 0), 0, 100);
+    person.personalReputation.scandalMemory = App.utils.clamp(person.personalReputation.scandalMemory + (Number(change.scandalMemory) || 0), 0, 100);
+  }
+
+  function decayPersonalReputation(person){
+    if (!person || !person.alive) return;
+    ensurePersonalReputation(person);
+    person.personalReputation.scandalMemory = Math.max(0, person.personalReputation.scandalMemory - App.utils.rand(2, 8));
+    person.personalReputation.notoriety = Math.max(0, person.personalReputation.notoriety - App.utils.rand(0.8, 2.6));
+  }
+
+  function markEstrangement(parent, child){
+    if (!parent || !child) return;
+    ensureFamilyDynamics(parent);
+    ensureFamilyDynamics(child);
+    if (parent.estrangedChildIds.indexOf(child.id) === -1) {
+      parent.estrangedChildIds.push(child.id);
+    }
+    if (child.estrangedParentIds.indexOf(parent.id) === -1) {
+      child.estrangedParentIds.push(parent.id);
+    }
+  }
+
+  function getHouseholdClassTier(person){
+    var household = getHouseholdForPerson(person);
+    return household && household.classTier ? household.classTier : "working";
+  }
+
+  function getClassTierRank(tier){
+    return householdClassRank(String(tier || "working").toLowerCase());
+  }
+
+  function getFertilityPreferenceScore(person){
+    var familyChannel = getTraitChannelScore(person, "family");
+
+    ensureDecisionData(person);
+    return (
+      (familyChannel * 1.5) +
+      ((person.decisionProfile.familyAttachment - 50) * 0.85) -
+      ((person.decisionProfile.statusSeeking - 50) * 0.45) -
+      ((person.decisionProfile.greed - 50) * 0.35)
+    );
+  }
+
+  function getRelationshipCompatibility(first, second){
+    var sharedTraits = countSharedTraits(first, second);
+    var firstFamily;
+    var secondFamily;
+    var familyGap;
+    var classGap;
+    var ambitionGap;
+    var fertilityGap;
+    var cultureScore = 0;
+    var statusMotiveGap;
+    var score;
+
+    ensureDecisionData(first);
+    ensureDecisionData(second);
+
+    firstFamily = getTraitChannelScore(first, "family") + ((first.decisionProfile.familyAttachment - 50) * 0.4);
+    secondFamily = getTraitChannelScore(second, "family") + ((second.decisionProfile.familyAttachment - 50) * 0.4);
+    familyGap = Math.abs(firstFamily - secondFamily);
+    classGap = Math.abs(getClassTierRank(getHouseholdClassTier(first)) - getClassTierRank(getHouseholdClassTier(second)));
+    ambitionGap = Math.abs((first.decisionProfile.statusSeeking - 50) - (second.decisionProfile.statusSeeking - 50));
+    fertilityGap = Math.abs(getFertilityPreferenceScore(first) - getFertilityPreferenceScore(second));
+    statusMotiveGap = Math.abs((first.decisionProfile.greed + first.decisionProfile.statusSeeking) - (second.decisionProfile.greed + second.decisionProfile.statusSeeking));
+
+    if (first.countryISO === second.countryISO) cultureScore += 8;
+    if (first.blocId === second.blocId) cultureScore += 5;
+    if (first.nameOrder === second.nameOrder) cultureScore += 2;
+    if (first.countryISO === "US" && first.state && second.state && first.state === second.state) cultureScore += 2;
+
+    score = 34 +
+      (sharedTraits * 7) +
+      cultureScore -
+      (familyGap * 0.38) -
+      (classGap * 5.2) -
+      (ambitionGap * 0.26) -
+      (fertilityGap * 0.14) -
+      (statusMotiveGap * 0.07);
+
+    return {
+      score:Math.round(score),
+      sharedTraits:sharedTraits,
+      classGap:classGap,
+      ambitionGap:ambitionGap,
+      fertilityGap:fertilityGap,
+      cultureScore:cultureScore,
+      familyGap:familyGap
+    };
+  }
+
   function ageForPerson(person){
     var endDay = person.alive ? App.store.simDay : (person.deathDay != null ? person.deathDay : App.store.simDay);
     return Math.max(0, (endDay - person.birthDay) / YEAR_DAYS);
@@ -2876,9 +3595,27 @@
 
   function syncPerson(person){
     ensureRelationshipIdentity(person);
+    ensureFamilyDynamics(person);
+    ensureSocialNetworkData(person);
     person.name = App.utils.formatPersonName(person.firstName, person.lastName, person.countryISO, person.nameOrder);
     person.age = ageForPerson(person);
     person.lifeStage = lifeStageForAge(person.age, person.alive);
+    ensureSkillData(person);
+
+    if (person.businessId || person.employerBusinessId) {
+      person.unemploymentStreakDays = 0;
+      person.lastEmployedDay = App.store.simDay;
+    } else if (person.alive && person.age >= 18 && !person.retired) {
+      if (person.lastEmployedDay != null) {
+        person.unemploymentStreakDays = Math.max(0, Math.floor(App.store.simDay - person.lastEmployedDay));
+      } else {
+        person.unemploymentStreakDays = Math.max(0, Math.floor((Number(person.unemploymentStreakDays) || 0) + SIM_DAYS_PER_TICK));
+      }
+    } else {
+      person.unemploymentStreakDays = 0;
+    }
+
+    ensureWorkerLifecycleData(person);
     person.status = getStatus(person);
   }
 
@@ -3028,7 +3765,33 @@
       educationInstitutionQuality:options.educationInstitutionQuality != null ? options.educationInstitutionQuality : null,
       childhoodStage:options.childhoodStage || null,
       skillTrack:options.skillTrack || null,
-      skills:options.skills || null
+      skills:options.skills || null,
+      rivalFounderArcUntilDay:options.rivalFounderArcUntilDay != null ? Number(options.rivalFounderArcUntilDay) : null,
+      formerSpouseIds:(options.formerSpouseIds || []).slice(),
+      estrangedChildIds:(options.estrangedChildIds || []).slice(),
+      estrangedParentIds:(options.estrangedParentIds || []).slice(),
+      nonMaritalChildIds:(options.nonMaritalChildIds || []).slice(),
+      birthUnionType:options.birthUnionType === "non_marital" ? "non_marital" : "marital",
+      groomedForBusinessById:options.groomedForBusinessById || null,
+      inheritanceDilution:Math.max(1, Number(options.inheritanceDilution) || 1),
+      siblingRivalry:App.utils.clamp(Number(options.siblingRivalry) || 0, 0, 100),
+      sharedPrivilege:App.utils.clamp(Number(options.sharedPrivilege) || 0, 0, 100),
+      mentorId:options.mentorId || null,
+      rivalIds:(options.rivalIds || []).slice(),
+      closeFriendIds:(options.closeFriendIds || []).slice(),
+      eliteCircleIds:(options.eliteCircleIds || []).slice(),
+      schoolTieIds:(options.schoolTieIds || []).slice(),
+      nepotismTieIds:(options.nepotismTieIds || []).slice(),
+      advisorBusinessIds:(options.advisorBusinessIds || []).slice(),
+      boardBusinessIds:(options.boardBusinessIds || []).slice(),
+      retirementType:options.retirementType || null,
+      retirementInfluence:App.utils.clamp(Number(options.retirementInfluence) || 0, 0, 100),
+      personalReputation:options.personalReputation && typeof options.personalReputation === "object" ? options.personalReputation : null,
+      workerLifecycleStage:options.workerLifecycleStage || null,
+      occupationCategory:options.occupationCategory || null,
+      workExperienceYears:App.utils.clamp(Number(options.workExperienceYears) || 0, 0, 60),
+      unemploymentStreakDays:Math.max(0, Math.floor(Number(options.unemploymentStreakDays) || 0)),
+      lastEmployedDay:options.lastEmployedDay == null ? null : Math.max(0, Math.floor(Number(options.lastEmployedDay) || 0))
     };
 
     syncPerson(person);
@@ -3140,6 +3903,518 @@
     return Math.max(0, (App.store.simDay - Math.max(0, Number(business.foundedDay) || 0)) / YEAR_DAYS);
   }
 
+  function ensureStockMarketState(){
+    if (!App.store.stockMarket || typeof App.store.stockMarket !== "object") {
+      App.store.stockMarket = {
+        listingsByBusinessId:{},
+        lastDividendDay:0,
+        lastTradeDay:0,
+        lastIpoDay:0,
+        tradeTape:[]
+      };
+    }
+    if (!App.store.stockMarket.listingsByBusinessId || typeof App.store.stockMarket.listingsByBusinessId !== "object") {
+      App.store.stockMarket.listingsByBusinessId = {};
+    }
+    if (!Array.isArray(App.store.stockMarket.tradeTape)) {
+      App.store.stockMarket.tradeTape = [];
+    }
+    return App.store.stockMarket;
+  }
+
+  function buildTickerSymbol(business){
+    var base = String(business && business.name || "NEX").replace(/[^A-Za-z]/g, "").toUpperCase();
+    var symbols;
+    var symbol;
+    var suffix = 1;
+
+    if (!base) {
+      base = "NEX";
+    }
+
+    symbol = base.slice(0, 4);
+    symbols = Object.keys(ensureStockMarketState().listingsByBusinessId).map(function(id){
+      var listing = ensureStockMarketState().listingsByBusinessId[id];
+      return listing ? listing.symbol : null;
+    }).filter(Boolean);
+
+    while (symbols.indexOf(symbol) !== -1) {
+      symbol = (base.slice(0, 3) + String(suffix)).slice(0, 4);
+      suffix += 1;
+    }
+
+    return symbol;
+  }
+
+  function getBusinessListing(businessOrId){
+    var businessId = typeof businessOrId === "string" ? businessOrId : (businessOrId && businessOrId.id);
+    var stockMarket = ensureStockMarketState();
+
+    if (!businessId) return null;
+    return stockMarket.listingsByBusinessId[businessId] || null;
+  }
+
+  function getListingHolderShares(listing, personId){
+    if (!listing || !personId) return 0;
+    if (!listing.sharesByHolder || typeof listing.sharesByHolder !== "object") {
+      listing.sharesByHolder = {};
+    }
+    return Math.max(0, Number(listing.sharesByHolder[personId]) || 0);
+  }
+
+  function setListingHolderShares(listing, personId, shares){
+    var normalized = Math.max(0, Math.floor(Number(shares) || 0));
+
+    if (!listing || !personId) return;
+    if (!listing.sharesByHolder || typeof listing.sharesByHolder !== "object") {
+      listing.sharesByHolder = {};
+    }
+
+    if (!normalized) {
+      delete listing.sharesByHolder[personId];
+      return;
+    }
+    listing.sharesByHolder[personId] = normalized;
+  }
+
+  function getListingHeldShares(listing){
+    return Object.keys(listing && listing.sharesByHolder && typeof listing.sharesByHolder === "object" ? listing.sharesByHolder : {}).reduce(function(total, holderId){
+      return total + Math.max(0, Number(listing.sharesByHolder[holderId]) || 0);
+    }, 0);
+  }
+
+  function getListingMarketCapGU(listing){
+    return Math.max(0, (Number(listing && listing.sharePriceGU) || 0) * Math.max(1, Number(listing && listing.totalShares) || 1));
+  }
+
+  function recordTradeTapeEntry(businessId, price, volume, movePct){
+    var stockMarket = ensureStockMarketState();
+
+    stockMarket.tradeTape.push({
+      day:App.store.simDay,
+      businessId:businessId,
+      priceGU:Math.max(0, Number(price) || 0),
+      volumeShares:Math.max(0, Math.floor(Number(volume) || 0)),
+      movePct:Number(movePct) || 0
+    });
+
+    if (stockMarket.tradeTape.length > STOCK_MAX_TAPE_ITEMS) {
+      stockMarket.tradeTape = stockMarket.tradeTape.slice(-STOCK_MAX_TAPE_ITEMS);
+    }
+  }
+
+  function getListingInvestorCandidates(listing, business){
+    var ownerId = business && business.ownerId;
+
+    return App.store.getLivingPeople().filter(function(person){
+      if (!person || person.age < 22) return false;
+      if (person.id === ownerId) return false;
+      if ((person.netWorthGU || 0) < 1800) return false;
+      if (person.businessId && person.businessId === (business && business.id)) return false;
+      return true;
+    });
+  }
+
+  function buyFromTreasury(listing, buyer, requestedShares){
+    var affordableShares;
+    var shares;
+    var cost;
+
+    if (!listing || !buyer || requestedShares <= 0) return 0;
+    if ((listing.treasuryShares || 0) <= 0) return 0;
+
+    affordableShares = Math.floor((buyer.netWorthGU || 0) / Math.max(0.01, listing.sharePriceGU || 0));
+    shares = Math.max(0, Math.min(requestedShares, listing.treasuryShares || 0, affordableShares));
+    if (!shares) return 0;
+
+    cost = shares * Math.max(0.01, listing.sharePriceGU || 0);
+    buyer.netWorthGU = Math.max(100, (buyer.netWorthGU || 0) - cost);
+    listing.treasuryShares = Math.max(0, (listing.treasuryShares || 0) - shares);
+    setListingHolderShares(listing, buyer.id, getListingHolderShares(listing, buyer.id) + shares);
+    syncPerson(buyer);
+    return shares;
+  }
+
+  function sellToTreasury(listing, seller, requestedShares){
+    var owned;
+    var shares;
+    var proceeds;
+
+    if (!listing || !seller || requestedShares <= 0) return 0;
+    owned = getListingHolderShares(listing, seller.id);
+    shares = Math.max(0, Math.min(requestedShares, owned));
+    if (!shares) return 0;
+
+    proceeds = shares * Math.max(0.01, listing.sharePriceGU || 0);
+    setListingHolderShares(listing, seller.id, owned - shares);
+    listing.treasuryShares = Math.max(0, (listing.treasuryShares || 0) + shares);
+    seller.netWorthGU += proceeds;
+    syncPerson(seller);
+    return shares;
+  }
+
+  function listBusinessOnExchange(business, reasonLabel){
+    var stockMarket = ensureStockMarketState();
+    var owner = App.store.getPerson(business && business.ownerId);
+    var totalShares;
+    var floatRatio;
+    var treasuryShares;
+    var listing;
+    var candidates;
+    var allocated = 0;
+    var saleProceeds = 0;
+    var summary;
+
+    if (!business || getBusinessListing(business.id)) return null;
+    if (!owner || !owner.alive) return null;
+
+    totalShares = 1000000;
+    floatRatio = App.utils.clamp(App.utils.rand(0.2, 0.42) + (owner.retired ? 0.06 : 0), 0.18, 0.55);
+    treasuryShares = Math.floor(totalShares * floatRatio);
+
+    listing = {
+      businessId:business.id,
+      symbol:buildTickerSymbol(business),
+      listedDay:App.store.simDay,
+      totalShares:totalShares,
+      treasuryShares:treasuryShares,
+      sharesByHolder:{},
+      sharePriceGU:Math.max(0.05, (business.valuationGU || STOCK_MIN_LISTING_VALUATION_GU) / totalShares),
+      annualDividendPerShareGU:0,
+      lastDividendPerShareGU:0,
+      lastDividendDay:0,
+      lastVolumeShares:0,
+      rollingVolumeShares:0,
+      lastSessionNetDemand:0
+    };
+
+    setListingHolderShares(listing, owner.id, totalShares - treasuryShares);
+
+    candidates = getListingInvestorCandidates(listing, business).sort(function(first, second){
+      var firstWeight = (first.netWorthGU || 0) * (first.retired ? 1.2 : 1) * (!first.businessId ? 1.1 : 1);
+      var secondWeight = (second.netWorthGU || 0) * (second.retired ? 1.2 : 1) * (!second.businessId ? 1.1 : 1);
+      return secondWeight - firstWeight;
+    }).slice(0, 40);
+
+    candidates.forEach(function(candidate){
+      var appetite;
+      var desired;
+      var bought;
+
+      if ((listing.treasuryShares || 0) <= 0) return;
+      appetite = candidate.retired ? App.utils.rand(0.03, 0.11) : App.utils.rand(0.01, 0.06);
+      desired = Math.floor(((candidate.netWorthGU || 0) * appetite) / Math.max(0.01, listing.sharePriceGU));
+      bought = buyFromTreasury(listing, candidate, desired);
+      allocated += bought;
+    });
+
+    saleProceeds = allocated * listing.sharePriceGU;
+    business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + saleProceeds * 0.68);
+    owner.netWorthGU += saleProceeds * 0.32;
+    syncPerson(owner);
+
+    stockMarket.listingsByBusinessId[business.id] = listing;
+    stockMarket.lastIpoDay = App.store.simDay;
+
+    summary = "IPO float sold " + allocated + " shares at " + App.utils.fmtCountry(listing.sharePriceGU, business.countryISO) + " per share.";
+    pushBusinessEventHistory(business, "IPO listing for " + business.name, summary + " " + (reasonLabel || "Market listing broadened ownership."));
+    emitNews("ipo", "<strong>" + business.name + "</strong> listed on the exchange as <strong>" + listing.symbol + "</strong>.", {
+      entities:{
+        personIds:[owner.id],
+        businessIds:[business.id],
+        countryIsos:[business.countryISO],
+        blocIds:[business.blocId]
+      },
+      causes:[
+        reasonLabel || "The firm reached scale and credibility for a public listing.",
+        "Public float sold: " + allocated + " shares."
+      ]
+    });
+
+    return listing;
+  }
+
+  function settleDelistingPayout(business, liquidationValue, reasonLabel){
+    var stockMarket = ensureStockMarketState();
+    var listing = getBusinessListing(business && business.id);
+    var distributable;
+    var perShare;
+    var paid = 0;
+
+    if (!business || !listing) return liquidationValue;
+
+    distributable = Math.max(0, liquidationValue) * 0.7;
+    perShare = distributable / Math.max(1, listing.totalShares || 1);
+
+    Object.keys(listing.sharesByHolder || {}).forEach(function(holderId){
+      var person = App.store.getPerson(holderId);
+      var shares = Math.max(0, Number(listing.sharesByHolder[holderId]) || 0);
+      var payout;
+
+      if (!person || !shares) return;
+      payout = shares * perShare;
+      person.netWorthGU += payout;
+      paid += payout;
+      syncPerson(person);
+    });
+
+    delete stockMarket.listingsByBusinessId[business.id];
+
+    if (reasonLabel) {
+      emitNews("bankruptcy", "<strong>" + business.name + "</strong> was delisted. Shareholders were cashed out at liquidation value.", {
+        entities:{
+          businessIds:[business.id],
+          countryIsos:[business.countryISO],
+          blocIds:[business.blocId]
+        },
+        causes:[reasonLabel]
+      });
+    }
+
+    return Math.max(0, liquidationValue - paid);
+  }
+
+  function isBusinessEligibleForListing(business){
+    if (!business) return false;
+    if (getBusinessListing(business.id)) return false;
+    if ((business.stage || "startup") === "startup") return false;
+    if ((business.stage || "startup") === "declining") return false;
+    if ((business.reputation || 0) < 52) return false;
+    if ((business.employees || 0) < STOCK_MIN_LISTING_EMPLOYEES) return false;
+    if ((business.revenueGU || 0) < STOCK_MIN_LISTING_REVENUE_GU) return false;
+    if ((business.valuationGU || 0) < STOCK_MIN_LISTING_VALUATION_GU) return false;
+    if (getBusinessAgeYears(business) < STOCK_MIN_LISTING_AGE_YEARS) return false;
+    return true;
+  }
+
+  function maybeAutoListBusiness(){
+    var stockMarket = ensureStockMarketState();
+    var cooldown = App.store.simDay - Math.max(0, Number(stockMarket.lastIpoDay) || 0);
+    var candidates;
+    var candidate;
+
+    if (cooldown < 45) return;
+    if (Math.random() >= chanceForDays(0.12, YEAR_DAYS / 2)) return;
+
+    candidates = App.store.businesses.filter(isBusinessEligibleForListing).sort(function(first, second){
+      return (second.valuationGU || 0) - (first.valuationGU || 0);
+    });
+
+    if (!candidates.length) return;
+    candidate = App.utils.pick(candidates.slice(0, 8));
+    listBusinessOnExchange(candidate, "Established earnings and scale attracted a listing window.");
+  }
+
+  function processListingPriceMarkToMarket(){
+    ensureStockMarketState();
+
+    Object.keys(App.store.stockMarket.listingsByBusinessId).forEach(function(businessId){
+      var listing = App.store.stockMarket.listingsByBusinessId[businessId];
+      var business = App.store.getBusiness(businessId);
+      var previousPrice;
+      var intrinsicPrice;
+      var margin;
+      var sentiment;
+      var drift;
+      var noise;
+      var multiplier;
+      var movePct;
+
+      if (!listing) return;
+      if (!business) {
+        delete App.store.stockMarket.listingsByBusinessId[businessId];
+        return;
+      }
+
+      previousPrice = Math.max(0.01, Number(listing.sharePriceGU) || 0.01);
+      intrinsicPrice = Math.max(0.01, (business.valuationGU || STOCK_MIN_LISTING_VALUATION_GU) / Math.max(1, listing.totalShares || 1));
+      margin = App.utils.clamp((business.profitGU || 0) / Math.max(1, business.revenueGU || 1), -0.25, 0.25);
+      sentiment = ((business.reputation || 50) - 50) / 100;
+      drift = ((intrinsicPrice / previousPrice) - 1) * 0.16;
+      noise = App.utils.rand(-0.02, 0.02);
+      multiplier = App.utils.clamp(1 + drift + (margin * 0.18) + (sentiment * 0.08) + noise, 0.82, 1.2);
+      listing.sharePriceGU = Math.max(0.05, previousPrice * multiplier);
+      business.valuationGU = (business.valuationGU * 0.7) + (getListingMarketCapGU(listing) * 0.3);
+      listing.lastSessionNetDemand = Number(listing.lastSessionNetDemand) || 0;
+      listing.rollingVolumeShares = Math.max(0, Math.floor((Number(listing.rollingVolumeShares) || 0) * 0.92));
+
+      movePct = ((listing.sharePriceGU - previousPrice) / previousPrice) * 100;
+      if (Math.abs(movePct) >= 12) {
+        emitNews("market", "<strong>" + business.name + "</strong> shares moved " + (movePct > 0 ? "+" : "") + movePct.toFixed(1) + "%.", {
+          entities:{
+            businessIds:[business.id],
+            countryIsos:[business.countryISO],
+            blocIds:[business.blocId]
+          },
+          causes:[
+            "Price discovery repriced the company against fundamentals.",
+            "Market cap now sits near " + App.utils.fmtCountry(getListingMarketCapGU(listing), business.countryISO) + "."
+          ],
+          rollupLabel:listing.symbol
+        });
+      }
+    });
+  }
+
+  function processDividendCycle(){
+    var stockMarket = ensureStockMarketState();
+    var since = App.store.simDay - Math.max(0, Number(stockMarket.lastDividendDay) || 0);
+
+    if (since < STOCK_DIVIDEND_CADENCE_DAYS) return;
+
+    Object.keys(stockMarket.listingsByBusinessId).forEach(function(businessId){
+      var listing = stockMarket.listingsByBusinessId[businessId];
+      var business = App.store.getBusiness(businessId);
+      var payoutPool;
+      var perShare;
+      var paid = 0;
+      var topIncome = { person:null, amount:0 };
+
+      if (!listing || !business) return;
+      if ((business.profitGU || 0) <= 0) {
+        listing.lastDividendPerShareGU = 0;
+        listing.annualDividendPerShareGU *= 0.75;
+        return;
+      }
+
+      payoutPool = Math.min(
+        Math.max(0, (business.profitGU || 0) * App.utils.clamp(0.08 + (((business.profitGU || 0) / Math.max(1, business.revenueGU || 1)) * 0.24), 0.05, 0.32) * (STOCK_DIVIDEND_CADENCE_DAYS / YEAR_DAYS)),
+        Math.max(0, (business.cashReservesGU || 0) * 0.45)
+      );
+      perShare = payoutPool / Math.max(1, listing.totalShares || 1);
+
+      if (perShare < 0.002) {
+        listing.lastDividendPerShareGU = 0;
+        listing.annualDividendPerShareGU *= 0.82;
+        return;
+      }
+
+      Object.keys(listing.sharesByHolder || {}).forEach(function(holderId){
+        var person = App.store.getPerson(holderId);
+        var shares = Math.max(0, Number(listing.sharesByHolder[holderId]) || 0);
+        var amount;
+
+        if (!person || !person.alive || !shares) return;
+        amount = shares * perShare;
+        person.netWorthGU += amount;
+        paid += amount;
+        if (amount > topIncome.amount) {
+          topIncome = { person:person, amount:amount };
+        }
+        syncPerson(person);
+      });
+
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) - paid);
+      listing.lastDividendPerShareGU = perShare;
+      listing.annualDividendPerShareGU = (listing.annualDividendPerShareGU * 0.55) + ((perShare * (YEAR_DAYS / STOCK_DIVIDEND_CADENCE_DAYS)) * 0.45);
+      listing.lastDividendDay = App.store.simDay;
+
+      if (topIncome.person && (topIncome.person.retired || !topIncome.person.businessId)) {
+        emitNews("market", "<strong>" + topIncome.person.name + "</strong> collected " + App.utils.fmtCountry(topIncome.amount, topIncome.person.countryISO) + " in dividends from " + listing.symbol + ".", {
+          entities:{
+            personIds:[topIncome.person.id],
+            businessIds:[business.id],
+            countryIsos:[business.countryISO],
+            blocIds:[business.blocId]
+          },
+          causes:[
+            "Public equity ownership provided passive income.",
+            "Dividend per share this cycle: " + App.utils.fmtCountry(perShare, business.countryISO) + "."
+          ],
+          rollupLabel:listing.symbol
+        });
+      }
+    });
+
+    stockMarket.lastDividendDay = App.store.simDay;
+  }
+
+  function processTradingCycle(){
+    var stockMarket = ensureStockMarketState();
+    var since = App.store.simDay - Math.max(0, Number(stockMarket.lastTradeDay) || 0);
+
+    if (since < STOCK_TRADING_CADENCE_DAYS) return;
+
+    Object.keys(stockMarket.listingsByBusinessId).forEach(function(businessId){
+      var listing = stockMarket.listingsByBusinessId[businessId];
+      var business = App.store.getBusiness(businessId);
+      var investors;
+      var netDemandShares = 0;
+      var tradedShares = 0;
+      var beforePrice;
+      var afterPrice;
+      var movePct;
+
+      if (!listing || !business) return;
+
+      beforePrice = Math.max(0.05, Number(listing.sharePriceGU) || 0.05);
+      investors = getListingInvestorCandidates(listing, business).slice(0, 90);
+
+      investors.forEach(function(person){
+        var ownedShares = getListingHolderShares(listing, person.id);
+        var retirementBias = person.retired ? 0.18 : 0;
+        var nonFounderBias = !person.businessId ? 0.06 : 0;
+        var momentumBias = Number(listing.lastSessionNetDemand) > 0 ? 0.05 : -0.02;
+        var buyChance = App.utils.clamp(0.08 + retirementBias + nonFounderBias + momentumBias, 0.04, 0.42);
+        var sellChance = App.utils.clamp(0.05 + (ownedShares > 0 ? 0.08 : 0) + (business.profitGU < 0 ? 0.06 : 0), 0.02, 0.34);
+        var buyBudget;
+        var buyRequest;
+        var sold;
+        var bought;
+
+        if (Math.random() < buyChance && (person.netWorthGU || 0) > beforePrice * 2) {
+          buyBudget = (person.netWorthGU || 0) * App.utils.rand(0.006, 0.035);
+          buyRequest = Math.floor(buyBudget / beforePrice);
+          bought = buyFromTreasury(listing, person, buyRequest);
+          netDemandShares += bought;
+          tradedShares += bought;
+        }
+
+        if (ownedShares > 0 && Math.random() < sellChance) {
+          sold = sellToTreasury(listing, person, Math.floor(ownedShares * App.utils.rand(0.05, 0.28)));
+          netDemandShares -= sold;
+          tradedShares += sold;
+        }
+      });
+
+      listing.lastSessionNetDemand = netDemandShares;
+      listing.lastVolumeShares = tradedShares;
+      listing.rollingVolumeShares = Math.max(0, (Number(listing.rollingVolumeShares) || 0) + tradedShares);
+
+      if (tradedShares > 0) {
+        afterPrice = Math.max(0.05, beforePrice * App.utils.clamp(1 + (netDemandShares / Math.max(1, listing.totalShares || 1)) * 2.4 + App.utils.rand(-0.012, 0.012), 0.92, 1.12));
+        listing.sharePriceGU = afterPrice;
+        movePct = ((afterPrice - beforePrice) / beforePrice) * 100;
+        recordTradeTapeEntry(business.id, afterPrice, tradedShares, movePct);
+
+        if (Math.abs(movePct) >= 8 && tradedShares >= 1500) {
+          emitNews("market", "<strong>" + business.name + "</strong> saw heavy trading in " + listing.symbol + " (" + (movePct > 0 ? "+" : "") + movePct.toFixed(1) + "%).", {
+            entities:{
+              businessIds:[business.id],
+              countryIsos:[business.countryISO],
+              blocIds:[business.blocId]
+            },
+            causes:[
+              "Investor demand shifted by " + netDemandShares + " shares this session.",
+              "Trading volume reached " + tradedShares + " shares."
+            ],
+            rollupLabel:listing.symbol
+          });
+        }
+      }
+    });
+
+    stockMarket.lastTradeDay = App.store.simDay;
+  }
+
+  function processStockMarketTick(){
+    ensureStockMarketState();
+    maybeAutoListBusiness();
+    processListingPriceMarkToMarket();
+    processTradingCycle();
+    processDividendCycle();
+  }
+
   function getBusinessStageFactor(stage){
     if (stage === "startup") return 0.84;
     if (stage === "growth") return 1.02;
@@ -3153,6 +4428,58 @@
     return Math.max(1500, Number(profile && profile.medianWageGU) || 12000);
   }
 
+  function getRoleOccupationHint(role){
+    var title = String(role && role.title || "").toLowerCase();
+    var department = String(role && role.department || "").toLowerCase();
+
+    if (title.indexOf("ceo") !== -1 || title.indexOf("coo") !== -1 || title.indexOf("cfo") !== -1 || department.indexOf("executive") !== -1) return "executive";
+    if (department.indexOf("finance") !== -1 || title.indexOf("finance") !== -1 || title.indexOf("account") !== -1) return "accountant";
+    if (department.indexOf("sales") !== -1 || title.indexOf("sales") !== -1 || title.indexOf("growth") !== -1) return "sales";
+    if (department.indexOf("technology") !== -1 || title.indexOf("cto") !== -1 || title.indexOf("engineer") !== -1 || title.indexOf("developer") !== -1) return "engineer";
+    if (department.indexOf("operations") !== -1 || department.indexOf("logistics") !== -1 || department.indexOf("stores") !== -1) return "operator";
+    return "operator";
+  }
+
+  function getRoleTalentShortageSignal(business, role){
+    var occupation = getRoleOccupationHint(role);
+    var candidates;
+    var qualified;
+    var threshold = occupation === "executive" ? 62 : 54;
+
+    if (!business) return 0;
+
+    candidates = App.store.getLivingPeople().filter(function(person){
+      return person.countryISO === business.countryISO &&
+        person.age >= 20 &&
+        !person.retired &&
+        !person.businessId &&
+        !person.employerBusinessId;
+    });
+
+    if (!candidates.length) return 0.85;
+
+    qualified = candidates.filter(function(person){
+      var skills = person.skills || {};
+      var score;
+
+      if (occupation === "executive") {
+        score = (Number(skills.management) || 0) * 0.45 + (Number(skills.social) || 0) * 0.25 + (Number(skills.financialDiscipline) || 0) * 0.2 + (Number(person.educationIndex) || 0) * 0.1;
+      } else if (occupation === "engineer") {
+        score = (Number(skills.technical) || 0) * 0.62 + (Number(skills.creativity) || 0) * 0.2 + (Number(person.educationIndex) || 0) * 0.18;
+      } else if (occupation === "accountant") {
+        score = (Number(skills.financialDiscipline) || 0) * 0.58 + (Number(skills.management) || 0) * 0.22 + (Number(person.educationIndex) || 0) * 0.2;
+      } else if (occupation === "sales") {
+        score = (Number(skills.social) || 0) * 0.62 + (Number(skills.management) || 0) * 0.18 + (Number(person.educationIndex) || 0) * 0.2;
+      } else {
+        score = (Number(skills.technical) || 0) * 0.34 + (Number(skills.social) || 0) * 0.28 + (Number(skills.management) || 0) * 0.18 + (Number(person.educationIndex) || 0) * 0.2;
+      }
+
+      return score >= threshold;
+    }).length;
+
+    return App.utils.clamp(1 - Math.min(1, qualified / (occupation === "executive" ? 5 : 9)), 0, 1);
+  }
+
   function getRoleCompensationMultiplier(role){
     var importance = Math.max(1, Number(role && role.importance) || 1);
     return 1.35 + (importance * 0.7);
@@ -3163,7 +4490,11 @@
     var industry = getIndustryValue(INDUSTRY_WAGE_MULTIPLIERS, business.industry, 1);
     var stage = getBusinessStageFactor(business.stage);
     var reputation = 0.88 + ((business.reputation || 50) / 100) * 0.34;
-    return Math.max(900, medianWage * industry * stage * reputation * 0.82);
+    var laborScarcity = getCountryLaborScarcity(business.countryISO);
+    var wagePressure = getCountryWagePressure(business.countryISO);
+    var industryDemandPressure = getIndustryLaborDemandPressure(business.countryISO, business.industry);
+    var laborMarketMultiplier = 1 + (laborScarcity * 0.12) + (wagePressure * 0.18) + (industryDemandPressure * 0.06);
+    return Math.max(900, medianWage * industry * stage * reputation * 0.82 * laborMarketMultiplier);
   }
 
   function getRoleSalary(business, role){
@@ -3171,28 +4502,64 @@
     var industry = getIndustryValue(INDUSTRY_WAGE_MULTIPLIERS, business.industry, 1);
     var stage = getBusinessStageFactor(business.stage);
     var reputation = 0.92 + ((business.reputation || 50) / 100) * 0.38;
-    return Math.max(1200, Math.round(medianWage * industry * getRoleCompensationMultiplier(role) * stage * reputation));
+    var laborScarcity = getCountryLaborScarcity(business.countryISO);
+    var wagePressure = getCountryWagePressure(business.countryISO);
+    var industryDemandPressure = getIndustryLaborDemandPressure(business.countryISO, business.industry);
+    var talentShortage = getRoleTalentShortageSignal(business, role);
+    var laborMarketMultiplier = 1 + (laborScarcity * 0.16) + (wagePressure * 0.24) + (industryDemandPressure * 0.08) + (talentShortage * 0.1);
+    return Math.max(1200, Math.round(medianWage * industry * getRoleCompensationMultiplier(role) * stage * reputation * laborMarketMultiplier));
   }
 
   function assignEmployment(person, business, role){
+    var baseSalary;
+    var unemploymentPenalty;
+    var roleHint;
+    var skillPremium;
+
     if (!person || !business || !role) return;
+
+    baseSalary = getRoleSalary(business, role);
+    unemploymentPenalty = App.utils.clamp((Math.max(0, Number(person.unemploymentStreakDays) || 0) - LONG_UNEMPLOYMENT_DAYS) / 900, 0, 0.12);
+    roleHint = getRoleOccupationHint(role);
+    if (roleHint === "executive") {
+      skillPremium = ((Number(person.skills && person.skills.management) || 0) - 50) * 0.0042;
+    } else if (roleHint === "engineer") {
+      skillPremium = ((Number(person.skills && person.skills.technical) || 0) - 50) * 0.004;
+    } else if (roleHint === "accountant") {
+      skillPremium = ((Number(person.skills && person.skills.financialDiscipline) || 0) - 50) * 0.004;
+    } else if (roleHint === "sales") {
+      skillPremium = ((Number(person.skills && person.skills.social) || 0) - 50) * 0.004;
+    } else {
+      skillPremium = ((getPersonSkillAverage(person) || 0) - 50) * 0.0028;
+    }
 
     person.employerBusinessId = business.id;
     person.jobTitle = role.title;
     person.jobTier = role.tier;
     person.jobDepartment = role.department;
-    person.salaryGU = getRoleSalary(business, role);
+    person.salaryGU = Math.max(900, Math.round(baseSalary * App.utils.clamp(1 + skillPremium - unemploymentPenalty, 0.86, 1.18)));
+    person.lastEmployedDay = App.store.simDay;
+    person.unemploymentStreakDays = 0;
   }
 
   function clearEmployment(person, businessId){
+    var hadEmployment;
+
     if (!person) return;
     if (businessId && person.employerBusinessId !== businessId) return;
+
+    hadEmployment = !!person.employerBusinessId;
 
     person.employerBusinessId = null;
     person.jobTitle = null;
     person.jobTier = null;
     person.jobDepartment = null;
     person.salaryGU = 0;
+
+    if (hadEmployment) {
+      person.lastEmployedDay = App.store.simDay;
+      person.unemploymentStreakDays = 0;
+    }
   }
 
   function buildLeadershipEntry(role, person){
@@ -3238,8 +4605,12 @@
   function leadershipCandidateScore(candidate, business, role){
     var score = 0;
     var prestigeSignal;
+    var owner = business ? App.store.getPerson(business.ownerId) : null;
+    var leadership;
+    var tieBonus = 0;
 
     ensureDecisionData(candidate);
+    ensureSocialNetworkData(candidate);
     if (candidate.lineageId === business.lineageId) score += 200;
     if (candidate.employerBusinessId === business.id) score += 120;
     score += Math.min(120, Math.floor((candidate.netWorthGU || 0) / 800));
@@ -3257,6 +4628,19 @@
       score += App.utils.clamp((prestigeSignal.prestige - 60) * 0.22, 0, 8);
       score += getPromotionReadinessScore(candidate, role, business);
     }
+    if (owner) {
+      tieBonus += getSocialProximityScore(candidate, owner) * 1.7;
+      if (candidate.mentorId && candidate.mentorId === owner.id) tieBonus += 6;
+    }
+    leadership = App.store.getBusinessLeadership(business);
+    leadership.forEach(function(entry){
+      if (!entry.person || entry.person.id === candidate.id) return;
+      tieBonus += getSocialProximityScore(candidate, entry.person) * 0.45;
+    });
+    score += App.utils.clamp(tieBonus, -14, 30);
+    score += (Number(candidate.personalReputation && candidate.personalReputation.prestige) || 35) * 0.28;
+    score += (Number(candidate.personalReputation && candidate.personalReputation.trust) || 50) * 0.18;
+    score -= (Number(candidate.personalReputation && candidate.personalReputation.scandalMemory) || 0) * 0.35;
     score += ((business.reputation || 50) - 50) * 0.4;
     return score;
   }
@@ -3609,6 +4993,9 @@
     if (metrics.reputation < 38) reasons.push({ text:"Damaged reputation limited room to maneuver.", weight:(38 - metrics.reputation) * 1.8 });
     if (metrics.institutionPrestige > 70) reasons.push({ text:"Leadership education prestige supported hiring confidence and merit promotions.", weight:(metrics.institutionPrestige - 70) * 1.8 });
     if (metrics.institutionPrestige < 44) reasons.push({ text:"Low institutional prestige made leadership favor conservative staffing and slower promotions.", weight:(44 - metrics.institutionPrestige) * 2.2 });
+    if (metrics.laborScarcity > 0.82) reasons.push({ text:"Local labor scarcity forced wage pressure and selective hiring.", weight:(metrics.laborScarcity - 0.82) * 28 });
+    if (metrics.longUnemploymentShare > 0.08) reasons.push({ text:"A large long-unemployment pool weakened talent matching quality.", weight:metrics.longUnemploymentShare * 120 });
+    if (metrics.wagePressure > 0.12) reasons.push({ text:"Country wage pressure raised expected compensation costs.", weight:metrics.wagePressure * 60 });
     if (metrics.geoPressure > 1.5) reasons.push({ text:"Geopolitical pressure made the firm more defensive.", weight:(metrics.geoPressure - 1.5) * 16 });
     if (metrics.trend > 0.07) reasons.push({ text:"Rising revenue momentum favored expansion.", weight:metrics.trend * 120 });
     if (metrics.trend < -0.07) reasons.push({ text:"Falling revenue momentum increased retrenchment pressure.", weight:Math.abs(metrics.trend) * 120 });
@@ -3645,9 +5032,13 @@
   function evaluateBusinessDecision(business){
     var makers;
     var bloc;
+    var profile;
     var trend;
     var profitMargin;
     var cashCoverage;
+    var laborScarcity;
+    var longUnemploymentShare;
+    var wagePressure;
     var metrics;
     var scores;
     var stance;
@@ -3662,15 +5053,22 @@
     primeBusinessDecisionState(business);
     makers = getBusinessDecisionMakers(business);
     bloc = App.store.getBloc(business.blocId);
+    profile = ensureCountryProfile(business.countryISO);
     trend = getRevenueTrend(business);
     profitMargin = getProfitMargin(business);
     cashCoverage = getCashCoverageMonths(business);
+    laborScarcity = getCountryLaborScarcity(business.countryISO);
+    longUnemploymentShare = getCountryLongUnemploymentShare(business.countryISO);
+    wagePressure = getCountryWagePressure(business.countryISO);
     metrics = {
       trend:trend,
       profitMargin:profitMargin,
       cashCoverage:cashCoverage,
       reputation:business.reputation || 50,
       institutionPrestige:50,
+      laborScarcity:laborScarcity,
+      longUnemploymentShare:longUnemploymentShare,
+      wagePressure:wagePressure,
       geoPressure:bloc ? bloc.geoPressure : 0,
       stage:business.stage
     };
@@ -3680,6 +5078,15 @@
       cash:(-trend * 60) + (-profitMargin * 80) + (3 - cashCoverage) * 12 + ((50 - (business.reputation || 50)) * 0.18) + ((bloc ? bloc.geoPressure : 0) * 7) + (business.stage === "declining" ? 10 : 0),
       succession:(business.stage === "declining" ? -6 : 0) + (cashCoverage < 2 ? -5 : 0) + ((business.reputation || 50) < 40 ? -6 : 0)
     };
+
+    scores.staffing += App.utils.clamp((laborScarcity - 0.7) * 30, -12, 8);
+    scores.staffing -= App.utils.clamp(longUnemploymentShare * 32, 0, 18);
+    scores.cash += App.utils.clamp(wagePressure * 36, -9, 16);
+
+    if (profile && profile.talentShortageIndex != null) {
+      scores.staffing -= App.utils.clamp(Number(profile.talentShortageIndex) * 14, 0, 10);
+      scores.cash += App.utils.clamp(Number(profile.talentShortageIndex) * 8, 0, 6);
+    }
 
     makers.forEach(function(entry){
       var weights = getRoleDecisionWeights(entry.roleKey);
@@ -3846,8 +5253,46 @@
   }
 
   function linkSpouses(first, second){
+    ensureFamilyDynamics(first);
+    ensureFamilyDynamics(second);
     first.spouseId = second.id;
     second.spouseId = first.id;
+  }
+
+  function dissolveMarriage(first, second){
+    if (!first || !second) return;
+    ensureFamilyDynamics(first);
+    ensureFamilyDynamics(second);
+
+    if (first.spouseId === second.id) {
+      first.spouseId = null;
+    }
+    if (second.spouseId === first.id) {
+      second.spouseId = null;
+    }
+
+    if (first.formerSpouseIds.indexOf(second.id) === -1) {
+      first.formerSpouseIds.push(second.id);
+    }
+    if (second.formerSpouseIds.indexOf(first.id) === -1) {
+      second.formerSpouseIds.push(first.id);
+    }
+
+    adjustTemporaryStates(first, {
+      stress:9,
+      confidence:-6,
+      resentment:7
+    });
+    adjustTemporaryStates(second, {
+      stress:9,
+      confidence:-6,
+      resentment:7
+    });
+
+    first.pulse = 1;
+    second.pulse = 1;
+    syncPerson(first);
+    syncPerson(second);
   }
 
   function addChildToParents(child, parents){
@@ -4409,25 +5854,19 @@
       if (candidate.id === person.id) return false;
       if (candidate.spouseId) return false;
       if (!areMarriageCompatible(person, candidate)) return false;
-      if (candidate.countryISO !== person.countryISO) return false;
       if (candidate.age < 22 || candidate.age > 50) return false;
       if (isCloseRelative(person, candidate)) return false;
       return true;
     }).sort(function(first, second){
       function score(candidate){
         var value = 0;
-        var candidateFamily = getTraitChannelScore(candidate, "family");
-        var personFamily = getTraitChannelScore(person, "family");
         var candidateMobility = getTraitChannelScore(candidate, "mobility");
-        var sharedTraits = countSharedTraits(person, candidate);
+        var compatibility = getRelationshipCompatibility(person, candidate);
 
         if (!candidate.businessId) value += 4;
-        if (person.countryISO === "US" && person.state && candidate.state === person.state) value += 3;
-        value += Math.max(0, 6 - Math.abs(person.age - candidate.age));
-        value += sharedTraits * 2;
-        value += candidateFamily * 0.5;
+        value += Math.max(0, 8 - Math.abs(person.age - candidate.age));
+        value += compatibility.score * 0.55;
         value += candidateMobility * 0.25;
-        value -= Math.abs(personFamily - candidateFamily) * 0.22;
         if (candidate.childrenIds && candidate.childrenIds.length) value -= 1;
         return value;
       }
@@ -4443,6 +5882,9 @@
     var spouse;
     var marriageEffects;
     var householdStress = getPersonFinancialStress(person);
+    var compatibility;
+    var stepChildrenCount;
+    var marriageText;
 
     chance += getTraitChannelScore(person, "family") * 0.0022;
     chance += getTraitChannelScore(person, "deal") * 0.0008;
@@ -4462,21 +5904,43 @@
       person.pulse = 1;
     }
 
+    compatibility = getRelationshipCompatibility(person, spouse);
+    if (compatibility.score < 10 && Math.random() < 0.35) {
+      dissolveMarriage(person, spouse);
+      syncHouseholds();
+      return;
+    }
+
     syncHouseholds();
+    stepChildrenCount = getStepChildCount(person, spouse) + getStepChildCount(spouse, person);
 
     marriageEffects = summarizeTraitEffects(collectGroupTraitEffects([person, spouse], ["family","deal"]), 4);
     recordTraitEffects(marriageEffects);
     setTraitSnapshot(person, marriageEffects);
     setTraitSnapshot(spouse, marriageEffects);
-    emitNews("marriage", "<strong>" + person.name + "</strong> and <strong>" + spouse.name + "</strong> married in " + App.store.getCountryName(person.countryISO) + ".", {
+    marriageText = "<strong>" + person.name + "</strong> and <strong>" + spouse.name + "</strong> married in " + App.store.getCountryName(person.countryISO) + ".";
+    if (stepChildrenCount > 0) {
+      marriageText = "<strong>" + person.name + "</strong> and <strong>" + spouse.name + "</strong> married and formed a stepfamily with " + stepChildrenCount + " child" + (stepChildrenCount === 1 ? "" : "ren") + ".";
+    }
+
+    emitNews("marriage", marriageText, {
       tags:buildTraitEffectTags(marriageEffects, 2),
       entities:{
         personIds:[person.id, spouse.id],
         countryIsos:[person.countryISO],
         blocIds:[person.blocId]
       },
-      causes:marriageEffects.slice(0, 2).map(function(effect){ return effect.label; })
+      causes:marriageEffects.slice(0, 2).map(function(effect){ return effect.label; }).concat([
+        "Compatibility score: " + compatibility.score + ".",
+        "Marriage considered class/culture proximity, ambition alignment, and fertility preference fit."
+      ])
     });
+  }
+
+  function getStepChildCount(parent, partner){
+    return App.store.getChildren(parent, false).filter(function(child){
+      return child && child.parentIds && child.parentIds.indexOf(partner.id) === -1;
+    }).length;
   }
 
   function getSharedChildren(first, second){
@@ -4487,8 +5951,368 @@
     });
   }
 
+  function getBirthNormModifier(iso){
+    var profile = ensureCountryProfile(iso);
+    var baseRate = Number(profile && profile.birthRatePer1000);
+
+    if (!Number.isFinite(baseRate)) baseRate = 14;
+    return App.utils.clamp((baseRate - 12) / 36, -0.15, 0.45);
+  }
+
+  function getParentHealthModifier(person){
+    var age;
+    var stress;
+    var burnout;
+    var grief;
+    var resentment;
+    var fatigue;
+
+    if (!person) return -0.2;
+
+    ensureDecisionData(person);
+    age = Number(person.age) || 0;
+    stress = Number(person.temporaryStates.stress) || 0;
+    burnout = Number(person.temporaryStates.burnout) || 0;
+    grief = Number(person.temporaryStates.grief) || 0;
+    resentment = Number(person.temporaryStates.resentment) || 0;
+
+    fatigue = ((stress - 40) * 0.0105) + ((burnout - 30) * 0.0065) + (grief * 0.0045) + (resentment * 0.0025);
+    if (age > 38) fatigue += (age - 38) * 0.015;
+    return App.utils.clamp(-fatigue, -0.55, 0.16);
+  }
+
+  function getMaritalStabilityModifier(first, second, isMarital){
+    var compatibility;
+    var strain;
+
+    if (!isMarital) return -0.06;
+    compatibility = getRelationshipCompatibility(first, second);
+    strain = (getPersonFinancialStress(first) + getPersonFinancialStress(second)) / 2;
+    return App.utils.clamp((compatibility.score / 165) - (strain * 0.14), -0.12, 0.14);
+  }
+
+  function applyChildOutcomeInfluence(mother, partner, child, siblings, household, isMarital){
+    var parentEducation;
+    var parentFamily;
+    var parentMobility;
+    var householdStress;
+    var classRank;
+    var siblingCount;
+    var privilegeBoost;
+    var dilutionPenalty;
+    var educationShift;
+    var rivalrySibling;
+
+    if (!child) return;
+
+    siblingCount = Math.max(0, (siblings || []).length);
+    householdStress = household ? ((household.financialStress || 0) / 100) : 0;
+    classRank = household ? householdClassRank(household.classTier) : 1;
+    parentEducation = ((Number(mother && mother.educationIndex) || 0) + (Number(partner && partner.educationIndex) || 0)) / 2;
+    parentFamily = (getTraitChannelScore(mother, "family") + getTraitChannelScore(partner, "family")) / 2;
+    parentMobility = (getTraitChannelScore(mother, "mobility") + getTraitChannelScore(partner, "mobility")) / 2;
+
+    privilegeBoost = classRank >= 3 ? (2.2 + (classRank - 3) * 1.8) : 0;
+    dilutionPenalty = siblingCount > 0 ? (siblingCount * 1.35) : 0;
+    educationShift =
+      ((parentEducation - 50) * 0.055) +
+      (parentFamily * 0.07) +
+      (parentMobility * 0.03) +
+      privilegeBoost -
+      (householdStress * 5.8) -
+      dilutionPenalty +
+      (isMarital ? 0.6 : -1.8);
+
+    child.educationIndex = App.utils.clamp((Number(child.educationIndex) || 0) + educationShift, 0, 100);
+    child.sharedPrivilege = App.utils.clamp((classRank - 1) * 14 + (privilegeBoost * 2.5), 0, 100);
+    child.inheritanceDilution = Math.max(1, siblingCount + 1);
+    child.siblingRivalry = App.utils.clamp((Number(child.siblingRivalry) || 0) + (siblingCount * 7.5) + (isMarital ? 1.5 : 4), 0, 100);
+
+    if (siblingCount >= 1 && Math.random() < App.utils.clamp(0.24 + (siblingCount * 0.08), 0.2, 0.65)) {
+      rivalrySibling = siblings.slice().sort(function(first, second){
+        return Math.abs((first.age || 0) - (second.age || 0));
+      })[0] || null;
+
+      if (rivalrySibling) {
+        ensureDecisionData(rivalrySibling);
+        rivalrySibling.siblingRivalry = App.utils.clamp((Number(rivalrySibling.siblingRivalry) || 0) + App.utils.rand(7, 16), 0, 100);
+        rivalrySibling.inheritanceDilution = Math.max(1, siblingCount + 1);
+        adjustTemporaryStates(rivalrySibling, {
+          resentment:App.utils.rand(4, 10),
+          stress:App.utils.rand(1, 4),
+          ambitionSpike:App.utils.rand(2, 5)
+        });
+      }
+    }
+
+    ensureEducationData(child, household || null);
+    ensureSkillData(child);
+    syncPerson(child);
+  }
+
+  function processYearlySiblingDynamics(){
+    var processedParents = {};
+
+    App.store.getLivingPeople().forEach(function(parent){
+      var children;
+      var siblingCount;
+      var key;
+
+      if (!parent || !parent.alive || !parent.childrenIds || !parent.childrenIds.length) return;
+      key = parent.id;
+      if (processedParents[key]) return;
+      processedParents[key] = true;
+
+      children = App.store.getChildren(parent, false).filter(function(child){
+        return !!child && child.alive;
+      });
+      siblingCount = children.length;
+      if (siblingCount <= 1) return;
+
+      children.forEach(function(child){
+        var rivalryDrift = App.utils.rand(0.5, 2.2) + (siblingCount - 2) * 0.45;
+        child.inheritanceDilution = Math.max(1, siblingCount);
+        child.siblingRivalry = App.utils.clamp((Number(child.siblingRivalry) || 0) + rivalryDrift, 0, 100);
+      });
+    });
+  }
+
+  function processYearlyFamilyBusinessGrooming(){
+    App.store.businesses.forEach(function(business){
+      var owner = App.store.getPerson(business.ownerId);
+      var children;
+      var eligible;
+      var sorted;
+      var chosen;
+      var others;
+      var household;
+
+      if (!owner || !owner.alive) return;
+      children = App.store.getChildren(owner, false).filter(function(child){
+        return !!child && child.alive;
+      });
+      if (children.length < 2) return;
+
+      eligible = children.filter(function(child){
+        return child.age >= 12 && child.age <= 32;
+      });
+      if (!eligible.length) return;
+
+      sorted = eligible.slice().sort(function(first, second){
+        var firstScore = (Number(first.educationIndex) || 0) * 0.45 + getPersonSkillAverage(first) * 0.55 + getTraitChannelScore(first, "business") * 2.2 + countSharedTraits(first, owner) * 4;
+        var secondScore = (Number(second.educationIndex) || 0) * 0.45 + getPersonSkillAverage(second) * 0.55 + getTraitChannelScore(second, "business") * 2.2 + countSharedTraits(second, owner) * 4;
+        return secondScore - firstScore;
+      });
+
+      chosen = sorted[0];
+      others = sorted.slice(1);
+      household = getHouseholdForPerson(owner);
+
+      chosen.groomedForBusinessById = business.id;
+      chosen.inheritanceDilution = Math.max(1, children.length);
+      chosen.siblingRivalry = App.utils.clamp((Number(chosen.siblingRivalry) || 0) + App.utils.rand(1, 4), 0, 100);
+      ensureSkillData(chosen);
+      chosen.skills.management = App.utils.clamp((Number(chosen.skills.management) || 0) + App.utils.rand(1.4, 3.8), 0, 100);
+      chosen.skills.social = App.utils.clamp((Number(chosen.skills.social) || 0) + App.utils.rand(0.8, 2.4), 0, 100);
+      adjustTemporaryStates(chosen, {
+        confidence:App.utils.rand(3, 8),
+        ambitionSpike:App.utils.rand(2, 5)
+      });
+
+      if (others.length) {
+        var rival = others[Math.floor(Math.random() * others.length)];
+        rival.siblingRivalry = App.utils.clamp((Number(rival.siblingRivalry) || 0) + App.utils.rand(5, 12), 0, 100);
+        rival.inheritanceDilution = Math.max(1, children.length);
+        adjustTemporaryStates(rival, {
+          resentment:App.utils.rand(3, 9),
+          stress:App.utils.rand(1, 4),
+          ambitionSpike:App.utils.rand(2, 6)
+        });
+      }
+
+      if (Math.random() < 0.42) {
+        emitNews("inheritance", "<strong>" + owner.name + "</strong> started grooming <strong>" + chosen.name + "</strong> for leadership at <strong>" + business.name + "</strong> while sibling rivalry rose.", {
+          tags:["family", "succession", "grooming"],
+          entities:{
+            personIds:[owner.id, chosen.id].concat(others.slice(0, 2).map(function(child){ return child.id; })),
+            businessIds:[business.id],
+            countryIsos:[business.countryISO],
+            blocIds:[business.blocId]
+          },
+          causes:[
+            "Family business succession grooming favored one child over siblings.",
+            "Inheritance dilution and rivalry effects intensified as household size grew" + (household ? " under current household pressure." : ".")
+          ]
+        });
+      }
+    });
+  }
+
+  function processYearlySocialNetworks(){
+    var living = App.store.getLivingPeople();
+
+    living.forEach(function(person){
+      var mentorPool;
+      var mentor;
+      var peers;
+      var friend;
+
+      ensureSocialNetworkData(person);
+      decayPersonalReputation(person);
+
+      if (person.age >= 18 && person.age <= 38 && !person.mentorId && Math.random() < 0.18) {
+        mentorPool = living.filter(function(candidate){
+          if (!candidate || candidate.id === person.id) return false;
+          if (candidate.age < person.age + 12) return false;
+          if (candidate.countryISO !== person.countryISO && candidate.blocId !== person.blocId) return false;
+          ensureSocialNetworkData(candidate);
+          return (candidate.personalReputation.prestige >= 56) || ((candidate.netWorthGU || 0) > 65000);
+        }).sort(function(first, second){
+          var firstScore = (Number(first.personalReputation && first.personalReputation.prestige) || 35) + ((first.netWorthGU || 0) / 4500);
+          var secondScore = (Number(second.personalReputation && second.personalReputation.prestige) || 35) + ((second.netWorthGU || 0) / 4500);
+          return secondScore - firstScore;
+        });
+
+        mentor = mentorPool[0] || null;
+        if (mentor) {
+          person.mentorId = mentor.id;
+          person.schoolTieIds = normalizeUniqueIdList((person.schoolTieIds || []).concat([mentor.id]), person.id).slice(0, 12);
+          mentor.closeFriendIds = normalizeUniqueIdList((mentor.closeFriendIds || []).concat([person.id]), mentor.id).slice(0, 10);
+          adjustPersonalReputation(mentor, { trust:0.8, prestige:0.6 });
+        }
+      }
+
+      peers = living.filter(function(candidate){
+        if (!candidate || candidate.id === person.id) return false;
+        if (candidate.countryISO !== person.countryISO) return false;
+        if (Math.abs((candidate.age || 0) - (person.age || 0)) > 7) return false;
+        return true;
+      });
+
+      if (peers.length && Math.random() < 0.12) {
+        friend = App.utils.pick(peers);
+        if (friend) {
+          person.closeFriendIds = normalizeUniqueIdList((person.closeFriendIds || []).concat([friend.id]), person.id).slice(0, 10);
+          friend.closeFriendIds = normalizeUniqueIdList((friend.closeFriendIds || []).concat([person.id]), friend.id).slice(0, 10);
+        }
+      }
+
+      if ((person.educationIndex || 0) >= 65 && Math.random() < 0.1) {
+        var schoolPeer = App.utils.pick(peers.filter(function(candidate){
+          return (candidate.educationIndex || 0) >= 62;
+        }));
+        if (schoolPeer) {
+          person.schoolTieIds = normalizeUniqueIdList((person.schoolTieIds || []).concat([schoolPeer.id]), person.id).slice(0, 12);
+          schoolPeer.schoolTieIds = normalizeUniqueIdList((schoolPeer.schoolTieIds || []).concat([person.id]), schoolPeer.id).slice(0, 12);
+        }
+      }
+
+      if ((person.netWorthGU || 0) >= 120000 && Math.random() < 0.22) {
+        var elitePeer = App.utils.pick(living.filter(function(candidate){
+          return candidate.id !== person.id && candidate.blocId === person.blocId && (candidate.netWorthGU || 0) >= 90000;
+        }));
+        if (elitePeer) {
+          person.eliteCircleIds = normalizeUniqueIdList((person.eliteCircleIds || []).concat([elitePeer.id]), person.id).slice(0, 8);
+          elitePeer.eliteCircleIds = normalizeUniqueIdList((elitePeer.eliteCircleIds || []).concat([person.id]), elitePeer.id).slice(0, 8);
+        }
+      }
+
+      if (person.businessId && Math.random() < 0.16) {
+        var rivalOwner = App.utils.pick(living.filter(function(candidate){
+          var candidateBusiness;
+          if (candidate.id === person.id || !candidate.businessId) return false;
+          candidateBusiness = App.store.getBusiness(candidate.businessId);
+          if (!candidateBusiness) return false;
+          return candidateBusiness.industry === (App.store.getBusiness(person.businessId) && App.store.getBusiness(person.businessId).industry);
+        }));
+        if (rivalOwner) {
+          person.rivalIds = normalizeUniqueIdList((person.rivalIds || []).concat([rivalOwner.id]), person.id).slice(0, 8);
+          rivalOwner.rivalIds = normalizeUniqueIdList((rivalOwner.rivalIds || []).concat([person.id]), rivalOwner.id).slice(0, 8);
+          adjustPersonalReputation(person, { notoriety:1.2 });
+          adjustPersonalReputation(rivalOwner, { notoriety:1.2 });
+        }
+      }
+
+      if (person.childrenIds && person.childrenIds.length && (person.businessId || (person.netWorthGU || 0) > 60000)) {
+        (person.childrenIds || []).forEach(function(childId){
+          var child = App.store.getPerson(childId);
+          if (!child || !child.alive || child.age < 15) return;
+          child.nepotismTieIds = normalizeUniqueIdList((child.nepotismTieIds || []).concat([person.id]), child.id).slice(0, 10);
+          if ((person.eliteCircleIds || []).length) {
+            child.nepotismTieIds = normalizeUniqueIdList((child.nepotismTieIds || []).concat(person.eliteCircleIds.slice(0, 2)), child.id).slice(0, 10);
+          }
+        });
+      }
+
+      syncPerson(person);
+    });
+  }
+
+  function processYearlyRetiredInfluence(){
+    App.store.getLivingPeople().forEach(function(person){
+      var influence;
+
+      if (!person.retired) return;
+      ensureSocialNetworkData(person);
+      influence = App.utils.clamp((Number(person.retirementInfluence) || 0) + ((person.personalReputation && person.personalReputation.prestige) || 0) * 0.3, 0, 100);
+      if (influence <= 8) return;
+
+      (person.advisorBusinessIds || []).forEach(function(businessId){
+        var business = App.store.getBusiness(businessId);
+        var owner = business ? App.store.getPerson(business.ownerId) : null;
+
+        if (!business || !owner || !owner.alive) return;
+
+        business.reputation = clampScore((business.reputation || 50) + App.utils.clamp((influence - 40) * 0.04, -1.2, 2.4));
+        business.currentDecision = evaluateBusinessDecision(business);
+        owner.temporaryStates.confidence = App.utils.clamp((owner.temporaryStates.confidence || 50) + App.utils.clamp((influence - 35) * 0.05, -1, 4), 0, 100);
+        owner.temporaryStates.stress = App.utils.clamp((owner.temporaryStates.stress || 22) - App.utils.clamp((influence - 50) * 0.04, -1, 3), 0, 100);
+        adjustPersonalReputation(owner, { prestige:App.utils.clamp((influence - 45) * 0.02, -0.5, 1.4), trust:0.2 });
+        syncPerson(owner);
+      });
+
+      if ((person.netWorthGU || 0) > 50000 && Math.random() < 0.16) {
+        var patron = App.utils.pick(App.store.getChildren(person, false).filter(function(child){
+          return child && child.alive && child.age >= 18;
+        }));
+        if (patron) {
+          var grant = Math.min((person.netWorthGU || 0) * App.utils.rand(0.008, 0.028), Math.max(800, patron.netWorthGU * 0.06));
+          person.netWorthGU = Math.max(100, (person.netWorthGU || 0) - grant);
+          patron.netWorthGU += grant;
+          patron.nepotismTieIds = normalizeUniqueIdList((patron.nepotismTieIds || []).concat([person.id]), patron.id).slice(0, 10);
+          adjustPersonalReputation(person, { trust:0.6, prestige:0.4 });
+          adjustPersonalReputation(patron, { prestige:0.8, trust:0.4 });
+          syncPerson(patron);
+        }
+      }
+
+      syncPerson(person);
+    });
+  }
+
+  function findNonMaritalBirthPartner(person){
+    var candidates = App.store.getLivingPeople().filter(function(candidate){
+      if (candidate.id === person.id) return false;
+      if (candidate.sex !== "male") return false;
+      if (candidate.age < 22 || candidate.age > 56) return false;
+      if (!areMarriageCompatible(person, candidate)) return false;
+      if (isCloseRelative(person, candidate)) return false;
+      if (candidate.countryISO !== person.countryISO && Math.random() > 0.1) return false;
+      return true;
+    }).sort(function(first, second){
+      var firstCompatibility = getRelationshipCompatibility(person, first);
+      var secondCompatibility = getRelationshipCompatibility(person, second);
+      var firstScore = firstCompatibility.score + (first.spouseId ? -6 : 3) + getTraitChannelScore(first, "deal") * 0.3;
+      var secondScore = secondCompatibility.score + (second.spouseId ? -6 : 3) + getTraitChannelScore(second, "deal") * 0.3;
+      return secondScore - firstScore;
+    });
+
+    return candidates[0] || null;
+  }
+
   function tryBirth(mother){
     var spouse = App.store.getSpouse(mother);
+    var partner = spouse;
     var children;
     var birthChance;
     var lastBirthDay;
@@ -4499,12 +6323,31 @@
     var householdStress;
     var childcareBurden;
     var household;
+    var isMarital;
+    var partnerCompatibility;
+    var fertilityPreference;
+    var birthNormModifier;
+    var wealthModifier;
+    var housingPenalty;
+    var educationModifier;
+    var healthModifier;
+    var maritalStabilityModifier;
+    var siblingsBeforeBirth;
+    var text;
 
-    if (!spouse || !spouse.alive) return;
-    if (spouse.sex !== "male") return;
     if (mother.age < 24 || mother.age > 42) return;
 
-    children = getSharedChildren(mother, spouse);
+    isMarital = !!(spouse && spouse.alive && spouse.sex === "male");
+    if (!isMarital) {
+      if (mother.spouseId) return;
+      partner = findNonMaritalBirthPartner(mother);
+      if (!partner) return;
+      partnerCompatibility = getRelationshipCompatibility(mother, partner);
+    }
+
+    if (!partner || !partner.alive || partner.sex !== "male") return;
+
+    children = getSharedChildren(mother, partner);
     if (children.length >= 3) return;
 
     lastBirthDay = children.reduce(function(latest, existingChild){
@@ -4515,36 +6358,74 @@
       return;
     }
 
-    birthChance = children.length === 0 ? 0.18 : (children.length === 1 ? 0.10 : 0.04);
-    familyPressure = (getTraitChannelScore(mother, "family") + getTraitChannelScore(spouse, "family")) / 2;
-    mobilityPressure = (getTraitChannelScore(mother, "mobility") + getTraitChannelScore(spouse, "mobility")) / 2;
+    birthChance = isMarital ? (children.length === 0 ? 0.18 : (children.length === 1 ? 0.10 : 0.04)) : (children.length === 0 ? 0.045 : 0.02);
+    familyPressure = (getTraitChannelScore(mother, "family") + getTraitChannelScore(partner, "family")) / 2;
+    mobilityPressure = (getTraitChannelScore(mother, "mobility") + getTraitChannelScore(partner, "mobility")) / 2;
+    fertilityPreference = (getFertilityPreferenceScore(mother) + getFertilityPreferenceScore(partner)) / 2;
+    birthNormModifier = getBirthNormModifier(mother.countryISO);
     household = getHouseholdForPerson(mother);
     householdStress = household ? (household.financialStress || 0) / 100 : 0;
     childcareBurden = household && household.monthlyExpensesGU > 0 ? (household.childcareCostGU || 0) / household.monthlyExpensesGU : 0;
+    wealthModifier = household ? App.utils.clamp(((household.cashOnHandGU || 0) / Math.max(1, household.monthlyExpensesGU || 1)) * 0.012, -0.03, 0.08) : 0;
+    housingPenalty = household && household.monthlyExpensesGU > 0 ? App.utils.clamp(((household.housingCostGU || 0) / household.monthlyExpensesGU) * 0.09, 0, 0.085) : 0;
+    educationModifier = App.utils.clamp((((Number(mother.educationIndex) || 0) + (Number(partner.educationIndex) || 0)) / 200) * 0.03, 0, 0.03);
+    healthModifier = (getParentHealthModifier(mother) + getParentHealthModifier(partner)) / 2;
+    maritalStabilityModifier = getMaritalStabilityModifier(mother, partner, isMarital);
     birthChance += familyPressure * 0.0036;
     birthChance -= mobilityPressure * 0.0015;
+    birthChance += fertilityPreference * 0.0016;
+    birthChance += birthNormModifier;
+    birthChance += wealthModifier;
+    birthChance += educationModifier;
+    birthChance += healthModifier;
+    birthChance += maritalStabilityModifier;
+    birthChance -= housingPenalty;
     birthChance -= householdStress * 0.12;
     birthChance -= childcareBurden * 0.08;
+    if (!isMarital && partnerCompatibility) {
+      birthChance += App.utils.clamp(partnerCompatibility.score * 0.0009, -0.02, 0.03);
+    }
     birthChance = App.utils.clamp(birthChance, 0.01, 0.26);
     if (Math.random() >= birthChance) {
       return;
     }
 
-    child = createChild([mother, spouse], 0);
+    siblingsBeforeBirth = children.slice();
+    child = createChild([mother, partner], 0);
+    if (!isMarital) {
+      child.birthUnionType = "non_marital";
+      ensureFamilyDynamics(mother);
+      ensureFamilyDynamics(partner);
+      if (mother.nonMaritalChildIds.indexOf(child.id) === -1) mother.nonMaritalChildIds.push(child.id);
+      if (partner.nonMaritalChildIds.indexOf(child.id) === -1) partner.nonMaritalChildIds.push(child.id);
+      adjustTemporaryStates(mother, {
+        stress:5,
+        confidence:-1
+      });
+      adjustTemporaryStates(partner, {
+        stress:4
+      });
+    }
+    applyChildOutcomeInfluence(mother, partner, child, siblingsBeforeBirth, household, isMarital);
     syncHouseholds();
-    birthEffects = summarizeTraitEffects(collectGroupTraitEffects([mother, spouse], ["family","mobility"]), 4);
+    birthEffects = summarizeTraitEffects(collectGroupTraitEffects([mother, partner], ["family","mobility"]), 4);
     recordTraitEffects(birthEffects);
     setTraitSnapshot(mother, birthEffects);
-    setTraitSnapshot(spouse, birthEffects);
+    setTraitSnapshot(partner, birthEffects);
     setTraitSnapshot(child, birthEffects);
-    emitNews("birth", "<strong>" + mother.name + "</strong> and <strong>" + spouse.name + "</strong> welcomed <strong>" + child.name + "</strong>.", {
+    text = isMarital ?
+      ("<strong>" + mother.name + "</strong> and <strong>" + partner.name + "</strong> welcomed <strong>" + child.name + "</strong>.") :
+      ("<strong>" + mother.name + "</strong> and <strong>" + partner.name + "</strong> welcomed <strong>" + child.name + "</strong> outside formal marriage.");
+    emitNews("birth", text, {
       tags:buildTraitEffectTags(birthEffects, 2),
       entities:{
-        personIds:[mother.id, spouse.id, child.id],
+        personIds:[mother.id, partner.id, child.id],
         countryIsos:[mother.countryISO],
         blocIds:[mother.blocId]
       },
-      causes:birthEffects.slice(0, 2).map(function(effect){ return effect.label; })
+      causes:birthEffects.slice(0, 2).map(function(effect){ return effect.label; }).concat([
+        isMarital ? "Child arrived within marriage." : "Child arrived outside marriage, creating inheritance ambiguity."
+      ])
     });
   }
 
@@ -4552,6 +6433,39 @@
     return person.traits.some(function(trait){
       return ENTREPRENEURIAL_TRAITS[trait];
     });
+  }
+
+  function getFounderAptitude(person){
+    var traitBias;
+    var stage;
+    var score = 0;
+
+    ensureDecisionData(person);
+    ensureSkillData(person);
+    ensureWorkerLifecycleData(person);
+
+    traitBias = hasEntrepreneurialTraits(person) ? 26 : 0;
+    stage = String(person.workerLifecycleStage || "worker");
+
+    score += traitBias;
+    score += getTraitChannelScore(person, "business") * 2.4;
+    score += getTraitChannelScore(person, "mobility") * 1.6;
+    score += (Number(person.skills && person.skills.creativity) || 0) * 0.28;
+    score += (Number(person.skills && person.skills.social) || 0) * 0.22;
+    score += (Number(person.skills && person.skills.management) || 0) * 0.24;
+    score += (Number(person.educationIndex) || 0) * 0.16;
+    score += (person.decisionProfile.riskTolerance - 50) * 0.7;
+    score += (person.decisionProfile.adaptability - 50) * 0.56;
+    score += (person.decisionProfile.discipline - 50) * 0.42;
+    score += (person.decisionProfile.statusSeeking - 50) * 0.28;
+
+    if (stage === "executive") score += 14;
+    else if (stage === "manager") score += 9;
+    else if (stage === "professional") score += 5;
+    else if (stage === "student") score -= 6;
+    else if (stage === "dependent") score -= 12;
+
+    return App.utils.clamp((score + 35) / 220, 0, 1);
   }
 
   function tryLaunchBusiness(person){
@@ -4565,10 +6479,20 @@
     var household;
     var launchReadiness;
     var launchCapital;
+    var mentor;
+    var socialCapital;
+    var patronBoost = 0;
+    var founderAptitude;
+    var lifecycleStage;
 
     if (!person.alive || person.retired || person.businessId || person.age < 22) return;
 
-    chance = hasEntrepreneurialTraits(person) ? 0.06 : 0.02;
+    ensureSocialNetworkData(person);
+    ensureWorkerLifecycleData(person);
+    founderAptitude = getFounderAptitude(person);
+    lifecycleStage = String(person.workerLifecycleStage || "worker");
+
+    chance = hasEntrepreneurialTraits(person) ? 0.026 : 0.005;
     mobilityTrait = getTraitChannelScore(person, "mobility");
     businessTrait = getTraitChannelScore(person, "business");
     household = getHouseholdForPerson(person);
@@ -4578,9 +6502,27 @@
     chance += (Number(person.educationIndex) || 0) * 0.00035;
     chance += App.utils.clamp((Number(person.skills && person.skills.creativity) || 0) * 0.00018, 0, 0.012);
     chance += App.utils.clamp((Number(person.skills && person.skills.social) || 0) * 0.00014, 0, 0.01);
+    socialCapital = (person.closeFriendIds.length * 0.5) + (person.schoolTieIds.length * 0.35) + (person.eliteCircleIds.length * 0.4) + (person.nepotismTieIds.length * 0.55);
+    chance += App.utils.clamp(socialCapital * 0.0018, 0, 0.03);
+    mentor = person.mentorId ? App.store.getPerson(person.mentorId) : null;
+    if (mentor && mentor.alive && (mentor.netWorthGU || 0) > 12000) {
+      patronBoost = Math.min((mentor.netWorthGU || 0) * 0.0012, Math.max(500, (person.netWorthGU || 0) * 0.08));
+      chance += 0.01;
+    }
     chance += launchReadiness * 0.01;
+    if ((Number(person.rivalFounderArcUntilDay) || 0) > App.store.simDay) {
+      chance += 0.028;
+    }
+    chance *= App.utils.clamp(0.45 + (founderAptitude * 1.35), 0.25, 1.8);
+    if (lifecycleStage === "executive") chance += 0.014;
+    else if (lifecycleStage === "manager") chance += 0.01;
+    else if (lifecycleStage === "professional") chance += 0.006;
+    else if (lifecycleStage === "student" || lifecycleStage === "dependent") chance *= 0.35;
+    if ((person.netWorthGU || 0) > 90000 && founderAptitude < 0.45) {
+      chance *= 0.32;
+    }
     chance -= getPersonFinancialStress(person) * 0.08;
-    chance = App.utils.clamp(chance, 0.006, 0.14);
+    chance = App.utils.clamp(chance, 0.002, 0.1);
     if (Math.random() >= chance) {
       return;
     }
@@ -4599,15 +6541,23 @@
       refreshHouseholdSnapshot(household);
     }
     business.cashReservesGU += launchCapital;
+    if (patronBoost > 0 && mentor && mentor.alive) {
+      business.cashReservesGU += patronBoost;
+      mentor.netWorthGU = Math.max(200, (mentor.netWorthGU || 0) - patronBoost);
+      adjustPersonalReputation(mentor, { trust:1.4, prestige:1.8, notoriety:0.6 });
+      syncPerson(mentor);
+    }
     person.netWorthGU = Math.max(200, person.netWorthGU - Math.min(person.netWorthGU * 0.06, launchCapital * 0.3));
     App.store.businesses.push(business);
     person.businessId = business.id;
+    person.rivalFounderArcUntilDay = null;
     person.pulse = 1;
     syncBusinessLeadership(business);
     launchEffects = summarizeTraitEffects(collectTraitEffects(person, ["mobility","business"]), 4);
     recordTraitEffects(launchEffects);
     setTraitSnapshot(person, launchEffects);
     setTraitSnapshot(business, launchEffects);
+    adjustPersonalReputation(person, { trust:1.2, prestige:4.5, notoriety:2.2 });
     syncPerson(person);
     emitNews("launch", "<strong>" + person.name + "</strong> " + bloc.flag + " launched <strong>" + business.name + "</strong> in " + business.industry + ".", {
       tags:buildTraitEffectTags(launchEffects, 2),
@@ -4657,6 +6607,7 @@
   function evaluateSuccessionCandidate(business, owner, candidate){
     var currentDecision = business.currentDecision || evaluateBusinessDecision(business);
     var isFamily = candidate.lineageId === owner.lineageId || candidate.id === owner.spouseId || owner.childrenIds.indexOf(candidate.id) !== -1;
+    var isNonMaritalChild = !!(owner.nonMaritalChildIds && owner.nonMaritalChildIds.indexOf(candidate.id) !== -1);
     var leadershipEntry = (business.leadership || []).find(function(entry){
       return entry.personId === candidate.id;
     }) || null;
@@ -4667,8 +6618,10 @@
     var businessTrait;
     var successionTraitScore;
     var successionTraitEffects;
+    var networkScore;
 
     ensureDecisionData(candidate);
+    ensureSocialNetworkData(candidate);
     readiness += (candidate.decisionProfile.discipline - 50) * 1.1;
     readiness += (candidate.decisionProfile.adaptability - 50) * 0.9;
     readiness += (candidate.decisionProfile.ethics - 50) * 0.6;
@@ -4680,6 +6633,15 @@
     readiness += roleImportance * 16;
     readiness += candidate.employerBusinessId === business.id ? 18 : 0;
     readiness += isFamily ? 14 : 0;
+    readiness += isNonMaritalChild ? -12 : 0;
+    readiness += candidate.groomedForBusinessById === business.id ? 26 : 0;
+    networkScore = getSocialProximityScore(candidate, owner);
+    readiness += networkScore * 1.8;
+    readiness += App.utils.clamp((Number(candidate.personalReputation && candidate.personalReputation.trust) || 50) - 50, -14, 14) * 0.42;
+    readiness += App.utils.clamp((Number(candidate.personalReputation && candidate.personalReputation.prestige) || 35) - 35, -12, 16) * 0.36;
+    readiness -= App.utils.clamp(Number(candidate.personalReputation && candidate.personalReputation.scandalMemory) || 0, 0, 100) * 0.18;
+    readiness -= App.utils.clamp((Number(candidate.inheritanceDilution) || 1) - 1, 0, 8) * 0.65;
+    readiness -= App.utils.clamp(Number(candidate.siblingRivalry) || 0, 0, 100) * 0.05;
 
     mobilityTrait = getTraitChannelScore(candidate, "mobility");
     familyTrait = getTraitChannelScore(candidate, "family");
@@ -4698,6 +6660,7 @@
       candidate:candidate,
       score:Math.round(readiness),
       isFamily:isFamily,
+      isNonMaritalChild:isNonMaritalChild,
       roleImportance:roleImportance,
       traitScore:Math.round(successionTraitScore),
       traitEffects:successionTraitEffects
@@ -4717,6 +6680,122 @@
     });
 
     return candidates.length ? candidates[0].candidate : null;
+  }
+
+  function getSuccessionEvaluations(owner, business){
+    return getSuccessionCandidates(owner, business).map(function(candidate){
+      return evaluateSuccessionCandidate(business, owner, candidate);
+    }).sort(function(first, second){
+      return second.score - first.score;
+    });
+  }
+
+  function resolveInheritanceDispute(owner, business, evaluations, trigger){
+    var childEvaluations = (evaluations || []).filter(function(entry){
+      return entry && entry.candidate && owner.childrenIds && owner.childrenIds.indexOf(entry.candidate.id) !== -1 && entry.score >= 34;
+    });
+    var topGap;
+    var ageRanks = {};
+    var scored;
+    var winner;
+    var losers;
+    var hasNonMaritalPressure;
+
+    if (childEvaluations.length < 2) return null;
+
+    childEvaluations.sort(function(first, second){
+      return second.score - first.score;
+    });
+    topGap = (childEvaluations[0].score || 0) - (childEvaluations[1].score || 0);
+    if (topGap > 7) return null;
+
+    childEvaluations.slice().sort(function(first, second){
+      return (Number(second.candidate.age) || 0) - (Number(first.candidate.age) || 0);
+    }).forEach(function(entry, index){
+      ageRanks[entry.candidate.id] = index;
+    });
+
+    scored = childEvaluations.map(function(entry){
+      var eldestBias = Math.max(0, (childEvaluations.length - (ageRanks[entry.candidate.id] || 0) - 1)) * 2.4;
+      var competenceBias = (entry.score || 0) * 0.95;
+      var favoritismBias = (countSharedTraits(owner, entry.candidate) * 3.4) + (getTraitChannelScore(entry.candidate, "family") * 0.4);
+      var rivalryNoise = App.utils.rand(-3.5, 3.5);
+
+      return {
+        evaluation:entry,
+        disputedScore:competenceBias + eldestBias + favoritismBias + rivalryNoise
+      };
+    }).sort(function(first, second){
+      return second.disputedScore - first.disputedScore;
+    });
+
+    winner = scored[0];
+    losers = scored.slice(1);
+    hasNonMaritalPressure = scored.some(function(item){
+      return !!(item && item.evaluation && item.evaluation.isNonMaritalChild);
+    });
+
+    losers.forEach(function(entry){
+      var candidate = entry.evaluation.candidate;
+      adjustTemporaryStates(candidate, {
+        resentment:18,
+        stress:9,
+        confidence:-7,
+        ambitionSpike:8
+      });
+      candidate.rivalFounderArcUntilDay = Math.max(Number(candidate.rivalFounderArcUntilDay) || 0, App.store.simDay + (YEAR_DAYS * 6));
+      syncPerson(candidate);
+    });
+
+    adjustTemporaryStates(winner.evaluation.candidate, {
+      confidence:10,
+      stress:-2,
+      ambitionSpike:6
+    });
+    syncPerson(winner.evaluation.candidate);
+
+    emitNews("inheritance", "Inheritance dispute in <strong>" + business.name + "</strong>: competing heirs clashed before <strong>" + winner.evaluation.candidate.name + "</strong> emerged.", {
+      tags:["dispute", "succession", trigger || "transfer"],
+      entities:{
+        personIds:[owner.id].concat(scored.map(function(item){ return item.evaluation.candidate.id; })),
+        businessIds:[business.id],
+        countryIsos:[business.countryISO],
+        blocIds:[business.blocId]
+      },
+      causes:[
+        "No clear successor among viable children triggered a family dispute.",
+        "Outcome reflected competence, eldest-child bias, and favoritism pressure.",
+        losers.length ? (losers.length + " losing heir(s) gained resentment and rival-founder pressure.") : "Dispute resolved without additional fallout.",
+        hasNonMaritalPressure ? "Questions around non-marital heirs intensified inheritance legitimacy arguments." : ""
+      ]
+    });
+
+    return {
+      winnerEvaluation:winner.evaluation,
+      loserIds:losers.map(function(item){ return item.evaluation.candidate.id; })
+    };
+  }
+
+  function pickSuccessionOutcome(owner, business, trigger){
+    var evaluations = getSuccessionEvaluations(owner, business);
+    var dispute;
+
+    if (!evaluations.length) return null;
+
+    dispute = resolveInheritanceDispute(owner, business, evaluations, trigger);
+    if (dispute && dispute.winnerEvaluation) {
+      return {
+        heir:dispute.winnerEvaluation.candidate,
+        evaluation:dispute.winnerEvaluation,
+        disputed:true
+      };
+    }
+
+    return {
+      heir:evaluations[0].candidate,
+      evaluation:evaluations[0],
+      disputed:false
+    };
   }
 
   function applySuccessionOutcome(owner, heir, business, evaluated){
@@ -4784,12 +6863,11 @@
     }
   }
 
-  function transferBusiness(owner, heir, business){
-    var successionEvaluation;
+  function transferBusiness(owner, heir, business, successionEvaluation){
 
     if (!business || !heir) return;
 
-    successionEvaluation = evaluateSuccessionCandidate(business, owner, heir);
+    successionEvaluation = successionEvaluation || evaluateSuccessionCandidate(business, owner, heir);
     owner.businessId = null;
     business.ownerId = heir.id;
     business.successionCount += 1;
@@ -4807,6 +6885,7 @@
     var value = business ? business.valuationGU * 0.5 : 0;
 
     if (business) {
+      value = settleDelistingPayout(business, value, "Insolvency triggered delisting and forced shareholder settlement.");
       releaseLabor(business.countryISO, business.employees || 0);
       pushBusinessEventHistory(business, "Liquidation at " + business.name, "The company could not continue independently.");
       App.store.people.forEach(function(person){
@@ -4877,7 +6956,8 @@
   function retirePerson(person){
     var business = App.store.getBusiness(person.businessId);
     var employmentBusiness = App.store.getEmploymentBusiness ? App.store.getEmploymentBusiness(person) : null;
-    var heir = business ? getPotentialHeir(person) : null;
+    var succession = business ? pickSuccessionOutcome(person, business, "retirement") : null;
+    var heir = succession ? succession.heir : null;
     var wealthTransfer = person.netWorthGU * 0.25;
     var saleValue;
     var retirementEvent;
@@ -4886,17 +6966,44 @@
     var keepBusinessInFamily = false;
     var debtRelief = 0;
     var supportReserve = 0;
+    var retirementType = "graceful";
+    var businessStress = 0;
+    var chairmanEligible = false;
+    var retirementCause = "Planned retirement with eligible heir.";
 
     syncHouseholds();
     household = getHouseholdForPerson(person);
     debtHeavyHousehold = !!(household && (household.financialStress > 78 || (household.debtGU || 0) > ((household.cashOnHandGU || 0) * 1.4)));
     keepBusinessInFamily = !!(business && heir && !debtHeavyHousehold && ((business.cashReservesGU || 0) > (business.revenueGU || 0) * 0.03 || (business.reputation || 0) >= 46));
+    ensureSocialNetworkData(person);
+    businessStress = business ? App.utils.clamp(Math.abs((business.profitGU || 0) / Math.max(1, business.revenueGU || 1)), 0, 1) : 0;
+    chairmanEligible = !!(business && heir && keepBusinessInFamily && (business.reputation || 0) >= 62 && (person.netWorthGU || 0) >= 50000 && !debtHeavyHousehold);
+
+    if ((person.temporaryStates && person.temporaryStates.burnout > 72) || (person.temporaryStates && person.temporaryStates.grief > 55)) {
+      retirementType = "illness";
+      retirementCause = "Health and burnout pressure triggered illness retirement.";
+    } else if (debtHeavyHousehold || businessStress > 0.22) {
+      retirementType = "forced";
+      retirementCause = "Household and firm stress forced retirement timing.";
+    } else if ((person.age || 0) >= 78 || (person.temporaryStates && person.temporaryStates.confidence < 34)) {
+      retirementType = "decline";
+      retirementCause = "Age-related decline shifted retirement from choice to necessity.";
+    } else if (chairmanEligible) {
+      retirementType = "prestige_chairman";
+      retirementCause = "Prestige-chairman retirement kept founder influence after handover.";
+    }
 
     person.retired = true;
+    person.retirementType = retirementType;
+    person.retirementInfluence = retirementType === "prestige_chairman" ? App.utils.clamp((person.retirementInfluence || 0) + App.utils.rand(48, 72), 0, 100) : App.utils.clamp((person.retirementInfluence || 0) + App.utils.rand(12, 36), 0, 100);
     person.pulse = 1;
 
     if (keepBusinessInFamily) {
-      transferBusiness(person, heir, business);
+      transferBusiness(person, heir, business, succession && succession.evaluation ? succession.evaluation : null);
+      if (retirementType === "prestige_chairman") {
+        person.boardBusinessIds = normalizeUniqueIdList((person.boardBusinessIds || []).concat([business.id]), null).slice(0, 4);
+        person.advisorBusinessIds = normalizeUniqueIdList((person.advisorBusinessIds || []).concat([business.id]), null).slice(0, 4);
+      }
       if (household) {
         debtRelief = relieveHouseholdDebt(household, wealthTransfer * 0.35);
         supportReserve = reserveDependentSupport(household, wealthTransfer * 0.18);
@@ -4910,7 +7017,7 @@
           countryIsos:[business.countryISO],
           blocIds:[business.blocId]
         },
-        causes:["Planned retirement with eligible heir."]
+        causes:[retirementCause]
       });
       emitNews("inheritance", "<strong>" + heir.name + "</strong> took over <strong>" + business.name + "</strong> as the next generation heir.", {
         entities:{
@@ -4940,12 +7047,19 @@
           countryIsos:[business.countryISO],
           blocIds:[business.blocId]
         },
-        causes:["No viable successor at retirement."]
+        causes:[retirementType === "forced" ? "Forced retirement with no stable successor." : "No viable successor at retirement."]
       });
     } else if (employmentBusiness) {
       clearEmployment(person, employmentBusiness.id);
       syncBusinessLeadership(employmentBusiness);
     }
+
+    adjustPersonalReputation(person, {
+      trust:retirementType === "forced" ? -1.4 : 0.6,
+      prestige:retirementType === "prestige_chairman" ? 3.5 : 1.2,
+      notoriety:retirementType === "forced" ? 1.8 : 0.3,
+      scandalMemory:retirementType === "forced" ? 1.4 : 0
+    });
 
     adjustTemporaryStates(person, {
       stress:-6,
@@ -4961,7 +7075,8 @@
       return candidate && candidate.founderId === person.id;
     }) : null;
     var employmentBusiness = App.store.getEmploymentBusiness ? App.store.getEmploymentBusiness(person) : null;
-    var heir = business ? getPotentialHeir(person) : null;
+    var succession = business ? pickSuccessionOutcome(person, business, "death") : null;
+    var heir = succession ? succession.heir : null;
     var survivors = [];
     var estate = person.netWorthGU;
     var successorShare;
@@ -4974,6 +7089,19 @@
     var survivorHouseholds = [];
     var debtHeavyHousehold = false;
     var keepDynastyIntact = false;
+    var estateTax = 0;
+    var debtObligation = 0;
+    var supportReserveTotal = 0;
+    var legalCost = 0;
+    var hiddenHeir = null;
+    var contestedWill = false;
+    var spouseSharePool = 0;
+    var childSharePool = 0;
+    var dynastyReservePool = 0;
+    var residualPool = 0;
+    var heirsForDistribution = [];
+    var splitAcross;
+    var rate = 0;
 
     syncHouseholds();
     household = getHouseholdForPerson(person);
@@ -4981,7 +7109,7 @@
     keepDynastyIntact = !!(business && heir && !debtHeavyHousehold && ((business.reputation || 0) >= 45 || (business.cashReservesGU || 0) > (business.revenueGU || 0) * 0.025));
 
     if (keepDynastyIntact) {
-      transferBusiness(person, heir, business);
+      transferBusiness(person, heir, business, succession && succession.evaluation ? succession.evaluation : null);
     } else if (business) {
       estate += liquidateBusiness(person, business);
     }
@@ -5001,6 +7129,19 @@
       }
     });
 
+    if ((person.nonMaritalChildIds || []).length && Math.random() < 0.2) {
+      hiddenHeir = (person.nonMaritalChildIds || []).map(function(id){
+        return App.store.getPerson(id);
+      }).find(function(candidate){
+        return !!(candidate && candidate.alive && survivors.indexOf(candidate) === -1);
+      }) || null;
+      if (hiddenHeir) {
+        survivors.push(hiddenHeir);
+      }
+    }
+
+    contestedWill = (survivors.length >= 3 && Math.random() < 0.28) || !!hiddenHeir;
+
     survivors.forEach(function(relative){
       var relativeHousehold = getHouseholdForPerson(relative);
       if (!relativeHousehold || householdMap[relativeHousehold.id]) return;
@@ -5011,26 +7152,90 @@
     survivorHouseholds.sort(function(first, second){
       return (second.debtGU || 0) - (first.debtGU || 0);
     }).forEach(function(relativeHousehold){
-      estate -= relieveHouseholdDebt(relativeHousehold, estate);
+      var paidDebt = relieveHouseholdDebt(relativeHousehold, estate);
+      debtObligation += paidDebt;
+      estate -= paidDebt;
     });
 
     survivorHouseholds.forEach(function(relativeHousehold){
-      estate -= reserveDependentSupport(relativeHousehold, estate);
+      var reserved = reserveDependentSupport(relativeHousehold, estate);
+      supportReserveTotal += reserved;
+      estate -= reserved;
     });
 
-    if (heir) {
-      successorShare = estate * 0.5;
-      heir.netWorthGU += successorShare;
-      splitShare = estate * 0.5;
-    } else {
-      splitShare = estate;
+    if (estate > 0) {
+      if (estate > 250000) {
+        rate = 0.22;
+      } else if (estate > 120000) {
+        rate = 0.16;
+      } else if (estate > 60000) {
+        rate = 0.1;
+      }
+      estateTax = estate * rate;
+      estate -= estateTax;
     }
 
-    if (survivors.length) {
-      survivors.forEach(function(relative){
-        relative.netWorthGU += splitShare / survivors.length;
+    if (contestedWill && estate > 0) {
+      legalCost = estate * App.utils.rand(0.04, 0.12);
+      estate -= legalCost;
+    }
+
+    heirsForDistribution = survivors.filter(function(relative){
+      return !!relative && relative.alive;
+    });
+
+    spouse = heirsForDistribution.find(function(relative){
+      return relative.id === (person.spouseId || "");
+    }) || spouse;
+
+    if (estate > 0) {
+      spouseSharePool = spouse ? estate * 0.34 : 0;
+      childSharePool = heirsForDistribution.length ? estate * 0.46 : 0;
+      dynastyReservePool = keepDynastyIntact && business ? estate * 0.12 : 0;
+      residualPool = Math.max(0, estate - spouseSharePool - childSharePool - dynastyReservePool);
+    }
+
+    if (spouse && spouseSharePool > 0) {
+      spouse.netWorthGU += spouseSharePool;
+      adjustPersonalReputation(spouse, { trust:0.4, notoriety:0.2 });
+    }
+
+    if (dynastyReservePool > 0 && heir) {
+      heir.netWorthGU += dynastyReservePool;
+    }
+
+    splitAcross = heirsForDistribution.filter(function(relative){
+      return !spouse || relative.id !== spouse.id;
+    });
+    if (splitAcross.length && childSharePool > 0) {
+      splitAcross.forEach(function(relative){
+        relative.netWorthGU += childSharePool / splitAcross.length;
       });
     }
+
+    if (heir && residualPool > 0) {
+      heir.netWorthGU += residualPool * 0.6;
+      if (splitAcross.length) {
+        splitAcross.forEach(function(relative){
+          relative.netWorthGU += (residualPool * 0.4) / splitAcross.length;
+        });
+      }
+    } else if (heirsForDistribution.length && residualPool > 0) {
+      heirsForDistribution.forEach(function(relative){
+        relative.netWorthGU += residualPool / heirsForDistribution.length;
+      });
+    }
+
+    if (contestedWill && business) {
+      business.reputation = clampScore((business.reputation || 50) - App.utils.rand(3, 10));
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) * App.utils.rand(0.85, 0.96));
+      if (!keepDynastyIntact || splitAcross.length > 1) {
+        business.employees = Math.max(1, business.employees - releaseLabor(business.countryISO, Math.max(1, Math.floor((business.employees || 1) * App.utils.rand(0.05, 0.16)))));
+      }
+      pushBusinessEventHistory(business, "Estate dispute pressure at " + business.name, "Contested inheritance and legal costs weakened control and liquidity.");
+    }
+
+    estate = 0;
 
     person.netWorthGU = 0;
     person.alive = false;
@@ -5053,10 +7258,28 @@
         countryIsos:[person.countryISO],
         blocIds:[person.blocId]
       },
-      causes:["Natural lifecycle event."],
+      causes:[
+        "Natural lifecycle event.",
+        "Estate tax: " + App.utils.fmtCountry(estateTax, person.countryISO) + ", debt obligations: " + App.utils.fmtCountry(debtObligation, person.countryISO) + ", dependent reserve: " + App.utils.fmtCountry(supportReserveTotal, person.countryISO) + ".",
+        contestedWill ? ("Contested will costs reached " + App.utils.fmtCountry(legalCost, person.countryISO) + ".") : "Will transfer proceeded without legal contest."
+      ],
       ownerBusinessId:business ? business.id : null,
       founderBusinessId:foundedBusiness ? foundedBusiness.id : null
     });
+    if (contestedWill) {
+      emitNews("inheritance", "Estate contest followed the death of <strong>" + person.name + "</strong>.", {
+        entities:{
+          personIds:[person.id].concat(heirsForDistribution.map(function(relative){ return relative.id; })),
+          businessIds:business ? [business.id] : [],
+          countryIsos:[person.countryISO],
+          blocIds:[person.blocId]
+        },
+        causes:[
+          hiddenHeir ? ("A hidden heir claim by " + hiddenHeir.name + " reshaped distribution.") : "Multiple heirs disputed the will outcome.",
+          "Legal and governance stress increased fragmentation risk for dynasty assets."
+        ]
+      });
+    }
     if (heir && business) {
       emitNews("inheritance", "<strong>" + heir.name + "</strong> inherited the " + business.name + " dynasty.", {
         entities:{
@@ -5116,9 +7339,90 @@
     });
   }
 
+  function processYearlyFamilyTransitions(){
+    var seenPairs = {};
+
+    App.store.getLivingPeople().forEach(function(person){
+      var spouse;
+      var pairKey;
+      var sharedChildren;
+      var householdStress;
+      var compatibility;
+      var divorceChance;
+      var estrangementChance;
+      var estrangedParent;
+      var estrangedChildren;
+
+      if (!person.spouseId) return;
+      spouse = App.store.getPerson(person.spouseId);
+      if (!spouse || !spouse.alive) return;
+
+      pairKey = [person.id, spouse.id].sort().join("|");
+      if (seenPairs[pairKey]) return;
+      seenPairs[pairKey] = true;
+
+      sharedChildren = getSharedChildren(person, spouse);
+      householdStress = (getPersonFinancialStress(person) + getPersonFinancialStress(spouse)) / 2;
+      compatibility = getRelationshipCompatibility(person, spouse);
+
+      divorceChance = 0.008;
+      divorceChance += householdStress * 0.08;
+      divorceChance += App.utils.clamp((12 - compatibility.score) * 0.0026, 0, 0.05);
+      divorceChance += compatibility.classGap * 0.004;
+      divorceChance += App.utils.clamp(compatibility.ambitionGap * 0.0012, 0, 0.04);
+      divorceChance -= App.utils.clamp((getTraitChannelScore(person, "family") + getTraitChannelScore(spouse, "family")) * 0.0018, -0.02, 0.03);
+      if (sharedChildren.length) {
+        divorceChance -= 0.004 * Math.min(2, sharedChildren.length);
+      }
+      divorceChance = App.utils.clamp(divorceChance, 0.002, 0.16);
+
+      if (Math.random() >= divorceChance) return;
+
+      dissolveMarriage(person, spouse);
+
+      estrangementChance = 0.18 + (householdStress * 0.35) + App.utils.clamp((8 - compatibility.score) * 0.012, 0, 0.32);
+      if (sharedChildren.length && Math.random() < App.utils.clamp(estrangementChance, 0.08, 0.75)) {
+        estrangedParent = getTraitChannelScore(person, "family") >= getTraitChannelScore(spouse, "family") ? spouse : person;
+        estrangedChildren = sharedChildren.slice().sort(function(){ return Math.random() - 0.5; }).slice(0, Math.max(1, Math.ceil(sharedChildren.length / 2)));
+        estrangedChildren.forEach(function(child){
+          markEstrangement(estrangedParent, child);
+          syncPerson(child);
+        });
+
+        emitNews("estrangement", "After the split, <strong>" + estrangedParent.name + "</strong> became estranged from " + estrangedChildren.length + " child" + (estrangedChildren.length === 1 ? "" : "ren") + ".", {
+          tags:["family", "estrangement"],
+          entities:{
+            personIds:[person.id, spouse.id].concat(estrangedChildren.map(function(child){ return child.id; })),
+            countryIsos:[person.countryISO],
+            blocIds:[person.blocId]
+          },
+          causes:[
+            "Divorce pressure rose from stress and compatibility gaps.",
+            "Post-divorce custody tensions triggered distance from part of the family."
+          ]
+        });
+      }
+
+      emitNews("divorce", "<strong>" + person.name + "</strong> and <strong>" + spouse.name + "</strong> divorced in " + App.store.getCountryName(person.countryISO) + ".", {
+        tags:["family", "divorce"],
+        entities:{
+          personIds:[person.id, spouse.id],
+          countryIsos:[person.countryISO],
+          blocIds:[person.blocId]
+        },
+        causes:[
+          "Relationship strain crossed a threshold from stress, class, ambition, and fertility-alignment pressures.",
+          "Compatibility score at dissolution: " + compatibility.score + "."
+        ]
+      });
+    });
+
+    syncHouseholds();
+  }
+
   function processYearlyBirths(){
     App.store.getLivingPeople().forEach(function(person){
-      if (person.sex !== "female" || !person.spouseId) return;
+      if (person.sex !== "female") return;
       tryBirth(person);
     });
   }
@@ -5145,9 +7449,14 @@
     syncHouseholds();
     updatePopulationProfilesYearly();
     processYearlyAging();
+    processYearlySocialNetworks();
     processYearlyMarriages();
+    processYearlyFamilyTransitions();
     processYearlyBirths();
+    processYearlySiblingDynamics();
+    processYearlyFamilyBusinessGrooming();
     processSeniorTransitions();
+    processYearlyRetiredInfluence();
     processYearlyLaunches();
     markYearlyEvents();
     syncHouseholds();
@@ -5206,6 +7515,50 @@
       person.childrenIds = (person.childrenIds || []).filter(function(childId, index, array){
         return childId && childId !== person.id && peopleById[childId] && array.indexOf(childId) === index;
       });
+      person.formerSpouseIds = (person.formerSpouseIds || []).filter(function(spouseId, index, array){
+        return spouseId && spouseId !== person.id && peopleById[spouseId] && array.indexOf(spouseId) === index;
+      });
+      person.estrangedChildIds = (person.estrangedChildIds || []).filter(function(childId, index, array){
+        return childId && childId !== person.id && peopleById[childId] && array.indexOf(childId) === index;
+      });
+      person.estrangedParentIds = (person.estrangedParentIds || []).filter(function(parentId, index, array){
+        return parentId && parentId !== person.id && peopleById[parentId] && array.indexOf(parentId) === index;
+      });
+      person.nonMaritalChildIds = (person.nonMaritalChildIds || []).filter(function(childId, index, array){
+        return childId && childId !== person.id && peopleById[childId] && array.indexOf(childId) === index;
+      });
+      if (person.birthUnionType !== "non_marital") {
+        person.birthUnionType = "marital";
+      }
+      person.groomedForBusinessById = person.groomedForBusinessById && businessesById[person.groomedForBusinessById] ? person.groomedForBusinessById : null;
+      person.inheritanceDilution = Math.max(1, Number(person.inheritanceDilution) || 1);
+      person.sharedPrivilege = App.utils.clamp(Number(person.sharedPrivilege) || 0, 0, 100);
+      person.siblingRivalry = App.utils.clamp(Number(person.siblingRivalry) || 0, 0, 100);
+      person.mentorId = person.mentorId && peopleById[person.mentorId] && person.mentorId !== person.id ? person.mentorId : null;
+      person.rivalIds = (person.rivalIds || []).filter(function(id, index, array){
+        return id && id !== person.id && peopleById[id] && array.indexOf(id) === index;
+      });
+      person.closeFriendIds = (person.closeFriendIds || []).filter(function(id, index, array){
+        return id && id !== person.id && peopleById[id] && array.indexOf(id) === index;
+      });
+      person.eliteCircleIds = (person.eliteCircleIds || []).filter(function(id, index, array){
+        return id && id !== person.id && peopleById[id] && array.indexOf(id) === index;
+      });
+      person.schoolTieIds = (person.schoolTieIds || []).filter(function(id, index, array){
+        return id && id !== person.id && peopleById[id] && array.indexOf(id) === index;
+      });
+      person.nepotismTieIds = (person.nepotismTieIds || []).filter(function(id, index, array){
+        return id && id !== person.id && peopleById[id] && array.indexOf(id) === index;
+      });
+      person.advisorBusinessIds = (person.advisorBusinessIds || []).filter(function(id, index, array){
+        return id && businessesById[id] && array.indexOf(id) === index;
+      });
+      person.boardBusinessIds = (person.boardBusinessIds || []).filter(function(id, index, array){
+        return id && businessesById[id] && array.indexOf(id) === index;
+      });
+      person.retirementType = person.retirementType ? String(person.retirementType) : null;
+      person.retirementInfluence = App.utils.clamp(Number(person.retirementInfluence) || 0, 0, 100);
+      person.personalReputation = person.personalReputation && typeof person.personalReputation === "object" ? person.personalReputation : null;
       if (person.spouseId && (!peopleById[person.spouseId] || person.spouseId === person.id)) {
         person.spouseId = null;
       }
@@ -5287,6 +7640,48 @@
       ensureBusinessDecisionState(business);
     });
 
+    ensureStockMarketState();
+    Object.keys(App.store.stockMarket.listingsByBusinessId || {}).forEach(function(businessId){
+      var listing = App.store.stockMarket.listingsByBusinessId[businessId];
+      var business = businessesById[businessId];
+      var heldShares = 0;
+
+      if (!listing || !business) {
+        delete App.store.stockMarket.listingsByBusinessId[businessId];
+        return;
+      }
+
+      listing.businessId = businessId;
+      listing.totalShares = Math.max(1000, Math.floor(Number(listing.totalShares) || 1000000));
+      listing.sharePriceGU = Math.max(0.05, Number(listing.sharePriceGU) || Math.max(0.05, (business.valuationGU || 0) / listing.totalShares));
+      listing.symbol = listing.symbol || buildTickerSymbol(business);
+      listing.treasuryShares = Math.max(0, Math.floor(Number(listing.treasuryShares) || 0));
+      listing.sharesByHolder = listing.sharesByHolder && typeof listing.sharesByHolder === "object" ? listing.sharesByHolder : {};
+
+      Object.keys(listing.sharesByHolder).forEach(function(holderId){
+        var shares = Math.max(0, Math.floor(Number(listing.sharesByHolder[holderId]) || 0));
+        if (!peopleById[holderId] || !shares) {
+          delete listing.sharesByHolder[holderId];
+          return;
+        }
+        listing.sharesByHolder[holderId] = shares;
+        heldShares += shares;
+      });
+
+      if ((listing.treasuryShares + heldShares) > listing.totalShares) {
+        listing.treasuryShares = Math.max(0, listing.totalShares - heldShares);
+      } else if ((listing.treasuryShares + heldShares) < listing.totalShares) {
+        listing.treasuryShares += listing.totalShares - (listing.treasuryShares + heldShares);
+      }
+
+      listing.lastDividendPerShareGU = Math.max(0, Number(listing.lastDividendPerShareGU) || 0);
+      listing.annualDividendPerShareGU = Math.max(0, Number(listing.annualDividendPerShareGU) || 0);
+      listing.lastDividendDay = Math.max(0, Math.floor(Number(listing.lastDividendDay) || 0));
+      listing.lastVolumeShares = Math.max(0, Math.floor(Number(listing.lastVolumeShares) || 0));
+      listing.rollingVolumeShares = Math.max(0, Math.floor(Number(listing.rollingVolumeShares) || 0));
+      listing.lastSessionNetDemand = Number(listing.lastSessionNetDemand) || 0;
+    });
+
     App.store.econHist = App.store.econHist || {};
     App.store.blocs.forEach(function(bloc){
       if (!Array.isArray(App.store.econHist[bloc.id])) {
@@ -5330,6 +7725,7 @@
     }
 
     bootstrapCountryProfiles();
+    ensureStockMarketState();
 
     App.store.blocs.forEach(function(bloc){
       for (var i = 0; i < App.utils.randInt(3, 5); i += 1) {
@@ -5424,23 +7820,16 @@
     }
 
     if (type === "ipo") {
-      ipoBusiness = App.utils.pick(App.store.businesses.filter(function(business){ return business.blocId === bloc.id; }));
+      ipoBusiness = App.utils.pick(App.store.businesses.filter(function(business){
+        return business.blocId === bloc.id && isBusinessEligibleForListing(business);
+      }));
       if (ipoBusiness) {
-        ipoBusiness.valuationGU *= App.utils.rand(1.35, 2.4);
-        owner = App.store.getPerson(ipoBusiness.ownerId);
-        if (owner && owner.alive) {
-          owner.netWorthGU += ipoBusiness.valuationGU * App.utils.rand(0.05, 0.14);
-          owner.pulse = 1;
+        listBusinessOnExchange(ipoBusiness, "Macro sentiment opened a high-visibility IPO window.");
+      } else {
+        ipoBusiness = App.utils.pick(App.store.businesses.filter(function(business){ return business.blocId === bloc.id; }));
+        if (ipoBusiness) {
+          ipoBusiness.valuationGU *= App.utils.rand(1.02, 1.12);
         }
-        emitNews("ipo", bloc.flag + " <strong>" + ipoBusiness.name + "</strong> IPO at " + App.utils.fmtL(ipoBusiness.valuationGU, bloc) + ".", {
-          entities:{
-            businessIds:[ipoBusiness.id],
-            personIds:owner ? [owner.id] : [],
-            countryIsos:[ipoBusiness.countryISO],
-            blocIds:[ipoBusiness.blocId]
-          },
-          causes:["Valuation breakout triggered listing momentum."]
-        });
       }
       return;
     }
@@ -5448,8 +7837,18 @@
     if (type === "scandal") {
       scandalBusiness = App.utils.pick(App.store.businesses.filter(function(business){ return business.blocId === bloc.id; }));
       if (scandalBusiness) {
+        owner = App.store.getPerson(scandalBusiness.ownerId);
         scandalBusiness.revenueGU *= App.utils.rand(0.78, 0.92);
         scandalBusiness.reputation = clampScore((scandalBusiness.reputation || 50) - App.utils.rand(6, 15));
+        if (owner && owner.alive) {
+          adjustPersonalReputation(owner, {
+            trust:-App.utils.rand(4, 11),
+            prestige:-App.utils.rand(3, 9),
+            notoriety:App.utils.rand(4, 12),
+            scandalMemory:App.utils.rand(12, 30)
+          });
+          syncPerson(owner);
+        }
         applyLeadershipStateChange(scandalBusiness, {
           confidence:-12,
           stress:16,
@@ -5539,6 +7938,7 @@
       var demandPenalty;
       var headroom;
       var workforceDelta = 0;
+      var talentShortageRatio = 0;
       var currentHeadcount = 0;
       var payrollAnnual = 0;
       var operatingCostAnnual = 0;
@@ -5643,7 +8043,11 @@
       currentHeadcount = Math.max(leadershipFloor, business.employees || leadershipFloor);
       if (requestedEmployeeDelta > 0) {
         headroom = Math.max(0, 2000 - currentHeadcount);
-        workforceDelta = reserveLabor(business.countryISO, Math.min(requestedEmployeeDelta, headroom));
+        requestedEmployeeDelta = Math.min(requestedEmployeeDelta, headroom);
+        workforceDelta = reserveLabor(business.countryISO, requestedEmployeeDelta);
+        if (requestedEmployeeDelta > 0) {
+          talentShortageRatio = App.utils.clamp((requestedEmployeeDelta - workforceDelta) / requestedEmployeeDelta, 0, 1);
+        }
       } else if (requestedEmployeeDelta < 0) {
         workforceDelta = -releaseLabor(business.countryISO, Math.abs(requestedEmployeeDelta));
       }
@@ -5653,13 +8057,28 @@
       reputationDelta += business.profitGU > 0 ? App.utils.clamp(margin * 8, 0.05, 0.9) : App.utils.clamp(margin * 11, -1.9, -0.08);
       if (employeeDelta < 0) reputationDelta -= App.utils.rand(0.2, 0.7);
       if (employeeDelta > 0) reputationDelta += App.utils.rand(0.05, 0.25);
+      if (talentShortageRatio > 0) reputationDelta -= App.utils.clamp(talentShortageRatio * 0.55, 0.08, 0.5);
       if (decision.stance === "retrenching") reputationDelta -= 0.2;
       if (decision.cashPolicy === "reinvest" && business.profitGU > 0) reputationDelta += 0.12;
       if (demandPenalty > 0.001) reputationDelta -= App.utils.clamp(demandPenalty * 3.5, 0.08, 0.45);
       reputationDelta += clampTraitDelta(ownerBusinessTrait / 18, 0.35);
       business.reputation = clampScore((business.reputation || 50) + reputationDelta);
+      adjustPersonalReputation(person, {
+        trust:business.profitGU > 0 ? App.utils.clamp(margin * 2.6, -0.6, 1.8) : App.utils.clamp(margin * 2.2, -2.4, 0.4),
+        prestige:business.profitGU > 0 ? App.utils.clamp(margin * 3.4, -0.4, 2.8) : App.utils.clamp(margin * 3.2, -2.8, 0.6),
+        notoriety:employeeDelta < 0 ? App.utils.rand(0.2, 1.2) : App.utils.rand(-0.2, 0.4),
+        scandalMemory:decision.stance === "retrenching" && employeeDelta < 0 ? App.utils.rand(0.2, 1) : -0.15
+      });
       cashCoverage = getCashCoverageMonths(business);
       business.valuationGU = business.revenueGU * App.utils.clamp(1.15 + ((business.reputation || 50) / 42) + (margin * 3.5) + (cashCoverage * 0.08), 1.05, 5.6);
+
+      if (talentShortageRatio > 0.22) {
+        ensureCountryProfile(business.countryISO).talentShortageIndex = App.utils.clamp(
+          Math.max(Number(ensureCountryProfile(business.countryISO).talentShortageIndex) || 0, talentShortageRatio),
+          0,
+          1
+        );
+      }
 
       if (ageYears > 2 && business.stage === "startup") business.stage = "growth";
       if (ageYears > 8 && business.stage === "growth") business.stage = "established";
@@ -5692,6 +8111,12 @@
         liquidateBusiness(person, business);
         person.netWorthGU = Math.max(600, person.netWorthGU * 0.32);
         person.pulse = 1;
+        adjustPersonalReputation(person, {
+          trust:-8,
+          prestige:-10,
+          notoriety:7,
+          scandalMemory:14
+        });
         adjustTemporaryStates(person, {
           confidence:-16,
           stress:18,
@@ -5731,6 +8156,7 @@
       setTraitSnapshot(business, decision.traitEffects || []);
       syncPerson(person);
     });
+    processStockMarketTick();
     processHouseholdTick();
   }
 

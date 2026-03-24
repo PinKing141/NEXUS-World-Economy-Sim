@@ -88,11 +88,11 @@ These are the highest-impact additions because they connect systems that current
 
 These extend what already exists in the sim and should feel natural immediately.
 
-- [ ] Simulation health governors
+- [x] Simulation health governors
   - Detect stagnation and collapse patterns: no new launches, empty business ecosystems, aging lock, currency convergence, prolonged unemployment traps.
   - Apply gentle corrective pressure: seeded entrepreneurs, temporary capital easing, migration relief, hiring incentives, or calibrated arrival boosts.
-  - Log every governor intervention for observability and balancing.
-- [ ] Inheritance disputes
+  - [x] Log every governor intervention for observability and balancing.
+- [x] Inheritance disputes
   - If multiple children are viable heirs and no clear successor exists, trigger disputes.
   - Model favoritism, eldest-child bias, competence bias, and sibling rivalry.
   - Give losing heirs resentment, distance from family, or rival-founder arcs.
@@ -100,42 +100,42 @@ These extend what already exists in the sim and should feel natural immediately.
   - Add a 0-100 reputation score per business.
   - Reputation should affect hiring ease, deal flow, customer trust, pricing power, and resilience during scandal.
   - Build reputation slowly through stability and erode it quickly through scandal, layoffs, corruption, or poor succession.
-- [ ] Real family formation
+- [x] Real family formation
   - Expand marriage logic beyond age and proximity.
   - Include class, religion or culture proxy, ambition compatibility, shared traits, fertility preference, and status motives.
   - Add divorce, estrangement, second marriages, stepfamilies, and illegitimate inheritance complications.
-- [ ] Better births and child outcomes
+- [x] Better births and child outcomes
   - Make fertility depend on age, wealth, local norms, education, housing costs, health, and marital stability.
   - Let parental traits and household conditions influence children.
   - Add sibling effects: rivalry, inheritance dilution, shared privilege, family businesses grooming one child over others.
-- [ ] Retirement paths
+- [x] Retirement paths
   - Differentiate graceful retirement, forced retirement, decline, illness retirement, and prestige-chairman style retirement.
   - Let retired founders remain influential through advice, board roles, patronage, or family pressure.
-- [ ] Richer deaths and estates
+- [x] Richer deaths and estates
   - Split estates between spouse, children, taxes, debt obligations, and businesses.
   - Allow debt-ridden dynasties to collapse after the founder dies.
   - Add contested wills, hidden heirs, and business fragmentation.
-- [ ] Social influence networks
+- [x] Social influence networks
   - Add mentors, rivals, close friends, elite circles, school ties, and nepotism chains.
   - Let opportunities flow through social proximity as much as through merit.
-- [ ] Personal reputation
+- [x] Personal reputation
   - Track trustworthiness, prestige, notoriety, and scandal memory for each person.
   - Let personal reputation shape hiring, marriage, investment access, and succession.
 
 ## Tier 2 - Jobs, Skills, and Class Structure
 
-- [ ] Worker lifecycle
+- [x] Worker lifecycle
   - Child -> student -> worker -> manager -> executive -> founder -> retiree should all be possible paths.
   - Not every wealthy person should become a founder.
   - Most people should live as workers, managers, professionals, or dependents.
-- [ ] Occupations
+- [x] Occupations
   - Add occupational categories: factory worker, engineer, accountant, sales, operator, executive, owner, investor, unemployed.
   - Let industries demand different occupation mixes.
-- [ ] Skills
+- [x] Skills
   - Track management skill, technical skill, social skill, financial discipline, and creativity.
   - Improve skills through education, work experience, and mentorship.
   - Allow skill decline from age, burnout, or long unemployment.
-- [ ] Wages and labor markets
+- [x] Wages and labor markets
   - Set wages by occupation, country, industry demand, firm reputation, and labor scarcity.
   - Add unemployment duration, wage pressure, labor mobility, and talent shortages.
 - [ ] Promotions and poaching
@@ -176,7 +176,7 @@ These extend what already exists in the sim and should feel natural immediately.
   - Give each bloc an interest rate and inflation pressure.
   - Let rate changes react to GDP trend, inflation, unemployment, and crises.
   - Make rates affect lending, hiring, valuation, housing, and startup formation.
-- [ ] Stock market
+- [x] Stock market
   - Allow established firms to go public.
   - Let citizens own shares, collect dividends, speculate, and diversify.
   - Let retired or non-founder elites stay economically relevant through financial ownership.

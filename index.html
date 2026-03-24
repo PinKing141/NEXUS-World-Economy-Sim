@@ -17,7 +17,7 @@
   <div id="ticker-wrap"><div id="ticker-inner"></div></div>
   <div id="macros">GDP <span class="v" id="gv">-</span> | FIRMS <span class="v" id="fv">0</span> | PEOPLE <span class="v" id="pv">0</span></div>
   <button id="reset-world-btn" type="button" title="Clear save data and restart from day zero">RESET WORLD</button>
-  <div id="clock"><div id="ct">Y1 Q1</div><div class="yr" id="cy">DAY 0</div></div>
+  <div id="clock"><div id="ct">Y1 Q1</div><div class="yr" id="cy">DAY 0</div><div id="pause-indicator" class="pause-indicator" aria-live="polite"></div></div>
 </div>
 <div id="fxbar"></div>
 
@@ -25,6 +25,10 @@
   <div id="middle">
     <div class="panel">
       <div class="ph">CITIZENS <div class="dot" style="background:var(--amber)"></div></div>
+      <div id="plist-tabs">
+        <button class="ptab act" type="button" data-people-tab="citizens">Citizens</button>
+        <button class="ptab" type="button" data-people-tab="companies">Companies</button>
+      </div>
       <div id="plist"></div>
     </div>
 
@@ -56,6 +60,10 @@
 
     <div class="panel" id="dpanel">
       <div class="ph">INSPECTOR <div class="dot" style="background:var(--green)"></div></div>
+      <div id="dpanel-tabs">
+        <button class="dtab act" type="button" data-inspector-tab="inspector">Inspector</button>
+        <button class="dtab" type="button" data-inspector-tab="governor">Governor Log</button>
+      </div>
       <div id="dc">
         <div class="empty"><div class="big">O</div><div>Click any citizen<br>or country to inspect</div></div>
       </div>

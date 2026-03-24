@@ -24,6 +24,131 @@
     family:"Family-First",
     merit:"Merit-First"
   };
+  var activePeopleTab = "citizens";
+  var activeInspectorTab = "inspector";
+  var lastNewsRenderSignature = "";
+  var tickerRenderSlots = [];
+  var tickerIdentitySignature = "";
+
+  function setInspectorTab(tab){
+    activeInspectorTab = tab === "governor" ? "governor" : "inspector";
+  }
+
+  function setPeopleTab(tab){
+    activePeopleTab = tab === "companies" ? "companies" : "citizens";
+  }
+
+  function syncPeopleTabs(){
+    Array.prototype.forEach.call(document.querySelectorAll("#plist-tabs .ptab"), function(button){
+      button.classList.toggle("act", button.getAttribute("data-people-tab") === activePeopleTab);
+    });
+  }
+
+  function syncInspectorTabs(){
+    Array.prototype.forEach.call(document.querySelectorAll("#dpanel-tabs .dtab"), function(button){
+      button.classList.toggle("act", button.getAttribute("data-inspector-tab") === activeInspectorTab);
+    });
+  }
+
+  function formatGovernorKeyLabel(value){
+    return String(value || "intervention").replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim().toUpperCase();
+  }
+
+  function summarizeGovernorImpact(entry){
+    var entities = entry && entry.entities && typeof entry.entities === "object" ? entry.entities : {};
+    var personCount = Array.isArray(entities.personIds) ? entities.personIds.length : 0;
+    var businessCount = Array.isArray(entities.businessIds) ? entities.businessIds.length : 0;
+    var countryCount = Array.isArray(entities.countryIsos) ? entities.countryIsos.length : 0;
+    var blocCount = Array.isArray(entities.blocIds) ? entities.blocIds.length : 0;
+    return "P" + personCount + " B" + businessCount + " C" + countryCount + " BL" + blocCount;
+  }
+
+  function renderGovernorLog(){
+    var el = document.getElementById("dc");
+    var governor = App.store.governor || {};
+    var logs = Array.isArray(governor.interventionLog) ? governor.interventionLog.slice(0, 40) : [];
+
+    if (!logs.length) {
+      el.innerHTML = "<div class='empty'><div class='big'>LOG</div><div>No governor interventions recorded yet.</div></div>";
+      return;
+    }
+
+    el.innerHTML = [
+      "<div class='mc'>",
+      "<div class='mcl'>Governor Interventions</div>",
+      "<div class='country-note'>Recent corrective actions with cause and impact for balancing.</div>",
+      "</div>",
+      "<div class='gov-log-list'>",
+      logs.map(function(entry){
+        var causes = Array.isArray(entry.causes) ? entry.causes.slice(0, 2) : [];
+        var dayText = App.utils.fmtDay(Number(entry.day) || 0);
+        var scope = String(entry.scope || "global").toUpperCase();
+        return [
+          "<div class='gov-log-entry'>",
+          "<div class='gov-log-head'>",
+          "<span class='gov-log-key'>" + formatGovernorKeyLabel(entry.key) + " - " + scope + "</span>",
+          "<span class='gov-log-day'>" + dayText + "</span>",
+          "</div>",
+          "<div class='country-note'>" + (entry.text || "Governor intervention applied.") + "</div>",
+          causes.length ? ("<div class='country-note'>Cause: " + causes.join(" | ") + "</div>") : "",
+          "<div class='country-note'>Impact: " + summarizeGovernorImpact(entry) + "</div>",
+          "</div>"
+        ].join("");
+      }).join(""),
+      "</div>"
+    ].join("");
+  }
+
+  function ensureTickerSlot(container, index){
+    var slot = tickerRenderSlots[index];
+    var row;
+    var flag;
+    var name;
+    var value;
+    var change;
+
+    if (slot) return slot;
+
+    row = document.createElement("span");
+    row.className = "ti";
+
+    flag = document.createElement("span");
+    flag.className = "tf";
+    row.appendChild(flag);
+
+    name = document.createElement("span");
+    name.className = "tn";
+    row.appendChild(name);
+
+    value = document.createElement("span");
+    value.className = "tv";
+    row.appendChild(value);
+
+    change = document.createElement("span");
+    change.className = "tup";
+    row.appendChild(change);
+
+    container.appendChild(row);
+
+    slot = {
+      row:row,
+      flag:flag,
+      name:name,
+      value:value,
+      change:change
+    };
+    tickerRenderSlots[index] = slot;
+    return slot;
+  }
+
+  function applyTickerSlot(slot, item){
+    var isUp = item.chg >= 0;
+    slot.flag.textContent = item.flag;
+    slot.name.textContent = item.name;
+    slot.value.textContent = item.local;
+    slot.change.className = isUp ? "tup" : "tdn";
+    slot.change.textContent = (isUp ? "▲" : "▼") + Math.abs(item.chg).toFixed(1) + "%";
+  }
 
   function renderEmptyInspector(){
     document.getElementById("dc").innerHTML =
@@ -544,7 +669,35 @@
   }
 
   function renderPeopleList(){
-    var html = App.store.getVisiblePeople().map(function(person){
+    var html;
+
+    syncPeopleTabs();
+
+    if (activePeopleTab === "companies") {
+      html = App.store.businesses.slice().sort(function(first, second){
+        return (Number(second.valuationGU) || 0) - (Number(first.valuationGU) || 0);
+      }).map(function(business){
+        var bloc = App.store.getBloc(business.blocId);
+        var countryFlag = App.utils.getCountryFlag(business.countryISO) || (bloc ? bloc.flag : "");
+        var owner = App.store.getPerson(business.ownerId);
+        var selected = App.store.selection.type === "business" && App.store.selection.id === business.id;
+        var valuationClass = (Number(business.profitGU) || 0) >= 0 ? "wp" : "wn";
+
+        return [
+          "<div class='pr " + (selected ? "sel" : "") + "' data-business-id='" + business.id + "'>",
+          "<div class='prn'><span>" + countryFlag + " " + business.name + "</span><span class='st s-" + (business.stage || "growing") + "'>" + (business.stage || "growth") + "</span></div>",
+          "<div class='prb'>" + (business.industry || "Business") + " - " + App.store.getCountryName(business.countryISO) + "</div>",
+          "<div class='prm'>Owner: " + (owner ? owner.name : "Unknown") + " | Employees: " + (business.employees || 0) + "</div>",
+          "<div class='prw " + valuationClass + "'>" + App.utils.fmtCountry(business.valuationGU, business.countryISO) + "</div>",
+          "</div>"
+        ].join("");
+      }).join("");
+
+      document.getElementById("plist").innerHTML = html || "<div class='empty'><div class='big'>BIZ</div><div>No companies yet.</div></div>";
+      return;
+    }
+
+    html = App.store.getVisiblePeople().map(function(person){
       var bloc = App.store.getBloc(person.blocId);
       var countryFlag = App.utils.getCountryFlag(person.countryISO) || bloc.flag;
       var business = App.store.getAssociatedBusiness(person);
@@ -744,6 +897,32 @@
     ].join("");
   }
 
+  function renderPortfolioSummary(person){
+    var summary = App.store.getPersonPortfolioSummary ? App.store.getPersonPortfolioSummary(person.id) : { holdings:0, totalShares:0, marketValueGU:0, annualDividendGU:0 };
+    var holdings = App.store.getPersonPortfolio ? App.store.getPersonPortfolio(person.id).slice(0, 5) : [];
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Portfolio</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Holdings</div><div class='sv b'>" + (summary.holdings || 0) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Market Value</div><div class='sv c'>" + App.utils.fmtCountry(summary.marketValueGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Annual Dividends</div><div class='sv " + ((summary.annualDividendGU || 0) > 0 ? "g" : "a") + "'>" + App.utils.fmtCountry(summary.annualDividendGU || 0, person.countryISO) + "</div></div>",
+      "</div>",
+      (holdings.length ? ("<div class='rl'>" + holdings.map(function(holding){
+        var yieldPct = holding.marketValueGU > 0 ? ((holding.annualDividendGU || 0) / holding.marketValueGU) * 100 : 0;
+        return [
+          "<button class='row rel' data-entity='business' data-id='" + holding.business.id + "'>",
+          "<div class='ri'><div class='rname'>" + holding.business.name + " (" + (holding.listing && holding.listing.symbol ? holding.listing.symbol : "-") + ")</div>",
+          "<div class='rmeta'>" + (holding.shares || 0).toLocaleString() + " shares | yield " + yieldPct.toFixed(1) + "%</div></div>",
+          "<div class='rwealth'>" + App.utils.fmtCountry(holding.marketValueGU || 0, person.countryISO) + "</div>",
+          "</button>"
+        ].join("");
+      }).join("") + "</div>") : "<div class='country-note'>No public equity holdings yet.</div>"),
+      "</div>"
+    ].join("");
+  }
+
   function renderPersonDetail(person){
     var el = document.getElementById("dc");
     var bloc = App.store.getBloc(person.blocId);
@@ -758,10 +937,29 @@
     var fxChange = bloc.prevRate ? ((bloc.rate - bloc.prevRate) / bloc.prevRate) * 100 : 0;
     var fxDir = fxChange >= 0 ? "d" : "u";
     var spouse = App.store.getSpouse(person);
+    var mentor = person.mentorId ? App.store.getPerson(person.mentorId) : null;
     var parents = App.store.getParents(person);
     var children = App.store.getChildren(person, true).slice().sort(function(first, second){
       return second.age - first.age;
     });
+    var formerSpouses = (person.formerSpouseIds || []).map(function(id){
+      return App.store.getPerson(id);
+    }).filter(Boolean);
+    var estrangedChildren = (person.estrangedChildIds || []).map(function(id){
+      return App.store.getPerson(id);
+    }).filter(Boolean);
+    var estrangedParents = (person.estrangedParentIds || []).map(function(id){
+      return App.store.getPerson(id);
+    }).filter(Boolean);
+    var rivals = (person.rivalIds || []).map(function(id){ return App.store.getPerson(id); }).filter(Boolean).slice(0, 6);
+    var closeFriends = (person.closeFriendIds || []).map(function(id){ return App.store.getPerson(id); }).filter(Boolean).slice(0, 8);
+    var eliteCircle = (person.eliteCircleIds || []).map(function(id){ return App.store.getPerson(id); }).filter(Boolean).slice(0, 6);
+    var schoolTies = (person.schoolTieIds || []).map(function(id){ return App.store.getPerson(id); }).filter(Boolean).slice(0, 8);
+    var nepotismTies = (person.nepotismTieIds || []).map(function(id){ return App.store.getPerson(id); }).filter(Boolean).slice(0, 8);
+    var personalRep = person.personalReputation || { trust:50, prestige:35, notoriety:12, scandalMemory:0 };
+    var retirementTypeLabel = person.retirementType ? String(person.retirementType).replace(/_/g, " ").toUpperCase() : "UNSPECIFIED";
+    var lifecycleStageLabel = String(person.workerLifecycleStage || "dependent").replace(/_/g, " ").toUpperCase();
+    var occupationLabel = String(person.occupationCategory || "dependent").replace(/_/g, " ").toUpperCase();
     var heir = ownedBusiness && App.sim.getPotentialHeir ? App.sim.getPotentialHeir(person) : null;
     var traitSnapshot = (person.lastTraitEffects && person.lastTraitEffects.length) ? person.lastTraitEffects : ((business && business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
     var skills = person.skills || {};
@@ -795,6 +993,7 @@
     var genderLabel = getGenderLabel(person);
 
     if (person.retired) notes.push("RETIRED");
+    if (person.retired && person.retirementType) notes.push(retirementTypeLabel);
     if (!person.alive) notes.push("DIED " + App.utils.fmtDay(person.deathDay || App.store.simDay));
 
     el.innerHTML = [
@@ -824,6 +1023,15 @@
       "<div class='sbox'><div class='sl'>Gender</div><div class='sv gender-" + genderClass + "'>" + genderSymbol + " " + genderLabel + "</div></div>",
       "</div>",
       "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Trust</div><div class='sv " + (personalRep.trust >= 65 ? "g" : (personalRep.trust >= 45 ? "a" : "r")) + "'>" + Math.round(personalRep.trust) + "/100</div></div>",
+      "<div class='sbox'><div class='sl'>Prestige</div><div class='sv " + (personalRep.prestige >= 62 ? "g" : (personalRep.prestige >= 40 ? "a" : "r")) + "'>" + Math.round(personalRep.prestige) + "/100</div></div>",
+      "<div class='sbox'><div class='sl'>Notoriety</div><div class='sv " + (personalRep.notoriety >= 60 ? "r" : "a") + "'>" + Math.round(personalRep.notoriety) + "/100</div></div>",
+      "</div>",
+      "<div class='country-note'>Scandal memory: <strong>" + Math.round(personalRep.scandalMemory || 0) + "/100</strong>." + (person.retired ? (" Retirement path: <strong>" + retirementTypeLabel + "</strong> (influence " + Math.round(Number(person.retirementInfluence) || 0) + "/100).") : "") + "</div>",
+      "<div class='country-note'>Lifecycle stage: <strong>" + lifecycleStageLabel + "</strong>. Occupation category: <strong>" + occupationLabel + "</strong>.</div>",
+      "<div class='country-note'>Sibling rivalry: <strong>" + Math.round(Number(person.siblingRivalry) || 0) + "/100</strong>. Inheritance dilution factor: <strong>x" + Math.max(1, Number(person.inheritanceDilution) || 1) + "</strong>. Shared privilege: <strong>" + Math.round(Number(person.sharedPrivilege) || 0) + "/100</strong>.</div>",
+      (person.groomedForBusinessById ? "<div class='country-note'>Family business grooming: <strong>Active</strong> for succession pathway.</div>" : ""),
+      "<div class='sg sg3'>",
       "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Education Index", "Raw education index: " + educationScore + "/100 | " + educationTipBody) + "><div class='sl'>Education</div><div class='sv a'>" + educationScore + "/100</div></div>",
       "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Credential", educationTipBody) + "><div class='sl'>Credential</div><div class='sv c'>" + credentialLabel.toUpperCase() + "</div></div>",
       "<div class='sbox sbox-tip'" + buildRichTooltipAttrs(educationTipTitle, educationTipBody) + "><div class='sl'>Institution</div><div class='sv b'>" + institutionName + "</div></div>",
@@ -836,6 +1044,7 @@
       "<div class='country-note'>Education currently affects baseline earnings, leadership candidacy, and founder launch odds.</div>",
       (employmentBusiness && person.jobTitle ? "<div class='sg'><div class='sbox'><div class='sl'>Employer</div><div class='sv a'>" + renderBusinessLink(employmentBusiness, employmentBusiness.name) + "</div></div><div class='sbox'><div class='sl'>Salary (GU)</div><div class='sv c'>" + App.utils.fmtGU(person.salaryGU || 0) + "</div></div></div>" : ""),
       renderHouseholdSummary(person),
+      renderPortfolioSummary(person),
       "<div class='sg'>",
       "<div class='sbox'><div class='sl'>Bloc GDP</div><div class='sv b'>" + App.utils.fmtL(bloc.gdp, bloc) + "</div></div>",
       "<div class='sbox'><div class='sl'>Geo Pressure</div><div class='sv " + (bloc.geoPressure > 1 ? "r" : "g") + "'>" + bloc.geoPressure.toFixed(1) + "</div></div>",
@@ -844,8 +1053,17 @@
       "<div class='traits'>" + (person.traits.length ? person.traits.map(function(trait){ return "<span class='trait'>" + trait + "</span>"; }).join("") : "<span class='country-note'>No defining traits yet.</span>") + "</div>",
       renderTraitEffectBlock("Recent Trait Influence", traitSnapshot, "No recent trait influence recorded."),
       renderRelativeList("Spouse", spouse ? [spouse] : [], "No spouse recorded."),
+      renderRelativeList("Former Spouses", formerSpouses, "No former spouses recorded."),
+      renderRelativeList("Mentor", mentor ? [mentor] : [], "No mentor link recorded."),
+      renderRelativeList("Close Friends", closeFriends, "No close friends tracked."),
+      renderRelativeList("School Ties", schoolTies, "No school ties tracked."),
+      renderRelativeList("Elite Circle", eliteCircle, "No elite circle ties tracked."),
+      renderRelativeList("Nepotism Ties", nepotismTies, "No nepotism chain tracked."),
+      renderRelativeList("Rivals", rivals, "No rivals tracked."),
       renderRelativeList("Parents", parents, "No parents recorded."),
+      renderRelativeList("Estranged Parents", estrangedParents, "No estranged parent ties recorded."),
       renderRelativeList("Children", children, "No children recorded."),
+      renderRelativeList("Estranged Children", estrangedChildren, "No estranged child ties recorded."),
       renderRelativeList("Likely Heir", heir ? [heir] : [], ownedBusiness ? "No eligible heir yet." : "No active business to inherit."),
       business ? renderBusinessCard(business, person.countryISO, currency, bloc) : "<div class='bc' style='text-align:center;color:var(--text3);font-family:var(--mono);font-size:9px;padding:14px;'>No business yet</div>"
     ].join("");
@@ -866,10 +1084,14 @@
     var currency = App.utils.getCurrency(business.countryISO);
     var founder = App.store.getPerson(business.founderId);
     var owner = App.store.getPerson(business.ownerId);
+    var listing = App.store.getListingForBusiness ? App.store.getListingForBusiness(business.id) : null;
     var ceo = App.store.getBusinessLeader(business, "ceo");
     var leadership = App.store.getBusinessLeadership(business);
     var otherEmployees = Math.max(0, business.employees - leadership.length);
     var businessTraitEffects = (business.lastTraitEffects && business.lastTraitEffects.length) ? business.lastTraitEffects : ((business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
+    var dividendYield = listing && listing.sharePriceGU > 0 ? ((listing.annualDividendPerShareGU || 0) / listing.sharePriceGU) * 100 : 0;
+    var floatShares = listing ? Math.max(0, (listing.totalShares || 0) - (listing.treasuryShares || 0) - ((listing.sharesByHolder && owner) ? (listing.sharesByHolder[owner.id] || 0) : 0)) : 0;
+    var holderCount = listing && listing.sharesByHolder ? Object.keys(listing.sharesByHolder).length : 0;
 
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
@@ -902,6 +1124,18 @@
       "<div class='sbox'><div class='sl'>Other Staff</div><div class='sv a'>" + otherEmployees + "</div></div>",
       "<div class='sbox'><div class='sl'>Cash Reserves</div><div class='sv c'>" + App.utils.fmtCountry(business.cashReservesGU || 0, business.countryISO) + "</div></div>",
       "</div>",
+      (listing ? [
+        "<div class='sg sg3'>",
+        "<div class='sbox'><div class='sl'>Listed</div><div class='sv g'>YES (" + listing.symbol + ")</div></div>",
+        "<div class='sbox'><div class='sl'>Share Price</div><div class='sv b'>" + App.utils.fmtCountry(listing.sharePriceGU || 0, business.countryISO) + "</div></div>",
+        "<div class='sbox'><div class='sl'>Dividend Yield</div><div class='sv c'>" + dividendYield.toFixed(1) + "%</div></div>",
+        "</div>",
+        "<div class='sg sg3'>",
+        "<div class='sbox'><div class='sl'>Shares</div><div class='sv a'>" + (listing.totalShares || 0).toLocaleString() + "</div></div>",
+        "<div class='sbox'><div class='sl'>Public Float</div><div class='sv c'>" + floatShares.toLocaleString() + "</div></div>",
+        "<div class='sbox'><div class='sl'>Holders</div><div class='sv b'>" + holderCount + "</div></div>",
+        "</div>"
+      ].join("") : "<div class='country-note'>Not listed yet. Eligible firms can list once scale and reputation stabilize.</div>"),
       "<div class='bc'>",
       "<div class='bcn'>" + business.name + "</div>",
       "<div class='bci'>" + business.industry + " - " + business.stage.toUpperCase() + " - " + bloc.flag + " " + bloc.name + "</div>",
@@ -1054,6 +1288,13 @@
     var business;
     var person;
 
+    syncInspectorTabs();
+
+    if (activeInspectorTab === "governor") {
+      renderGovernorLog();
+      return;
+    }
+
     if (!App.store.selection.type) {
       renderEmptyInspector();
       return;
@@ -1089,16 +1330,26 @@
   function updateTopBar(){
     var totalGdp = App.store.blocs.reduce(function(sum, bloc){ return sum + bloc.gdp; }, 0);
     var pauseEvent;
-    var pauseLabel = "";
+    var pauseIndicator = document.getElementById("pause-indicator");
+    var pauseTier = "";
     document.getElementById("gv").textContent = App.utils.fmtGU(totalGdp);
     document.getElementById("fv").textContent = App.store.businesses.length;
     document.getElementById("pv").textContent = App.store.getLivingCount();
     document.getElementById("ct").textContent = App.utils.fmtDay(App.store.simDay);
     pauseEvent = App.store.pauseReasonEventId && App.store.getEventById ? App.store.getEventById(App.store.pauseReasonEventId) : null;
     if (pauseEvent) {
-      pauseLabel = " [PAUSED - " + (pauseEvent.significance && pauseEvent.significance.tier ? pauseEvent.significance.tier.toUpperCase() : "CRITICAL") + "]";
+      pauseTier = pauseEvent.significance && pauseEvent.significance.tier ? pauseEvent.significance.tier.toUpperCase() : "CRITICAL";
+      if (pauseIndicator) {
+        pauseIndicator.textContent = "PAUSED - " + pauseTier;
+        pauseIndicator.title = "Simulation paused by " + pauseTier + " event";
+        pauseIndicator.classList.add("show");
+      }
+    } else if (pauseIndicator) {
+      pauseIndicator.textContent = "";
+      pauseIndicator.title = "";
+      pauseIndicator.classList.remove("show");
     }
-    document.getElementById("cy").textContent = App.utils.fmtYear(App.store.simDay) + pauseLabel;
+    document.getElementById("cy").textContent = App.utils.fmtYear(App.store.simDay);
   }
 
   function syncSpeedButtons(){
@@ -1119,22 +1370,79 @@
   }
 
   function updateFxBar(){
-    document.getElementById("fxbar").innerHTML = App.store.blocs.map(function(bloc){
+    var container = document.getElementById("fxbar");
+    var existingRows = {};
+
+    Array.prototype.forEach.call(container.querySelectorAll(".fx[data-bloc-id]"), function(row){
+      existingRows[row.getAttribute("data-bloc-id")] = row;
+    });
+
+    App.store.blocs.forEach(function(bloc){
       var change = bloc.prevRate ? ((bloc.rate - bloc.prevRate) / bloc.prevRate) * 100 : 0;
       var className = change >= 0 ? "fxdn" : "fxup";
-      var arrow = change >= 0 ? "&#9660;" : "&#9650;";
+      var arrow = change >= 0 ? "▼" : "▲";
       var displayRate = bloc.rate > 100 ? bloc.rate.toFixed(1) : bloc.rate.toFixed(4);
-      return "<span class='fx'><span class='fxl'>" + bloc.flag + " " + bloc.currency + "/GU</span><span class='fxr'>" + displayRate + "</span><span class='" + className + "'>" + arrow + Math.abs(change).toFixed(2) + "%</span></span>";
-    }).join("");
+      var row = existingRows[bloc.id];
+      var labelEl;
+      var rateEl;
+      var changeEl;
+
+      if (!row) {
+        row = document.createElement("span");
+        row.className = "fx";
+        row.setAttribute("data-bloc-id", bloc.id);
+
+        labelEl = document.createElement("span");
+        labelEl.className = "fxl";
+        row.appendChild(labelEl);
+
+        rateEl = document.createElement("span");
+        rateEl.className = "fxr";
+        row.appendChild(rateEl);
+
+        changeEl = document.createElement("span");
+        changeEl.className = className;
+        row.appendChild(changeEl);
+
+        container.appendChild(row);
+      } else {
+        labelEl = row.children[0];
+        rateEl = row.children[1];
+        changeEl = row.children[2];
+      }
+
+      if (labelEl) labelEl.textContent = bloc.flag + " " + bloc.currency + "/GU";
+      if (rateEl) rateEl.textContent = displayRate;
+      if (changeEl) {
+        changeEl.className = className;
+        changeEl.textContent = arrow + Math.abs(change).toFixed(2) + "%";
+      }
+
+      container.appendChild(row);
+      delete existingRows[bloc.id];
+    });
+
+    Object.keys(existingRows).forEach(function(blocId){
+      var stale = existingRows[blocId];
+      if (stale && stale.parentNode) {
+        stale.parentNode.removeChild(stale);
+      }
+    });
   }
 
   function updateTicker(){
+    var container;
+    var items;
+    var doubledItems;
+    var identitySignature;
+    var index;
     var previousData = App.store.tickerData;
     App.store.tickerData = {};
     App.store.businesses.forEach(function(business){
       var previous = previousData[business.id] ? previousData[business.id].val : business.valuationGU;
       var bloc = App.store.getBloc(business.blocId);
       App.store.tickerData[business.id] = {
+        id:business.id,
         name:App.utils.getBusinessTicker ? App.utils.getBusinessTicker(business.name) : business.name.split(" ")[0].slice(0, 4).toUpperCase(),
         val:business.valuationGU,
         local:App.utils.fmtCountry(business.valuationGU, business.countryISO || "US"),
@@ -1143,17 +1451,54 @@
       };
     });
 
-    var items = Object.keys(App.store.tickerData).map(function(id){
+    items = Object.keys(App.store.tickerData).map(function(id){
       return App.store.tickerData[id];
     }).slice(0, 18);
+    container = document.getElementById("ticker-inner");
 
-    document.getElementById("ticker-inner").innerHTML = items.length ? items.concat(items).map(function(item){
-      return "<span class='ti'><span class='tf'>" + item.flag + "</span><span class='tn'>" + item.name + "</span><span class='tv'>" + item.local + "</span><span class='" + (item.chg >= 0 ? "tup" : "tdn") + "'>" + (item.chg >= 0 ? "&#9650;" : "&#9660;") + Math.abs(item.chg).toFixed(1) + "%</span></span>";
-    }).join("") : "";
+    if (!items.length) {
+      container.innerHTML = "";
+      tickerRenderSlots = [];
+      tickerIdentitySignature = "";
+      return;
+    }
+
+    identitySignature = items.map(function(item){
+      return item.id;
+    }).join("|");
+    doubledItems = items.concat(items);
+
+    if (identitySignature !== tickerIdentitySignature || tickerRenderSlots.length !== doubledItems.length) {
+      container.innerHTML = "";
+      tickerRenderSlots = [];
+      tickerIdentitySignature = identitySignature;
+      for (index = 0; index < doubledItems.length; index += 1) {
+        applyTickerSlot(ensureTickerSlot(container, index), doubledItems[index]);
+      }
+      return;
+    }
+
+    for (index = 0; index < doubledItems.length; index += 1) {
+      applyTickerSlot(ensureTickerSlot(container, index), doubledItems[index]);
+    }
   }
 
   function renderNews(){
-    document.getElementById("ns").innerHTML = (App.store.newsItems || []).map(function(item){
+    var items = App.store.newsItems || [];
+    var signature = items.map(function(item){
+      var significance = item && item.significance ? item.significance.tier : "";
+      var pacing = item && item.pacing ? item.pacing.mode : "";
+      var suppressed = item && item.pacing ? (item.pacing.suppressedCount || 0) : 0;
+      return [item.id, item.time, significance, pacing, suppressed, item.text].join("|");
+    }).join("||");
+
+    if (signature === lastNewsRenderSignature) {
+      return;
+    }
+
+    lastNewsRenderSignature = signature;
+
+    document.getElementById("ns").innerHTML = items.map(function(item){
       var tags = (item.tags || []).slice(0, 3);
       var tagHtml = tags.map(function(tag){
         return "<span class='ntag tag-default'>" + tag + "</span>";
@@ -1407,10 +1752,27 @@
 
   function initUI(){
     document.getElementById("plist").addEventListener("click", function(event){
-      var row = event.target.closest(".pr");
-      if (!row) return;
-      App.store.selectPerson(row.getAttribute("data-person-id"));
+      var personRow = event.target.closest(".pr[data-person-id]");
+      var businessRow = event.target.closest(".pr[data-business-id]");
+
+      if (businessRow) {
+        setInspectorTab("inspector");
+        App.store.selectBusiness(businessRow.getAttribute("data-business-id"));
+        renderSelection();
+        return;
+      }
+
+      if (!personRow) return;
+      setInspectorTab("inspector");
+      App.store.selectPerson(personRow.getAttribute("data-person-id"));
       renderSelection();
+    });
+
+    document.getElementById("plist-tabs").addEventListener("click", function(event){
+      var button = event.target.closest(".ptab[data-people-tab]");
+      if (!button) return;
+      setPeopleTab(button.getAttribute("data-people-tab"));
+      renderPeopleList();
     });
 
     document.getElementById("dc").addEventListener("click", function(event){
@@ -1418,6 +1780,7 @@
       var personTarget;
 
       if (businessTarget) {
+        setInspectorTab("inspector");
         App.store.selectBusiness(businessTarget.getAttribute("data-business-id"));
         renderSelection();
         return;
@@ -1425,8 +1788,16 @@
 
       personTarget = event.target.closest(".rrow[data-person-id], .entity-link[data-person-id]");
       if (!personTarget) return;
+      setInspectorTab("inspector");
       App.store.selectPerson(personTarget.getAttribute("data-person-id"));
       renderSelection();
+    });
+
+    document.getElementById("dpanel-tabs").addEventListener("click", function(event){
+      var button = event.target.closest(".dtab[data-inspector-tab]");
+      if (!button) return;
+      setInspectorTab(button.getAttribute("data-inspector-tab"));
+      renderInspector();
     });
 
     document.getElementById("ctabs").addEventListener("click", function(event){
@@ -1467,6 +1838,8 @@
     });
 
     syncSpeedButtons();
+    syncPeopleTabs();
+    syncInspectorTabs();
     renderNews();
   }
 

@@ -13,9 +13,20 @@
       currencyConvergenceTicks:0,
       cooldowns:{},
       interventionCountsByDay:{},
+      interventionLog:[],
       signalSnapshot:{},
       runCount:0,
       lastRunDay:0
+    };
+  }
+
+  function createStockMarketState(){
+    return {
+      listingsByBusinessId:{},
+      lastDividendDay:0,
+      lastTradeDay:0,
+      lastIpoDay:0,
+      tradeTape:[]
     };
   }
 
@@ -44,6 +55,7 @@
     countryData: {},
     countryProfiles: {},
     governor: createGovernorState(),
+    stockMarket: createStockMarketState(),
     mapObject: null,
     mapSvg: null,
     mapDocument: null,
@@ -122,6 +134,7 @@
     store.countryData = {};
     store.countryProfiles = {};
     store.governor = createGovernorState();
+    store.stockMarket = createStockMarketState();
     store.mapObject = null;
     store.mapSvg = null;
     store.mapDocument = null;
@@ -181,6 +194,66 @@
 
   store.getBusiness = function(id){
     return store.businesses.find(function(business){ return business.id === id; }) || null;
+  };
+
+  store.getListingForBusiness = function(businessOrId){
+    var businessId = typeof businessOrId === "string" ? businessOrId : (businessOrId && businessOrId.id);
+    var stockMarket = store.stockMarket || {};
+    var listings = stockMarket.listingsByBusinessId || {};
+
+    if (!businessId) return null;
+    return listings[businessId] || null;
+  };
+
+  store.getAllListings = function(){
+    var stockMarket = store.stockMarket || {};
+    var listings = stockMarket.listingsByBusinessId || {};
+
+    return Object.keys(listings).map(function(id){
+      return listings[id];
+    }).filter(Boolean);
+  };
+
+  store.getPersonPortfolio = function(personOrId){
+    var personId = typeof personOrId === "string" ? personOrId : (personOrId && personOrId.id);
+
+    if (!personId) return [];
+
+    return store.getAllListings().map(function(listing){
+      var business = store.getBusiness(listing.businessId);
+      var holderMap = listing && listing.sharesByHolder && typeof listing.sharesByHolder === "object" ? listing.sharesByHolder : {};
+      var shares = Math.max(0, Number(holderMap[personId]) || 0);
+      var price = Math.max(0, Number(listing.sharePriceGU) || 0);
+      var annualDividendPerShare = Math.max(0, Number(listing.annualDividendPerShareGU) || 0);
+
+      if (!shares || !business) return null;
+      return {
+        listing:listing,
+        business:business,
+        shares:shares,
+        marketValueGU:shares * price,
+        annualDividendGU:shares * annualDividendPerShare
+      };
+    }).filter(Boolean).sort(function(first, second){
+      return second.marketValueGU - first.marketValueGU;
+    });
+  };
+
+  store.getPersonPortfolioSummary = function(personOrId){
+    var holdings = store.getPersonPortfolio(personOrId);
+
+    return holdings.reduce(function(summary, holding){
+      summary.holdings += 1;
+      summary.totalShares += holding.shares;
+      summary.marketValueGU += holding.marketValueGU;
+      summary.annualDividendGU += holding.annualDividendGU;
+      return summary;
+    }, {
+      holdings:0,
+      totalShares:0,
+      marketValueGU:0,
+      annualDividendGU:0
+    });
   };
 
   store.getHousehold = function(id){

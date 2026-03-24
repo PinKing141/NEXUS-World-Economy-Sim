@@ -21,6 +21,8 @@
     retirement:32,
     birth:30,
     marriage:30,
+    divorce:34,
+    estrangement:36,
     hire:18
   };
 
@@ -35,6 +37,8 @@
     hire:"structural",
     launch:"human",
     marriage:"human",
+    divorce:"human",
+    estrangement:"human",
     birth:"human",
     retirement:"human",
     inheritance:"human",
@@ -62,6 +66,8 @@
     retirement:{ impact:0.32, rarity:0.28, legacy:0.44, crossGen:0.56 },
     birth:{ impact:0.30, rarity:0.26, legacy:0.52, crossGen:0.82 },
     marriage:{ impact:0.30, rarity:0.24, legacy:0.46, crossGen:0.58 },
+    divorce:{ impact:0.38, rarity:0.30, legacy:0.50, crossGen:0.66 },
+    estrangement:{ impact:0.42, rarity:0.34, legacy:0.56, crossGen:0.74 },
     hire:{ impact:0.20, rarity:0.16, legacy:0.08, crossGen:0.02 }
   };
 
@@ -174,7 +180,7 @@
     if (entities.countryIsos.length > 1) return "global";
     if (entities.blocIds.length === 1) return "bloc";
     if (entities.blocIds.length > 1) return "global";
-    if (type === "marriage" || type === "birth" || type === "inheritance" || type === "death") return "family";
+    if (type === "marriage" || type === "divorce" || type === "estrangement" || type === "birth" || type === "inheritance" || type === "death") return "family";
     return "global";
   }
 

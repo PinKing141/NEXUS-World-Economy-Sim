@@ -212,6 +212,18 @@
     var roles = [];
     var ownedBusiness;
     var associatedBusiness;
+    var occupationLabels = {
+      factory_worker:"Factory Worker",
+      engineer:"Engineer",
+      accountant:"Accountant",
+      sales:"Sales",
+      operator:"Operator",
+      executive:"Executive",
+      owner:"Owner",
+      investor:"Investor",
+      unemployed:"Unemployed",
+      dependent:"Dependent"
+    };
 
     if (!person) return roles;
 
@@ -226,6 +238,8 @@
 
     if (person.jobTitle) {
       roles.push(person.jobTitle);
+    } else if (person.occupationCategory && occupationLabels[person.occupationCategory]) {
+      roles.push(occupationLabels[person.occupationCategory]);
     }
 
     if (person.parentIds && person.parentIds.length) {

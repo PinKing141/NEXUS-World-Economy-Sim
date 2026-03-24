@@ -38,9 +38,9 @@ html,body{
   border-bottom:1px solid var(--border);
   display:flex;
   align-items:center;
-  padding:0 12px;
+  padding:0 8px;
   height:40px;
-  gap:14px;
+  gap:9px;
   flex-shrink:0;
   z-index:100;
   position:relative;
@@ -80,13 +80,39 @@ html,body{
 
 .ti{
   display:flex;
-  gap:4px;
+  gap:6px;
   align-items:center;
+  font-variant-numeric:tabular-nums;
 }
 
-.tn{color:var(--amber);}
-.tf{font-size:11px;}
-.tv{color:var(--text);}
+.tf{
+  font-size:11px;
+  width:1.7em;
+  text-align:center;
+  flex:0 0 auto;
+}
+
+.tn{
+  color:var(--amber);
+  width:4ch;
+  text-align:left;
+  flex:0 0 auto;
+}
+
+.tv{
+  color:var(--text);
+  min-width:8.5ch;
+  text-align:right;
+  flex:0 0 auto;
+}
+
+.tup,
+.tdn{
+  min-width:6ch;
+  text-align:right;
+  flex:0 0 auto;
+}
+
 .tup{color:var(--green);}
 .tdn{color:var(--red);}
 
@@ -100,8 +126,9 @@ html,body{
   font-size:11px;
   color:var(--amber);
   border-left:1px solid var(--border);
-  padding-left:12px;
+  padding-left:8px;
   flex-shrink:0;
+  min-width:170px;
 }
 
 #clock .yr{
@@ -109,14 +136,34 @@ html,body{
   font-size:9px;
 }
 
+.pause-indicator{
+  margin-top:2px;
+  display:none;
+  font-size:8px;
+  letter-spacing:.6px;
+  color:#ffb4a8;
+  background:rgba(231,76,60,.14);
+  border:1px solid rgba(231,76,60,.35);
+  border-radius:2px;
+  padding:1px 4px;
+  max-width:132px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.pause-indicator.show{
+  display:inline-block;
+}
+
 #macros{
   display:flex;
-  gap:10px;
+  gap:8px;
   font-family:var(--mono);
   font-size:10px;
   color:var(--text2);
   border-left:1px solid var(--border);
-  padding-left:12px;
+  padding-left:8px;
   flex-shrink:0;
 }
 
@@ -165,6 +212,7 @@ html,body{
   display:flex;
   gap:5px;
   align-items:center;
+  font-variant-numeric:tabular-nums;
 }
 
 .fxl{color:var(--text3);}
@@ -237,6 +285,34 @@ html,body{
   flex:1;
 }
 
+#plist-tabs{
+  display:flex;
+  gap:1px;
+  background:var(--border);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+
+.ptab{
+  flex:1;
+  border:none;
+  background:var(--bg2);
+  color:var(--text2);
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+  padding:5px 6px;
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease;
+}
+
+.ptab:hover,
+.ptab.act{
+  background:var(--bg3);
+  color:var(--amber);
+}
+
 #plist::-webkit-scrollbar,
 #dpanel::-webkit-scrollbar,
 #ns::-webkit-scrollbar,
@@ -302,6 +378,12 @@ html,body{
 .prw{
   font-family:var(--mono);
   font-size:10px;
+}
+
+.prm{
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:8px;
 }
 
 .wp{color:var(--green);}
@@ -512,6 +594,34 @@ html,body{
 
 #dpanel{
   overflow-y:auto;
+}
+
+#dpanel-tabs{
+  display:flex;
+  gap:1px;
+  background:var(--border);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+
+.dtab{
+  flex:1;
+  border:none;
+  background:var(--bg2);
+  color:var(--text2);
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+  padding:5px 6px;
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease;
+}
+
+.dtab:hover,
+.dtab.act{
+  background:var(--bg3);
+  color:var(--amber);
 }
 
 #dc{
@@ -1009,6 +1119,41 @@ html,body{
   line-height:1.6;
 }
 
+.gov-log-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.gov-log-entry{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:3px;
+  padding:7px;
+}
+
+.gov-log-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:4px;
+}
+
+.gov-log-key{
+  color:var(--amber);
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:.8px;
+  text-transform:uppercase;
+}
+
+.gov-log-day{
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:8px;
+}
+
 #news-panel{
   overflow:hidden;
   display:flex;
@@ -1026,7 +1171,7 @@ html,body{
   display:flex;
   gap:7px;
   align-items:flex-start;
-  animation:nslide .35s ease;
+  transition:background-color .18s ease, border-color .18s ease;
 }
 
 @keyframes nslide{
