@@ -1,7 +1,7 @@
 (function(global){
   var App = global.Nexus || (global.Nexus = {});
   var SAVE_KEY = "nexus.world.snapshot";
-  var SCHEMA_VERSION = 5;
+  var SCHEMA_VERSION = 11;
   var AUTOSAVE_INTERVAL_DAYS = 30;
   var MAX_NEWS_ITEMS = 100;
   var MAX_EVENT_HISTORY = 2000;
@@ -62,6 +62,40 @@
     });
   }
 
+  function normalizeGovernorState(value){
+    var source = value && typeof value === "object" ? value : {};
+    var signalSnapshot = source.signalSnapshot && typeof source.signalSnapshot === "object" ? source.signalSnapshot : {};
+    var interventionCounts = source.interventionCountsByDay && typeof source.interventionCountsByDay === "object" ? source.interventionCountsByDay : {};
+    var nowDay = Math.max(0, toInteger((App.store && App.store.simDay) || 0, 0));
+    var filteredCounts = {};
+
+    Object.keys(interventionCounts).forEach(function(key){
+      var numericDay = toInteger(key, NaN);
+      var count;
+      if (!Number.isFinite(numericDay)) return;
+      if (Math.abs(nowDay - numericDay) > 10) return;
+      count = Math.max(0, toInteger(interventionCounts[key], 0));
+      if (!count) return;
+      filteredCounts[String(numericDay)] = count;
+    });
+
+    return {
+      enabled:source.enabled !== false,
+      annualLaunches:Math.max(0, toInteger(source.annualLaunches, 0)),
+      lastLaunchYear:toInteger(source.lastLaunchYear, -1),
+      noLaunchYears:Math.max(0, toInteger(source.noLaunchYears, 0)),
+      emptyEcosystemTicksByBloc:deepClone(source.emptyEcosystemTicksByBloc || {}),
+      unemploymentTrapTicksByBloc:deepClone(source.unemploymentTrapTicksByBloc || {}),
+      agingLockTicks:Math.max(0, toInteger(source.agingLockTicks, 0)),
+      currencyConvergenceTicks:Math.max(0, toInteger(source.currencyConvergenceTicks, 0)),
+      cooldowns:deepClone(source.cooldowns || {}),
+      interventionCountsByDay:filteredCounts,
+      signalSnapshot:deepClone(signalSnapshot),
+      runCount:Math.max(0, toInteger(source.runCount, 0)),
+      lastRunDay:Math.max(0, toInteger(source.lastRunDay, 0))
+    };
+  }
+
   function normalizeHouseholdTier(value){
     var tier = normalizeString(value, "working");
     var valid = {
@@ -72,6 +106,214 @@
       elite:true
     };
     return valid[tier] ? tier : "working";
+  }
+
+  function normalizeEducationAttainment(value, educationIndex){
+    var normalized = normalizeString(value, null);
+    var tierMap = {
+      none:true,
+      primary:true,
+      secondary:true,
+      advanced:true
+    };
+    var score = clamp(toFiniteNumber(educationIndex, 0), 0, 100);
+
+    if (normalized && tierMap[normalized]) {
+      return normalized;
+    }
+    if (score >= 75) return "advanced";
+    if (score >= 55) return "secondary";
+    if (score >= 35) return "primary";
+    return "none";
+  }
+
+  function normalizeEducationCredentialLabel(value, attainment){
+    var label = normalizeString(value, null);
+    var fallbackByAttainment = {
+      advanced:"Bachelor Degree",
+      secondary:"High School Diploma",
+      primary:"Primary School Certificate",
+      none:"No Formal Qualification"
+    };
+
+    if (label) return label;
+    return fallbackByAttainment[normalizeString(attainment, "none")] || "No Formal Qualification";
+  }
+
+  function normalizeEducationInstitutionType(value, educationIndex){
+    var normalized = normalizeString(value, null);
+    var score = clamp(toFiniteNumber(educationIndex, 0), 0, 100);
+
+    if (normalized === "school" || normalized === "university" || normalized === "specialist_school") {
+      return normalized;
+    }
+    return score >= 75 ? "university" : "school";
+  }
+
+  function inferEducationInstitutionSectorFromName(name){
+    var text = String(name || "").toLowerCase();
+
+    if (!text) return null;
+    if (/\b(private|independent)\b/.test(text)) return "private";
+    if (/\b(public|state|national|government|federal)\b/.test(text)) return "public";
+    return null;
+  }
+
+  function harmonizeEducationInstitutionNameSector(name, sector){
+    var text = String(name || "").trim();
+    var normalizedSector = sector === "private" ? "private" : "public";
+
+    if (!text) return text;
+
+    if (normalizedSector === "private") {
+      text = text.replace(/\bPublic\b/gi, "Private");
+      text = text.replace(/\bGovernment\b/gi, "Private");
+      text = text.replace(/\bFederal\b/gi, "Private");
+      return text;
+    }
+
+    text = text.replace(/\bPrivate\b/gi, "Public");
+    text = text.replace(/\bIndependent\b/gi, "Public");
+    return text;
+  }
+
+  function sanitizeInstitutionNameRealism(name, countryISO){
+    var text = String(name || "");
+
+    text = text.replace(/\bStarlight\b/gi, "Central");
+    text = text.replace(/\bHarmony\b/gi, "Regional");
+    text = text.replace(/\bProsperity\b/gi, "Metropolitan");
+
+    if (String(countryISO || "") === "IN") {
+      text = text.replace(/\bAcademy\b/gi, "School");
+    }
+
+    return text;
+  }
+
+  function normalizeEducationInstitutionName(value, institutionType, institutionSector, countryISO){
+    var name = normalizeString(value, null);
+
+    if (!name) {
+      name = institutionType === "university" ? "National University" : "Local Public School";
+    }
+
+    name = sanitizeInstitutionNameRealism(name, countryISO);
+    return harmonizeEducationInstitutionNameSector(name, institutionSector);
+  }
+
+  function normalizeEducationInstitutionSector(value, institutionType, institutionName){
+    var normalized = normalizeString(value, null);
+    var inferred = inferEducationInstitutionSectorFromName(institutionName);
+
+    if (inferred) {
+      return inferred;
+    }
+
+    if (normalized === "private" || normalized === "public") {
+      return normalized;
+    }
+    return institutionType === "university" ? "public" : "public";
+  }
+
+  function normalizeEducationCourseLabel(value, institutionType){
+    var label = normalizeString(value, null);
+
+    if (label) return label;
+    if (institutionType === "specialist_school") return "Vocational and Applied Studies";
+    if (institutionType === "university") return "General Degree Program";
+    return "General Studies";
+  }
+
+  function normalizeEducationInstitutionQuality(value, fallbackEducationIndex){
+    var score = toFiniteNumber(value, NaN);
+
+    if (!Number.isFinite(score)) {
+      score = 40 + clamp(toFiniteNumber(fallbackEducationIndex, 0), 0, 100) * 0.4;
+    }
+    return clamp(score, 20, 100);
+  }
+
+  function normalizeChildhoodStage(value, age){
+    var stage = normalizeString(value, null);
+    var years = Math.max(0, toFiniteNumber(age, 0));
+    var valid = {
+      early_childhood:true,
+      primary_foundation:true,
+      lower_secondary:true,
+      upper_secondary:true,
+      tertiary_transition:true,
+      adult_complete:true
+    };
+
+    if (stage && valid[stage]) {
+      return stage;
+    }
+    if (years < 5) return "early_childhood";
+    if (years < 10) return "primary_foundation";
+    if (years < 14) return "lower_secondary";
+    if (years < 18) return "upper_secondary";
+    if (years < 23) return "tertiary_transition";
+    return "adult_complete";
+  }
+
+  function normalizeSkillTrack(value, age){
+    var track = normalizeString(value, null);
+    var years = Math.max(0, toFiniteNumber(age, 0));
+    var valid = {
+      foundation:true,
+      general:true,
+      leadership:true,
+      technical:true,
+      commercial:true,
+      creative:true
+    };
+
+    if (track && valid[track]) {
+      return track;
+    }
+    return years < 12 ? "foundation" : "general";
+  }
+
+  function normalizePersonSkills(skills, educationIndex, age){
+    var source = skills && typeof skills === "object" ? skills : {};
+    var education = clamp(toFiniteNumber(educationIndex, 0), 0, 100);
+    var years = Math.max(0, toFiniteNumber(age, 0));
+    var base = years < 10 ? 8 : (years < 18 ? 18 : (years < 25 ? 28 : 34));
+    var fallback = clamp((base * 0.45) + (education * 0.32), 0, 100);
+
+    return {
+      management:clamp(toFiniteNumber(source.management, fallback), 0, 100),
+      technical:clamp(toFiniteNumber(source.technical, fallback), 0, 100),
+      social:clamp(toFiniteNumber(source.social, fallback), 0, 100),
+      financialDiscipline:clamp(toFiniteNumber(source.financialDiscipline, fallback), 0, 100),
+      creativity:clamp(toFiniteNumber(source.creativity, fallback), 0, 100)
+    };
+  }
+
+  function normalizeBusinessNamingMode(value, fallback){
+    var mode = normalizeString(value, fallback || null);
+    return mode === "legacy" ? "legacy" : (mode === "v2" ? "v2" : (fallback || null));
+  }
+
+  function resolveSnapshotBusinessNamingMode(snapshot, fallback){
+    var stateMode = snapshot && snapshot.state ? snapshot.state.businessNamingMode : null;
+    return normalizeBusinessNamingMode(snapshot && snapshot.businessNamingMode, normalizeBusinessNamingMode(stateMode, fallback || null));
+  }
+
+  function buildSnapshotEnvelope(snapshot, schemaVersion, state, fallbackMode){
+    var next = {
+      schemaVersion:schemaVersion,
+      savedAtISO:normalizeString(snapshot && snapshot.savedAtISO, new Date().toISOString()),
+      state:state
+    };
+    var mode = resolveSnapshotBusinessNamingMode(snapshot, fallbackMode);
+
+    if (mode) {
+      next.businessNamingMode = mode;
+    }
+
+    return next;
   }
 
   function getYearDays(){
@@ -625,6 +867,19 @@
     person.lastName = normalizeString(person.lastName, "Citizen");
     person.name = normalizeString(person.name, person.firstName + " " + person.lastName);
     person.sex = normalizeString(person.sex, "male");
+    if (person.sex !== "male" && person.sex !== "female") {
+      person.sex = "male";
+    }
+    person.sexualOrientation = normalizeString(person.sexualOrientation, "straight");
+    if (["straight","bi","gay","lesbian"].indexOf(person.sexualOrientation) === -1) {
+      person.sexualOrientation = "straight";
+    }
+    if (person.sexualOrientation === "gay" && person.sex === "female") {
+      person.sexualOrientation = "lesbian";
+    }
+    if (person.sexualOrientation === "lesbian" && person.sex === "male") {
+      person.sexualOrientation = "gay";
+    }
     person.blocId = normalizeString(person.blocId, "NA");
     person.countryISO = normalizeString(person.countryISO, "US");
     person.state = normalizeString(person.state, null);
@@ -665,6 +920,18 @@
     person.decisionProfileBase = person.decisionProfileBase && typeof person.decisionProfileBase === "object" ? person.decisionProfileBase : null;
     person.decisionProfile = person.decisionProfile && typeof person.decisionProfile === "object" ? person.decisionProfile : null;
     person.temporaryStates = person.temporaryStates && typeof person.temporaryStates === "object" ? person.temporaryStates : null;
+    person.educationIndex = clamp(toFiniteNumber(person.educationIndex, 0), 0, 100);
+    person.educationAttainment = normalizeEducationAttainment(person.educationAttainment, person.educationIndex);
+    person.educationCredentialLabel = normalizeEducationCredentialLabel(person.educationCredentialLabel, person.educationAttainment);
+    person.educationInstitutionType = normalizeEducationInstitutionType(person.educationInstitutionType, person.educationIndex);
+    person.educationInstitutionName = normalizeEducationInstitutionName(person.educationInstitutionName, person.educationInstitutionType, person.educationInstitutionSector, person.countryISO);
+    person.educationInstitutionSector = normalizeEducationInstitutionSector(person.educationInstitutionSector, person.educationInstitutionType, person.educationInstitutionName);
+    person.educationInstitutionName = normalizeEducationInstitutionName(person.educationInstitutionName, person.educationInstitutionType, person.educationInstitutionSector, person.countryISO);
+    person.educationCourseLabel = normalizeEducationCourseLabel(person.educationCourseLabel, person.educationInstitutionType);
+    person.educationInstitutionQuality = normalizeEducationInstitutionQuality(person.educationInstitutionQuality, person.educationIndex);
+    person.childhoodStage = normalizeChildhoodStage(person.childhoodStage, person.age);
+    person.skillTrack = normalizeSkillTrack(person.skillTrack, person.age);
+    person.skills = normalizePersonSkills(person.skills, person.educationIndex, person.age);
     person.lastTraitEffects = normalizeTraitEffects(person.lastTraitEffects);
 
     return person;
@@ -899,11 +1166,7 @@
 
     reconcileCrossReferences(migratedState);
 
-    return {
-      schemaVersion:1,
-      savedAtISO:normalizeString(snapshot.savedAtISO, new Date().toISOString()),
-      state:migratedState
-    };
+    return buildSnapshotEnvelope(snapshot, 1, migratedState, null);
   }
 
   function migrateSnapshotToV2(snapshot){
@@ -924,11 +1187,7 @@
     migratedState.eventSeq = Math.max(0, toInteger(previousState.eventSeq, 0));
     migratedState.pauseReasonEventId = normalizeString(previousState.pauseReasonEventId, null);
 
-    return {
-      schemaVersion:2,
-      savedAtISO:normalizeString(snapshot.savedAtISO, new Date().toISOString()),
-      state:migratedState
-    };
+    return buildSnapshotEnvelope(snapshot, 2, migratedState, null);
   }
 
   function migrateSnapshotToV3(snapshot){
@@ -957,11 +1216,7 @@
       }
     }
 
-    return {
-      schemaVersion:3,
-      savedAtISO:normalizeString(snapshot.savedAtISO, new Date().toISOString()),
-      state:migratedState
-    };
+    return buildSnapshotEnvelope(snapshot, 3, migratedState, null);
   }
 
   function migrateSnapshotToV4(snapshot){
@@ -990,11 +1245,7 @@
       }
     }
 
-    return {
-      schemaVersion:4,
-      savedAtISO:normalizeString(snapshot.savedAtISO, new Date().toISOString()),
-      state:migratedState
-    };
+    return buildSnapshotEnvelope(snapshot, 4, migratedState, null);
   }
 
   function migrateSnapshotToV5(snapshot){
@@ -1019,11 +1270,152 @@
       person.householdId = householdMembers[person.id] || person.householdId || null;
     });
 
-    return {
-      schemaVersion:5,
-      savedAtISO:normalizeString(snapshot.savedAtISO, new Date().toISOString()),
-      state:migratedState
-    };
+    return buildSnapshotEnvelope(snapshot, 5, migratedState, null);
+  }
+
+  function migrateSnapshotToV6(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+    var namingMode = resolveSnapshotBusinessNamingMode(snapshot, "legacy");
+
+    return buildSnapshotEnvelope(snapshot, 6, migratedState, namingMode || "legacy");
+  }
+
+  function migrateSnapshotToV7(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+    var householdsById = {};
+    var people = Array.isArray(migratedState.people) ? migratedState.people : [];
+    var profiles = migratedState.countryProfiles || {};
+
+    function estimateEducationIndex(person){
+      var profile = profiles[person.countryISO] || null;
+      var household = person.householdId ? householdsById[person.householdId] : null;
+      var classTier = normalizeHouseholdTier(household && household.classTier);
+      var classRank = { strained:0, working:1, middle:2, affluent:3, elite:4 }[classTier];
+      var age = Math.max(0, toFiniteNumber(person.age, 0));
+      var base;
+
+      if (age < 6) {
+        base = 0;
+      } else if (age < 12) {
+        base = 8;
+      } else if (age < 18) {
+        base = 18;
+      } else if (age < 25) {
+        base = 28;
+      } else {
+        base = 34;
+      }
+
+      base += clamp(toFiniteNumber(profile && profile.educationIndex, 0.6), 0.1, 1) * 34;
+      base += clamp(toFiniteNumber(profile && profile.institutionScore, 0.55), 0.1, 1) * 18;
+      base += (classRank - 1) * 7;
+      return clamp(base, 0, 100);
+    }
+
+    (Array.isArray(migratedState.households) ? migratedState.households : []).forEach(function(household){
+      var id = normalizeString(household && household.id, null);
+      if (!id) return;
+      householdsById[id] = household;
+    });
+
+    migratedState.people = people.map(function(person){
+      var next = deepClone(person || {});
+      var education = toFiniteNumber(next.educationIndex, NaN);
+
+      if (!Number.isFinite(education)) {
+        education = estimateEducationIndex(next);
+      }
+      next.educationIndex = clamp(education, 0, 100);
+      next.educationAttainment = normalizeEducationAttainment(next.educationAttainment, next.educationIndex);
+      return next;
+    });
+
+    return buildSnapshotEnvelope(snapshot, 7, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
+  }
+
+  function migrateSnapshotToV8(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+
+    migratedState.people = (Array.isArray(migratedState.people) ? migratedState.people : []).map(function(person){
+      var next = deepClone(person || {});
+      var education = clamp(toFiniteNumber(next.educationIndex, 0), 0, 100);
+
+      next.educationIndex = education;
+      next.educationAttainment = normalizeEducationAttainment(next.educationAttainment, education);
+      next.childhoodStage = normalizeChildhoodStage(next.childhoodStage, next.age);
+      next.skillTrack = normalizeSkillTrack(next.skillTrack, next.age);
+      next.skills = normalizePersonSkills(next.skills, education, next.age);
+      return next;
+    });
+
+    return buildSnapshotEnvelope(snapshot, 8, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
+  }
+
+  function migrateSnapshotToV9(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+
+    migratedState.people = (Array.isArray(migratedState.people) ? migratedState.people : []).map(function(person){
+      var next = deepClone(person || {});
+      var education = clamp(toFiniteNumber(next.educationIndex, 0), 0, 100);
+
+      next.educationIndex = education;
+      next.educationAttainment = normalizeEducationAttainment(next.educationAttainment, education);
+      next.educationCredentialLabel = normalizeEducationCredentialLabel(next.educationCredentialLabel, next.educationAttainment);
+      next.educationInstitutionType = normalizeEducationInstitutionType(next.educationInstitutionType, education);
+      next.educationInstitutionName = normalizeEducationInstitutionName(next.educationInstitutionName, next.educationInstitutionType);
+      next.educationInstitutionQuality = normalizeEducationInstitutionQuality(next.educationInstitutionQuality, education);
+      return next;
+    });
+
+    return buildSnapshotEnvelope(snapshot, 9, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
+  }
+
+  function migrateSnapshotToV10(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+
+    migratedState.people = (Array.isArray(migratedState.people) ? migratedState.people : []).map(function(person){
+      var next = deepClone(person || {});
+      var education = clamp(toFiniteNumber(next.educationIndex, 0), 0, 100);
+
+      next.educationIndex = education;
+      next.educationAttainment = normalizeEducationAttainment(next.educationAttainment, education);
+      next.educationCredentialLabel = normalizeEducationCredentialLabel(next.educationCredentialLabel, next.educationAttainment);
+      next.educationInstitutionType = normalizeEducationInstitutionType(next.educationInstitutionType, education);
+      next.educationInstitutionSector = normalizeEducationInstitutionSector(next.educationInstitutionSector, next.educationInstitutionType);
+      next.educationInstitutionName = normalizeEducationInstitutionName(next.educationInstitutionName, next.educationInstitutionType);
+      next.educationInstitutionQuality = normalizeEducationInstitutionQuality(next.educationInstitutionQuality, education);
+      return next;
+    });
+
+    return buildSnapshotEnvelope(snapshot, 10, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
+  }
+
+  function migrateSnapshotToV11(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+
+    migratedState.people = (Array.isArray(migratedState.people) ? migratedState.people : []).map(function(person){
+      var next = deepClone(person || {});
+      var education = clamp(toFiniteNumber(next.educationIndex, 0), 0, 100);
+
+      next.educationIndex = education;
+      next.educationAttainment = normalizeEducationAttainment(next.educationAttainment, education);
+      next.educationCredentialLabel = normalizeEducationCredentialLabel(next.educationCredentialLabel, next.educationAttainment);
+      next.educationInstitutionType = normalizeEducationInstitutionType(next.educationInstitutionType, education);
+      next.educationInstitutionName = normalizeEducationInstitutionName(next.educationInstitutionName, next.educationInstitutionType, next.educationInstitutionSector, next.countryISO);
+      next.educationInstitutionSector = normalizeEducationInstitutionSector(next.educationInstitutionSector, next.educationInstitutionType, next.educationInstitutionName);
+      next.educationInstitutionName = normalizeEducationInstitutionName(next.educationInstitutionName, next.educationInstitutionType, next.educationInstitutionSector, next.countryISO);
+      next.educationCourseLabel = normalizeEducationCourseLabel(next.educationCourseLabel, next.educationInstitutionType);
+      next.educationInstitutionQuality = normalizeEducationInstitutionQuality(next.educationInstitutionQuality, education);
+      return next;
+    });
+
+    return buildSnapshotEnvelope(snapshot, 11, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
   }
 
   function migrateSnapshot(rawSnapshot){
@@ -1098,6 +1490,7 @@
     App.store.traitEffectStats = deepClone(state.traitEffectStats || {});
     App.store.econHist = deepClone(state.econHist || {});
     App.store.tickerData = deepClone(state.tickerData || {});
+    App.store.businessNamingMode = normalizeBusinessNamingMode(resolveSnapshotBusinessNamingMode(snapshot, "legacy"), "legacy");
     App.store.selectedBlocId = normalizeString(state.selectedBlocId, "NA");
     App.store.selection = normalizeSelection(state.selection);
     App.store.simSpeed = clamp(toFiniteNumber(state.simSpeed, 1), 0, 8);
@@ -1108,6 +1501,7 @@
     App.store.countryProfiles = normalizeCountryProfiles(state.countryProfiles, App.store.blocs, App.store.businesses, {
       injectBusinessHeadcount:false
     });
+    App.store.governor = normalizeGovernorState(state.governor);
     App.store.households = normalizeHouseholds(state.households, App.store.people, App.store.countryProfiles);
 
     App.store.households.forEach(function(household){
@@ -1169,11 +1563,13 @@
       accumulator:App.store.accumulator,
       countryNames:deepClone(App.store.countryNames || {}),
       countryData:deepClone(App.store.countryData || {}),
-      countryProfiles:deepClone(App.store.countryProfiles || {})
+      countryProfiles:deepClone(App.store.countryProfiles || {}),
+      governor:normalizeGovernorState(App.store.governor)
     };
     var migrated = migrateSnapshot({
       schemaVersion:0,
       savedAtISO:new Date().toISOString(),
+      businessNamingMode:normalizeBusinessNamingMode(App.store.businessNamingMode, "v2"),
       state:rawState
     });
 
@@ -1300,6 +1696,12 @@
   registerSnapshotMigration(3, migrateSnapshotToV3);
   registerSnapshotMigration(4, migrateSnapshotToV4);
   registerSnapshotMigration(5, migrateSnapshotToV5);
+  registerSnapshotMigration(6, migrateSnapshotToV6);
+  registerSnapshotMigration(7, migrateSnapshotToV7);
+  registerSnapshotMigration(8, migrateSnapshotToV8);
+  registerSnapshotMigration(9, migrateSnapshotToV9);
+  registerSnapshotMigration(10, migrateSnapshotToV10);
+  registerSnapshotMigration(11, migrateSnapshotToV11);
 
   App.persistence = {
     SAVE_KEY:SAVE_KEY,

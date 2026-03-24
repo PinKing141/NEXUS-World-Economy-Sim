@@ -54,16 +54,25 @@ These are the highest-impact additions because they connect systems that current
     - [ ] Phase 2: birth and death pressure tied to conditions.
     - [ ] Phase 3: migration pressure and talent drift.
     - [ ] Phase 4: inequality feedback into social pressure and institutional drift.
-- [ ] Event significance schema (design now, implement with observational tools)
+- [x] Event significance schema (design now, implement with observational tools)
   - Define significance weighting and narrative pacing rules now so event noise does not bury meaningful moments.
-- [ ] Household economy
+- [x] Household economy
   - Track wages, spending, savings, debt, housing cost, childcare burden, and inheritance pressure.
   - Let household finances shape life outcomes, not just founder net worth.
   - Make class mobility possible but uneven across countries and families.
+- [x] Business identity naming pass (v1 shipped)
+  - New worlds now use industry-aware, ISO-routed business naming instead of a flat surname-plus-suffix formula.
+  - Naming now supports founder-weighted, coined regional, and Gulf geo-brand modes while preserving legacy naming in migrated worlds.
+  - Logo monograms and ticker symbols now derive from significant name tokens instead of only the first character or first word.
 - [ ] Education and development
   - Add childhood development, education quality, attainment, and skill formation.
   - Let wealthy families and strong institutions improve access to education.
   - Let education influence employability, leadership potential, and founder odds.
+  - Implementation status (v1 foundation + outcomes):
+    - [x] Added person-level education index and attainment with save migration coverage.
+    - [x] Wired education access to household advantage and institution context.
+    - [x] Wired education into employability, leadership scoring, and founder launch odds.
+    - [x] Extend v1 into full childhood stage progression and explicit skill formation tracks.
 
 ## Build Design Gates (Required Before Each Build)
 
@@ -87,7 +96,7 @@ These extend what already exists in the sim and should feel natural immediately.
   - If multiple children are viable heirs and no clear successor exists, trigger disputes.
   - Model favoritism, eldest-child bias, competence bias, and sibling rivalry.
   - Give losing heirs resentment, distance from family, or rival-founder arcs.
-- [ ] Company reputation
+- [x] Company reputation
   - Add a 0-100 reputation score per business.
   - Reputation should affect hiring ease, deal flow, customer trust, pricing power, and resilience during scandal.
   - Build reputation slowly through stability and erode it quickly through scandal, layoffs, corruption, or poor succession.
@@ -272,7 +281,7 @@ These extend what already exists in the sim and should feel natural immediately.
 
 These are crucial because the user is watching, not controlling.
 
-- [ ] Event significance weighting and narrative pacing
+- [x] Event significance weighting and narrative pacing
   - Score events by impact, rarity, legacy depth, and cross-generational consequence.
   - Give major events differentiated presentation (priority placement, pause-worthy styling, stronger context).
   - Keep routine events visible without crowding out structural and dynasty-defining moments.
@@ -306,7 +315,7 @@ These are crucial because the user is watching, not controlling.
 
 ## Tier 9 - Historical Memory and World Persistence
 
-- [ ] Simulation save and load
+- [x] Simulation save and load
   - Preserve long-running worlds.
   - Build this on top of the Build 0 versioned schema and migration path.
 - [ ] Deterministic seeds
@@ -336,7 +345,7 @@ These are crucial because the user is watching, not controlling.
   - No impossible ages.
   - No dead people staying employed unless intentionally modeled.
   - No orphaned business owners without ownership resolution.
-- [ ] Event audit logging
+- [x] Event audit logging
   - Store event causes, not just event text.
 
 ## Concrete Backlog by Build Order

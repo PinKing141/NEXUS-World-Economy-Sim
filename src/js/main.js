@@ -16,6 +16,33 @@
     return null;
   }
 
+  function runMapInit(){
+    App.map.init().then(function(){
+      App.ui.renderAll();
+    }, function(error){
+      console.error(error);
+      emitNews("market", "Map initialization fell back. The simulation is still running, but the interactive world layer could not fully load.", {
+        causes:["Interactive world layer load failure."]
+      });
+    });
+  }
+
+  function runSimulationStart(){
+    App.ui.renderAll();
+    App.sim.start();
+    runMapInit();
+  }
+
+  function runFreshWorld(reason){
+    App.sim.initSim();
+    if (reason) {
+      emitNews("market", reason, {
+        causes:["Boot fallback path used."]
+      });
+    }
+    runSimulationStart();
+  }
+
   function boot(){
     App.store.reset();
     App.ui.initUI();
@@ -34,40 +61,23 @@
         emitNews("market", describeLoadResult(loadResult), {
           causes:["Snapshot restore succeeded."]
         });
+        runSimulationStart();
       } else {
-        App.sim.initSim();
+        runFreshWorld();
         if (loadResult && loadResult.error) {
           console.warn("Snapshot restore failed:", loadResult.error);
         }
       }
-
-      App.ui.renderAll();
-      App.sim.start();
-
-      App.map.init().then(function(){
-        App.ui.renderAll();
-      }, function(error){
-        console.error(error);
-        emitNews("market", "Map initialization fell back. The simulation is still running, but the interactive world layer could not fully load.", {
-          causes:["Interactive world layer load failure."]
-        });
-      });
     }).catch(function(error){
       console.error(error);
-      emitNews("market", "Country baseline data failed to load. Continuing with heuristic population defaults.", {
-        causes:["Country baseline fetch failed."]
-      });
-      App.sim.initSim();
-      App.ui.renderAll();
-      App.sim.start();
-      App.map.init().then(function(){
-        App.ui.renderAll();
-      }, function(mapError){
-        console.error(mapError);
-        emitNews("market", "Map initialization fell back. The simulation is still running, but the interactive world layer could not fully load.", {
-          causes:["Interactive world layer load failure."]
+      try {
+        runFreshWorld("Startup hit a recoverable error. A fresh world was generated with default baselines.");
+      } catch (startupError) {
+        console.error(startupError);
+        emitNews("default", "Startup failed before simulation could begin. Open console for details and reload.", {
+          causes:["Startup exception: " + (startupError && startupError.message ? startupError.message : "Unknown")]
         });
-      });
+      }
     });
   }
 

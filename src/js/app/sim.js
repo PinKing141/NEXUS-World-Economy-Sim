@@ -12,6 +12,15 @@
   var LEGACY_SIM_DAYS_PER_TICK = 3;
   var TICKS_PER_YEAR = YEAR_DAYS / SIM_DAYS_PER_TICK;
   var DAYS_PER_MONTH = YEAR_DAYS / 12;
+  var MAX_PERSON_NET_WORTH_GU = 5e8;
+  var MAX_PERSON_SALARY_GU = 2e7;
+  var MAX_BUSINESS_REVENUE_GU = 2e9;
+  var MAX_BUSINESS_PROFIT_GU = 6e8;
+  var MAX_BUSINESS_VALUATION_GU = 1.2e10;
+  var MAX_BUSINESS_CASH_GU = 2e9;
+  var MAX_HOUSEHOLD_BALANCE_GU = 5e8;
+  var MAX_COUNTRY_MEDIAN_WAGE_GU = 5e5;
+  var MAX_COUNTRY_DEMAND_GU = 2e14;
   var CORE_LEADERSHIP_ROLES = {
     ceo:{ roleKey:"ceo", title:"CEO", department:"Executive", tier:"executive", importance:5 },
     coo:{ roleKey:"coo", title:"COO", department:"Operations", tier:"executive", importance:4 },
@@ -37,7 +46,7 @@
         ["#5b8cff", "#21c7b7", "#ffd166"],
         ["#3b82f6", "#8b5cf6", "#7ee7ff"]
       ],
-      archetypes:["grid", "overlap", "ring"]
+      archetypes:["grid", "overlap", "ring", "orbit", "wave"]
     },
     Finance:{
       palettes:[
@@ -45,7 +54,7 @@
         ["#1b4965", "#5fa8d3", "#ffd166"],
         ["#0f3d3e", "#2c666e", "#d9a441"]
       ],
-      archetypes:["bars", "monogram", "fold"]
+      archetypes:["bars", "monogram", "fold", "chevron"]
     },
     Retail:{
       palettes:[
@@ -53,7 +62,7 @@
         ["#d97706", "#b45309", "#fde68a"],
         ["#8d5a97", "#355070", "#ffd6a5"]
       ],
-      archetypes:["overlap", "ring", "monogram"]
+      archetypes:["overlap", "ring", "monogram", "wave"]
     },
     Manufacturing:{
       palettes:[
@@ -61,7 +70,7 @@
         ["#4b5563", "#0f172a", "#f59e0b"],
         ["#5b6770", "#1f2937", "#d97706"]
       ],
-      archetypes:["bars", "fold", "grid"]
+      archetypes:["bars", "fold", "grid", "chevron"]
     },
     "Real Estate":{
       palettes:[
@@ -69,7 +78,7 @@
         ["#4f6d7a", "#3d405b", "#f2cc8f"],
         ["#3f5c73", "#6c757d", "#ffd6a5"]
       ],
-      archetypes:["fold", "monogram", "bars"]
+      archetypes:["fold", "monogram", "bars", "prism"]
     },
     "F&B":{
       palettes:[
@@ -77,7 +86,7 @@
         ["#9c6644", "#7f5539", "#ffb703"],
         ["#bc6c25", "#6f1d1b", "#f4a261"]
       ],
-      archetypes:["ring", "overlap", "monogram"]
+      archetypes:["ring", "overlap", "monogram", "wave"]
     },
     Healthcare:{
       palettes:[
@@ -85,7 +94,7 @@
         ["#1d7874", "#679289", "#f4c095"],
         ["#0f766e", "#0284c7", "#99f6e4"]
       ],
-      archetypes:["ring", "grid", "overlap"]
+      archetypes:["ring", "grid", "overlap", "orbit"]
     },
     Media:{
       palettes:[
@@ -93,7 +102,7 @@
         ["#8338ec", "#3a86ff", "#ffbe0b"],
         ["#6d28d9", "#db2777", "#fde047"]
       ],
-      archetypes:["overlap", "bars", "ring"]
+      archetypes:["overlap", "bars", "ring", "prism"]
     },
     Logistics:{
       palettes:[
@@ -101,7 +110,7 @@
         ["#2563eb", "#0891b2", "#fbbf24"],
         ["#0f4c81", "#2a9d8f", "#e9c46a"]
       ],
-      archetypes:["bars", "grid", "fold"]
+      archetypes:["bars", "grid", "fold", "chevron"]
     },
     Energy:{
       palettes:[
@@ -109,8 +118,17 @@
         ["#f97316", "#b91c1c", "#facc15"],
         ["#d97706", "#92400e", "#fde68a"]
       ],
-      archetypes:["ring", "fold", "bars"]
+      archetypes:["ring", "fold", "bars", "prism"]
     }
+  };
+  var BLOC_LOGO_TINTS = {
+    NA:["#4a9edd", "#8ad0ff", "#ffd47a"],
+    SA:["#8bc34a", "#c6f56c", "#1f6f4a"],
+    EU:["#4caf50", "#9de2a0", "#5b8cff"],
+    AF:["#cddc39", "#f2f17a", "#f5a623"],
+    AS:["#ef5350", "#ff9a96", "#ffd166"],
+    RU:["#ab47bc", "#d391e3", "#5b8cff"],
+    default:["#4a9edd", "#7ee7ff", "#f5a623"]
   };
   var DECISION_PROFILE_KEYS = ["riskTolerance","greed","patience","discipline","loyalty","statusSeeking","familyAttachment","adaptability","ethics"];
   var TEMP_STATE_KEYS = ["confidence","stress","burnout","grief","resentment","ambitionSpike"];
@@ -219,6 +237,172 @@
     affluent:3,
     elite:4
   };
+  var GOVERNOR_CONFIG = {
+    noLaunchYearsThreshold:2,
+    emptyEcosystemMinDensityPerMillion:1.2,
+    emptyEcosystemTicksThreshold:120,
+    unemploymentRateThreshold:0.2,
+    unemploymentTrapTicksThreshold:120,
+    agingSeniorAge:62,
+    agingShareThreshold:0.58,
+    agingLockTicksThreshold:180,
+    currencyConvergenceStdThreshold:0.055,
+    currencyConvergenceTicksThreshold:90,
+    maxInterventionsPerDay:2,
+    maxSeededLaunchesPerRun:1,
+    cooldownDays:{
+      seededEntrepreneur:180,
+      capitalEasing:90,
+      migrationRelief:120,
+      hiringIncentive:75,
+      forexNudge:120
+    }
+  };
+  var EDUCATION_ATTAINMENT_TIERS = [
+    { min:75, label:"advanced" },
+    { min:55, label:"secondary" },
+    { min:35, label:"primary" },
+    { min:0, label:"none" }
+  ];
+  var EDUCATION_CREDENTIAL_LEVELS = [
+    { min:96, key:"doctorate" },
+    { min:88, key:"masters" },
+    { min:75, key:"bachelor" },
+    { min:55, key:"highschool" },
+    { min:35, key:"primary" },
+    { min:0, key:"none" }
+  ];
+  var COUNTRY_CREDENTIAL_STYLE = {
+    US:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Primary School Certificate", none:"No Formal Qualification" },
+      schools:["Jefferson High School", "Roosevelt High School", "Lincoln Academy", "Riverview Public School"],
+      universities:["Columbia Institute", "Hudson State University", "New Boston University", "Pacific Metropolitan University"]
+    },
+    UK:{
+      labels:{ doctorate:"Doctorate", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"A-Level Qualification", primary:"GCSE Foundation", none:"No Formal Qualification" },
+      schools:["St. Edmund College", "Northbridge School", "Wellington Comprehensive", "Riverside Grammar"],
+      universities:["Kingston University", "Albion Institute", "Royal Thames University", "Westbridge University"]
+    },
+    IN:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Higher Secondary Certificate", primary:"Secondary School Certificate", none:"No Formal Qualification" },
+      schools:["Delhi Public School", "Sunrise Senior School", "Kendriya Senior School", "National Model School"],
+      universities:["National Technical University", "Metropolitan College", "Bharat Institute", "Coastal State University"]
+    },
+    CA:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary School Diploma", primary:"Elementary Certificate", none:"No Formal Qualification" },
+      schools:["Toronto Collegiate", "Vancouver Secondary", "Prairie North School", "Maple Ridge Academy"],
+      universities:["Dominion University", "Lakeshore Institute", "Northern Atlantic University", "Pacific Canada University"]
+    },
+    AU:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Secondary Certificate", primary:"Primary Certificate", none:"No Formal Qualification" },
+      schools:["Sydney Central High", "Perth Public College", "Brisbane North School", "Melbourne Grammar House"],
+      universities:["Southern Coast University", "Austral Institute of Technology", "Outback State University", "Harbour City University"]
+    },
+    DE:{
+      labels:{ doctorate:"Doktorgrad", masters:"Masterabschluss", bachelor:"Bachelorabschluss", highschool:"Abitur", primary:"Grundschule Abschluss", none:"Keine formale Qualifikation" },
+      schools:["Berlin Gesamtschule", "Rheinland Gymnasium", "Bayern Secondary", "Hamburg Stadt School"],
+      universities:["Federal Technical University", "Rhein University", "Berlin Institute of Science", "Bavaria State University"]
+    },
+    FR:{
+      labels:{ doctorate:"Doctorat", masters:"Master", bachelor:"Licence", highschool:"Baccalaureat", primary:"Certificat Primaire", none:"Aucune qualification formelle" },
+      schools:["Lycee Montclair", "Ecole du Centre", "College Rivage", "Lycee Republique"],
+      universities:["Universite Nouvelle", "Institut National", "Sorbonne Moderne", "Universite de la Cote"]
+    },
+    ES:{
+      labels:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Grado Universitario", highschool:"Bachillerato", primary:"Certificado Primario", none:"Sin titulacion formal" },
+      schools:["Instituto Central", "Colegio del Norte", "Academia del Sol", "Escuela Ribera"],
+      universities:["Universidad Nacional", "Instituto Iberico", "Universidad Costera", "Universidad Metropolitana"]
+    },
+    BR:{
+      labels:{ doctorate:"Doutorado", masters:"Mestrado", bachelor:"Bacharelado", highschool:"Ensino Medio", primary:"Ensino Fundamental", none:"Sem qualificacao formal" },
+      schools:["Colegio Sao Pedro", "Escola Atlantica", "Instituto Horizonte", "Colegio do Vale"],
+      universities:["Universidade Federal Nova", "Instituto Paulista", "Universidade do Litoral", "Universidade Metropolitana do Sul"]
+    },
+    MX:{
+      labels:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Licenciatura", highschool:"Preparatoria", primary:"Primaria", none:"Sin certificacion formal" },
+      schools:["Preparatoria Nacional", "Colegio del Centro", "Escuela Sierra", "Academia Valle"],
+      universities:["Universidad Nacional de Economia", "Instituto Tecnologico Central", "Universidad del Pacifico", "Universidad Metropolitana de Mexico"]
+    },
+    CN:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Middle School Diploma", primary:"Compulsory Education Certificate", none:"No Formal Qualification" },
+      schools:["Harmony Senior School", "Eastern River Academy", "Jade Bridge School", "Central Prosperity School"],
+      universities:["Huaxia National University", "Pearl Delta Institute", "Eastern Technology University", "Capital Science University"]
+    },
+    JP:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Upper Secondary Diploma", primary:"Compulsory School Certificate", none:"No Formal Qualification" },
+      schools:["Sakura Senior High", "Kansai Public School", "Tohoku Academy", "Tokyo Metro High"],
+      universities:["Nippon National University", "Kanto Institute of Science", "Osaka Metropolitan University", "Pacific East University"]
+    },
+    KR:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Middle School Completion", none:"No Formal Qualification" },
+      schools:["Seoul Central High", "Han River Academy", "Busan Public School", "Daegu Senior School"],
+      universities:["Korea National University", "Han Tech Institute", "Seoul Metropolitan University", "East Bay University"]
+    },
+    ID:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Sarjana Degree", highschool:"SMA Diploma", primary:"SMP Certificate", none:"No Formal Qualification" },
+      schools:["Jakarta Senior School", "Nusantara Academy", "Java Public High", "Bali Central School"],
+      universities:["Archipelago National University", "Jakarta State Institute", "Nusantara Tech University", "Coastal Indonesia University"]
+    },
+    NG:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Secondary Certificate", primary:"Basic Education Certificate", none:"No Formal Qualification" },
+      schools:["Lagos Community School", "Abuja Senior College", "Riverland Academy", "Unity High School"],
+      universities:["National University of Lagos", "Federal Science Institute", "West Coast University", "Niger Delta University"]
+    },
+    ZA:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"National Senior Certificate", primary:"General Education Certificate", none:"No Formal Qualification" },
+      schools:["Cape Town Senior School", "Johannesburg Central", "Pretoria Academy", "Durban Community High"],
+      universities:["Southern Africa University", "Cape Institute of Technology", "Johannesburg State University", "Coastal Republic University"]
+    },
+    KE:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"KCSE Certificate", primary:"KCPE Certificate", none:"No Formal Qualification" },
+      schools:["Nairobi Public School", "Rift Valley Secondary", "Mombasa Senior Academy", "Kenya Unity School"],
+      universities:["Kenya National University", "Savannah Technical Institute", "East Africa University", "Nairobi Metropolitan University"]
+    },
+    EG:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Thanaweya Diploma", primary:"Preparatory Certificate", none:"No Formal Qualification" },
+      schools:["Cairo Secondary School", "Nile Delta Academy", "Alexandria Public School", "Giza Senior School"],
+      universities:["Nile National University", "Cairo Institute of Science", "Mediterranean Egypt University", "Pyramid State University"]
+    },
+    SA:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary Education Certificate", primary:"Intermediate School Certificate", none:"No Formal Qualification" },
+      schools:["Riyadh Public School", "Jeddah Central High", "Eastern Province Academy", "Kingdom Senior School"],
+      universities:["Arabian National University", "Riyadh Technology Institute", "Gulf State University", "Desert Coast University"]
+    },
+    AE:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary School Certificate", primary:"Preparatory Certificate", none:"No Formal Qualification" },
+      schools:["Dubai Modern School", "Abu Dhabi Central High", "Emirates Public Academy", "Sharjah Senior School"],
+      universities:["Emirates National University", "Dubai Institute of Management", "Gulf Metropolitan University", "Abu Dhabi Technology University"]
+    },
+    TR:{
+      labels:{ doctorate:"Doktora", masters:"Yuksek Lisans", bachelor:"Lisans", highschool:"Lise Diplomasi", primary:"Ilkogretim Belgesi", none:"Resmi nitelik yok" },
+      schools:["Istanbul Anatolia School", "Ankara Public Lise", "Izmir Senior Academy", "Bosphorus College"],
+      universities:["Anatolia National University", "Istanbul Technology Institute", "Aegean State University", "Capital City University"]
+    },
+    RU:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary General Certificate", primary:"Basic School Certificate", none:"No Formal Qualification" },
+      schools:["Moscow Central School", "Volga Public Academy", "Siberia Secondary", "Nevsky Senior School"],
+      universities:["Federation National University", "Moscow Science Institute", "Volga State University", "Northern Technical University"]
+    },
+    PH:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior High School Diploma", primary:"Junior High Certificate", none:"No Formal Qualification" },
+      schools:["Manila Central High", "Luzon Public School", "Visayas Academy", "Mindanao Senior School"],
+      universities:["Philippine National University", "Manila Institute of Technology", "Island State University", "Pacific Archipelago University"]
+    },
+    default:{
+      labels:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Primary Certificate", none:"No Formal Qualification" },
+      schools:["Central Public School", "City Secondary School", "Regional Academy", "Community High School"],
+      universities:["National University", "Metropolitan University", "State Institute", "Global Technical College"]
+    }
+  };
+  var SKILL_KEYS = ["management", "technical", "social", "financialDiscipline", "creativity"];
+  var SKILL_TRACKS = {
+    foundation:{ management:1.0, technical:1.0, social:1.0, financialDiscipline:1.0, creativity:1.0 },
+    general:{ management:1.0, technical:1.0, social:1.0, financialDiscipline:1.0, creativity:1.0 },
+    leadership:{ management:1.35, technical:0.85, social:1.2, financialDiscipline:1.2, creativity:0.9 },
+    technical:{ management:0.85, technical:1.4, social:0.9, financialDiscipline:0.95, creativity:1.15 },
+    commercial:{ management:1.05, technical:0.85, social:1.35, financialDiscipline:1.2, creativity:0.9 },
+    creative:{ management:0.8, technical:1.0, social:1.0, financialDiscipline:0.75, creativity:1.5 }
+  };
 
   function randomId(){
     return Math.random().toString(36).slice(2);
@@ -289,20 +473,43 @@
     return list[Math.floor(random() * list.length)];
   }
 
+  function blendHexColor(first, second, ratio){
+    var a = String(first || "#4a9edd").replace("#", "").padStart(6, "0");
+    var b = String(second || "#7ee7ff").replace("#", "").padStart(6, "0");
+    var mix = App.utils.clamp(Number(ratio) || 0, 0, 1);
+    var out = [0, 1, 2].map(function(index){
+      var offset = index * 2;
+      var av = parseInt(a.slice(offset, offset + 2), 16);
+      var bv = parseInt(b.slice(offset, offset + 2), 16);
+      var value = Math.round((av * (1 - mix)) + (bv * mix));
+      return value.toString(16).padStart(2, "0");
+    }).join("");
+
+    return "#" + out;
+  }
+
   function createBusinessLogoConfig(business){
     var identity = [business.id, business.name, business.industry, business.countryISO, business.lineageId].join("|");
     var seed = hashString(identity);
     var random = createSeededRandom(seed);
     var rules = LOGO_RULES[business.industry] || LOGO_RULES.Technology;
     var palette = seededPick(random, rules.palettes);
+    var bloc = App.store && App.store.getBlocByCountry ? App.store.getBlocByCountry(business.countryISO) : null;
+    var tint = BLOC_LOGO_TINTS[bloc && bloc.id ? bloc.id : "default"] || BLOC_LOGO_TINTS.default;
+    var blendRatio = 0.14 + (random() * 0.24);
+    var primary = blendHexColor(palette[0], tint[0], blendRatio);
+    var secondary = blendHexColor(palette[1], tint[1], blendRatio * 0.9);
+    var accent = blendHexColor(palette[2], tint[2], blendRatio * 0.85);
+    var frameStyle = seededPick(random, ["circle", "square", "diamond"]);
+    var regionMark = bloc && bloc.id ? bloc.id : (business.countryISO || "WW");
 
     return {
       seed:seed,
       archetype:seededPick(random, rules.archetypes),
       palette:{
-        primary:palette[0],
-        secondary:palette[1],
-        accent:palette[2]
+        primary:primary,
+        secondary:secondary,
+        accent:accent
       },
       rounded:random() > 0.45,
       variant:Math.floor(random() * 4),
@@ -310,15 +517,33 @@
       accentIndex:Math.floor(random() * 4),
       cutout:random() > 0.5,
       useGradient:random() > 0.38,
-      frame:seededPick(random, ["circle", "square", "diamond"]),
-      monogram:(business.name || "?").charAt(0).toUpperCase()
+      frame:frameStyle,
+      halo:random() > 0.42,
+      texture:seededPick(random, ["clean", "scanline", "grain"]),
+      strokeWeight:1 + Math.floor(random() * 2),
+      regionMark:String(regionMark).slice(0, 2).toUpperCase(),
+      monogram:App.utils.getBusinessMonogram ? App.utils.getBusinessMonogram(business.name || "?") : (business.name || "?").charAt(0).toUpperCase()
     };
   }
 
   function ensureBusinessLogo(business){
+    var generated;
+
     if (!business) return;
+    generated = createBusinessLogoConfig(business);
+
     if (!business.logo) {
-      business.logo = createBusinessLogoConfig(business);
+      business.logo = generated;
+      return;
+    }
+
+    business.logo = Object.assign({}, generated, business.logo);
+    business.logo.palette = Object.assign({}, generated.palette, business.logo.palette || {});
+    if (!business.logo.monogram) {
+      business.logo.monogram = generated.monogram;
+    }
+    if (!business.logo.regionMark) {
+      business.logo.regionMark = generated.regionMark;
     }
   }
 
@@ -341,6 +566,352 @@
     return "mixed";
   }
 
+  function getBusinessNamingConfig(){
+    return App.data && App.data.BUSINESS_NAMING ? App.data.BUSINESS_NAMING : null;
+  }
+
+  function getWorldBusinessNamingMode(){
+    if (App.store && App.store.businessNamingMode !== "v2") {
+      App.store.businessNamingMode = "v2";
+    }
+    return "v2";
+  }
+
+  function normalizeBusinessNameText(name){
+    return String(name || "").replace(/\s*&\s*/g, " & ").replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeBusinessNameKey(name){
+    return normalizeBusinessNameText(name).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  function getBusinessNamingList(values, fallback){
+    return values && values.length ? values : (fallback || []);
+  }
+
+  function pickBusinessNamingValue(values, fallback){
+    var list = getBusinessNamingList(values, fallback);
+    return list.length ? App.utils.pick(list) : "";
+  }
+
+  function pickBusinessWeightKey(weights){
+    var keys = Object.keys(weights || {});
+    var total = 0;
+    var roll;
+    var running = 0;
+
+    if (!keys.length) return null;
+
+    keys.forEach(function(key){
+      total += Math.max(0, Number(weights[key]) || 0);
+    });
+
+    if (total <= 0) return keys[0];
+
+    roll = Math.random() * total;
+    for (var i = 0; i < keys.length; i += 1) {
+      running += Math.max(0, Number(weights[keys[i]]) || 0);
+      if (running >= roll) {
+        return keys[i];
+      }
+    }
+
+    return keys[keys.length - 1];
+  }
+
+  function getBusinessNamingModeForCountry(countryISO){
+    var naming = getBusinessNamingConfig();
+    var bloc;
+
+    if (!countryISO) return "founderWeighted";
+
+    if (naming && naming.countryModes && naming.countryModes[countryISO]) {
+      return naming.countryModes[countryISO];
+    }
+
+    bloc = App.store && App.store.getBlocByCountry ? App.store.getBlocByCountry(countryISO) : null;
+    if (!bloc) return "founderWeighted";
+
+    if (bloc.id === "AS") {
+      if (countryISO === "JP") return "japaneseCoined";
+      if (countryISO === "KR" || countryISO === "KP") return "koreanCoined";
+      if (countryISO === "VN") return "vietnameseCoined";
+      if (["IN","PK","BD","LK","NP"].indexOf(countryISO) !== -1) return "southAsiaCoined";
+      return "sinophoneCoined";
+    }
+
+    if (bloc.id === "AF" && ["AE","SA","QA","KW","OM","BH"].indexOf(countryISO) !== -1) {
+      return "gulfGeobrand";
+    }
+
+    return "founderWeighted";
+  }
+
+  function pickBusinessIndustrySuffix(industry){
+    var naming = getBusinessNamingConfig();
+    var suffixes = naming && naming.industrySuffixes ? naming.industrySuffixes[industry] : null;
+    var fallback = naming ? naming.fallbackSuffixes : ["Group","Co","Ltd"];
+    return pickBusinessNamingValue(suffixes, fallback);
+  }
+
+  function pickBusinessIndustryNoun(industry){
+    var naming = getBusinessNamingConfig();
+    var nouns = naming && naming.industryNouns ? naming.industryNouns[industry] : null;
+    return pickBusinessNamingValue(nouns, naming ? naming.fallbackSuffixes : ["Group"]);
+  }
+
+  function pickBusinessScopeDescriptor(scope){
+    var naming = getBusinessNamingConfig();
+    var descriptors = naming && naming.scopeDescriptors ? naming.scopeDescriptors[scope] : null;
+    var fallback = naming && naming.scopeDescriptors ? naming.scopeDescriptors.mixed : ["Summit","Atlas","Prime"];
+    return pickBusinessNamingValue(descriptors, fallback);
+  }
+
+  function isReservedBusinessName(name){
+    var naming = getBusinessNamingConfig();
+    var reserved = naming && Array.isArray(naming.reservedBrandNames) ? naming.reservedBrandNames : [];
+    var key = normalizeBusinessNameKey(name);
+
+    return reserved.some(function(entry){
+      return normalizeBusinessNameKey(entry) === key;
+    });
+  }
+
+  function doesBusinessNameExist(name){
+    var key = normalizeBusinessNameKey(name);
+
+    return (App.store.businesses || []).some(function(existing){
+      return existing && normalizeBusinessNameKey(existing.name) === key;
+    });
+  }
+
+  function makeUniqueBusinessName(baseName){
+    var normalized = normalizeBusinessNameText(baseName || "Business Group");
+    var candidate = normalized;
+    var index = 2;
+
+    while (doesBusinessNameExist(candidate) || isReservedBusinessName(candidate)) {
+      candidate = normalized + " " + index;
+      index += 1;
+    }
+
+    return candidate;
+  }
+
+  function getBusinessSpouse(owner){
+    var spouse = App.store.getSpouse ? App.store.getSpouse(owner) : null;
+
+    if (!spouse || !spouse.alive) return null;
+    if (!spouse.lastName || !owner.lastName) return null;
+    if (String(spouse.lastName).toLowerCase() === String(owner.lastName).toLowerCase()) return null;
+    return spouse;
+  }
+
+  function getFounderCoinedMode(owner){
+    var iso = owner && owner.countryISO;
+
+    if (!iso) return "southAsiaCoined";
+    if (iso === "JP") return "japaneseCoined";
+    if (iso === "KR" || iso === "KP") return "koreanCoined";
+    if (iso === "VN") return "vietnameseCoined";
+    if (["CN","HK","TW","SG"].indexOf(iso) !== -1) return "sinophoneCoined";
+    if (["IN","PK","BD","LK","NP"].indexOf(iso) !== -1) return "southAsiaCoined";
+    return "southAsiaCoined";
+  }
+
+  function buildBusinessAcronym(owner, spouse){
+    var letters = [];
+
+    if (owner && owner.firstName) letters.push(owner.firstName.charAt(0));
+    if (owner && owner.lastName) letters.push(owner.lastName.charAt(0));
+    if (spouse && spouse.lastName && letters.length < 4) letters.push(spouse.lastName.charAt(0));
+    if (owner && owner.countryISO && letters.length < 2) letters.push(owner.countryISO.charAt(0));
+
+    return letters.join("").replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
+  }
+
+  function buildCoinedBrandCore(mode){
+    var naming = getBusinessNamingConfig();
+    var pool = naming && naming.coinedPools ? naming.coinedPools[mode] : null;
+    var parts;
+
+    if (!pool) return null;
+
+    parts = [
+      pickBusinessNamingValue(pool.starts, ["Nova"])
+    ];
+    if (pool.middles && pool.middles.length && Math.random() < Number(pool.middleChance || 0)) {
+      parts.push(pickBusinessNamingValue(pool.middles, ["a"]));
+    }
+    parts.push(pickBusinessNamingValue(pool.ends, ["tek"]));
+
+    return normalizeBusinessNameText(parts.join(""));
+  }
+
+  function buildFounderWeightedName(owner, industry, scope, templateKey, spouse){
+    var coinedMode = getFounderCoinedMode(owner);
+    var coinedCore = buildCoinedBrandCore(coinedMode);
+
+    if (templateKey === "descriptorSurname") {
+      return pickBusinessScopeDescriptor(scope) + " " + owner.lastName + " " + pickBusinessIndustrySuffix(industry);
+    }
+    if (templateKey === "acronymSuffix") {
+      return buildBusinessAcronym(owner, spouse) + " " + pickBusinessIndustrySuffix(industry);
+    }
+    if (templateKey === "spousePartners" && spouse) {
+      return owner.lastName + " & " + spouse.lastName + " " + pickBusinessIndustrySuffix(industry);
+    }
+    if (templateKey === "descriptorBrand") {
+      return pickBusinessScopeDescriptor(scope) + " " + pickBusinessIndustryNoun(industry);
+    }
+    if (templateKey === "coinedIndustry" && coinedCore) {
+      return coinedCore + " " + pickBusinessIndustryNoun(industry);
+    }
+    if (templateKey === "coinedSuffix" && coinedCore) {
+      return coinedCore + " " + pickBusinessIndustrySuffix(industry);
+    }
+    return owner.lastName + " " + pickBusinessIndustrySuffix(industry);
+  }
+
+  function isLikelyLegacyFounderName(name, owner){
+    var normalizedName;
+    var ownerPrefix;
+    var suffixPart;
+    var naming = getBusinessNamingConfig();
+    var suffixes = [];
+
+    if (!name || !owner || !owner.lastName) return false;
+
+    normalizedName = normalizeBusinessNameText(name);
+    ownerPrefix = normalizeBusinessNameText(owner.lastName + " ").toLowerCase();
+    if (normalizedName.toLowerCase().indexOf(ownerPrefix) !== 0) return false;
+
+    suffixPart = normalizedName.slice(ownerPrefix.length).replace(/\s+\d+$/, "").trim().toLowerCase();
+    if (!suffixPart) return false;
+
+    suffixes = suffixes.concat(naming && naming.legacySuffixes ? naming.legacySuffixes : []);
+    suffixes = suffixes.concat(naming && naming.fallbackSuffixes ? naming.fallbackSuffixes : []);
+
+    return suffixes.some(function(suffix){
+      return normalizeBusinessNameText(suffix).toLowerCase() === suffixPart;
+    });
+  }
+
+  function refreshLegacyBusinessNames(){
+    var renamed = 0;
+
+    (App.store.businesses || []).forEach(function(business){
+      var owner;
+      var nextName;
+
+      if (!business) return;
+      owner = App.store.getPerson(business.ownerId) || App.store.getPerson(business.founderId);
+      if (!owner) return;
+      if (!isLikelyLegacyFounderName(business.name, owner)) return;
+
+      nextName = generateBusinessName(owner, business.industry);
+      if (!nextName || nextName === business.name) return;
+
+      business.name = nextName;
+      business.logo = createBusinessLogoConfig(business);
+      renamed += 1;
+    });
+
+    return renamed;
+  }
+
+  function buildCoinedModeName(owner, industry, scope, mode, templateKey, spouse){
+    var coinedCore = buildCoinedBrandCore(mode);
+
+    if (!coinedCore) return null;
+    if (templateKey === "coinedIndustry") {
+      return coinedCore + " " + pickBusinessIndustryNoun(industry);
+    }
+    if (templateKey === "surnameIndustry") {
+      return owner.lastName + " " + pickBusinessIndustryNoun(industry);
+    }
+    if (templateKey === "acronymSuffix") {
+      return buildBusinessAcronym(owner, spouse) + " " + pickBusinessIndustrySuffix(industry);
+    }
+    if (templateKey === "descriptorBrand") {
+      return pickBusinessScopeDescriptor(scope) + " " + pickBusinessIndustryNoun(industry);
+    }
+    if (templateKey === "coinedSuffix") {
+      return coinedCore + " " + pickBusinessIndustrySuffix(industry);
+    }
+    if (templateKey === "descriptorSurname") {
+      return pickBusinessScopeDescriptor(scope) + " " + owner.lastName + " " + pickBusinessIndustrySuffix(industry);
+    }
+    return coinedCore;
+  }
+
+  function buildGulfModeName(owner, industry, templateKey, spouse){
+    var naming = getBusinessNamingConfig();
+    var pool = naming && naming.coinedPools ? naming.coinedPools.gulfGeobrand : null;
+    var geoWord = pool ? pickBusinessNamingValue(pool.geo, ["Gulf"]) : "Gulf";
+    var institutionWord = pool ? pickBusinessNamingValue(pool.institutional, ["Holdings"]) : "Holdings";
+
+    if (templateKey === "geoInstitution") {
+      return geoWord + " " + institutionWord;
+    }
+    if (templateKey === "familyHolding") {
+      return owner.lastName + " " + pickBusinessNamingValue(["Group","Holdings","Capital"], ["Holdings"]);
+    }
+    if (templateKey === "acronymInstitution") {
+      return buildBusinessAcronym(owner, spouse) + " " + institutionWord;
+    }
+    return geoWord + " " + pickBusinessIndustryNoun(industry);
+  }
+
+  function buildBusinessNameCandidate(owner, industry, scope, mode, templateKey){
+    var spouse = getBusinessSpouse(owner);
+
+    if (mode === "gulfGeobrand") {
+      return buildGulfModeName(owner, industry, templateKey, spouse);
+    }
+    if (mode === "founderWeighted") {
+      return buildFounderWeightedName(owner, industry, scope, templateKey, spouse);
+    }
+    return buildCoinedModeName(owner, industry, scope, mode, templateKey, spouse);
+  }
+
+  function buildBusinessNameFallback(owner, industry, mode){
+    if (mode === "gulfGeobrand") {
+      return buildGulfModeName(owner, industry, "geoIndustry", getBusinessSpouse(owner));
+    }
+    if (mode !== "founderWeighted") {
+      return buildCoinedModeName(owner, industry, getIndustryMarketScope(industry), mode, "coinedIndustry", getBusinessSpouse(owner));
+    }
+    return owner.lastName + " " + pickBusinessIndustrySuffix(industry);
+  }
+
+  function generateBusinessName(owner, industry){
+    var naming = getBusinessNamingConfig();
+    var scope = getIndustryMarketScope(industry);
+    var mode = getBusinessNamingModeForCountry(owner.countryISO);
+    var weights = naming && naming.modeWeights ? naming.modeWeights[mode] : null;
+    var attempts = 0;
+    var templateKey;
+    var candidate;
+    var legacyName;
+
+    if (!naming || getWorldBusinessNamingMode() === "legacy") {
+      legacyName = owner.lastName + " " + pickBusinessNamingValue(naming && naming.legacySuffixes, ["Group","Co","Ltd"]);
+      return makeUniqueBusinessName(legacyName);
+    }
+
+    while (attempts < 18) {
+      templateKey = pickBusinessWeightKey(weights);
+      candidate = normalizeBusinessNameText(buildBusinessNameCandidate(owner, industry, scope, mode, templateKey));
+      if (candidate && !doesBusinessNameExist(candidate) && !isReservedBusinessName(candidate)) {
+        return candidate;
+      }
+      attempts += 1;
+    }
+
+    return makeUniqueBusinessName(buildBusinessNameFallback(owner, industry, mode));
+  }
+
   function ensureCountryProfile(iso, blocId){
     var profile;
     var bloc = App.store.getBloc(blocId) || App.store.getBlocByCountry(iso);
@@ -360,11 +931,673 @@
     return profile;
   }
 
+  function getEducationAttainment(educationIndex){
+    var score = App.utils.clamp(Number(educationIndex) || 0, 0, 100);
+    var match = EDUCATION_ATTAINMENT_TIERS.find(function(tier){
+      return score >= tier.min;
+    });
+
+    return match ? match.label : "none";
+  }
+
+  function getEducationCredentialLevel(educationIndex){
+    var score = App.utils.clamp(Number(educationIndex) || 0, 0, 100);
+    var match = EDUCATION_CREDENTIAL_LEVELS.find(function(level){
+      return score >= level.min;
+    });
+
+    return match ? match.key : "none";
+  }
+
+  function getCountryCredentialStyle(iso){
+    return COUNTRY_CREDENTIAL_STYLE[iso] || COUNTRY_CREDENTIAL_STYLE.default;
+  }
+
+  function getCountryDegreeNaming(iso){
+    var map = {
+      US:{ doctorate:"Doctor of Philosophy (PhD)", masters:"Master of Arts/Science (MA/MSc)", bachelor:"Bachelor of Arts/Science (BA/BSc)" },
+      UK:{ doctorate:"Doctor of Philosophy (PhD)", masters:"Master of Arts/Science (MA/MSc)", bachelor:"Bachelor Degree (BA/BSc)" },
+      IN:{ doctorate:"Doctor of Philosophy (PhD)", masters:"Master Degree (MA/MSc/MTech)", bachelor:"Bachelor Degree (BA/BSc/BCom/BTech)" },
+      CA:{ doctorate:"Doctor of Philosophy (PhD)", masters:"Master Degree (MA/MSc)", bachelor:"Bachelor Degree (BA/BSc)" },
+      AU:{ doctorate:"Doctor of Philosophy (PhD)", masters:"Master Degree (MA/MSc)", bachelor:"Bachelor Degree (BA/BSc)" },
+      DE:{ doctorate:"Doktorgrad (Dr.)", masters:"Masterabschluss", bachelor:"Bachelorabschluss" },
+      FR:{ doctorate:"Doctorat", masters:"Master", bachelor:"Licence" },
+      ES:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Grado Universitario" },
+      BR:{ doctorate:"Doutorado", masters:"Mestrado", bachelor:"Bacharelado" },
+      MX:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Licenciatura" },
+      CN:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      JP:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      KR:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      ID:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Sarjana Degree" },
+      NG:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      ZA:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      KE:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      EG:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      SA:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      AE:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      TR:{ doctorate:"Doktora", masters:"Yuksek Lisans", bachelor:"Lisans" },
+      RU:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      PH:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" },
+      default:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree" }
+    };
+
+    return map[iso] || map.default;
+  }
+
+  function getCountrySpecialistInstitutions(iso){
+    var map = {
+      US:["State Technical Institute", "Regional Career and Trade Academy", "Applied Science Polytechnic"],
+      UK:["Further Education College", "National Vocational Institute", "Applied Skills Academy"],
+      IN:["Polytechnic Institute", "Industrial Training Institute", "National Skills College"],
+      CA:["Provincial Polytechnic", "Applied Trades College", "Regional Technical Institute"],
+      AU:["TAFE College", "Applied Technology Institute", "Regional Skills Academy"],
+      DE:["Fachschule Institute", "Applied Technik Academy", "Regional Berufskolleg"],
+      FR:["Institut Professionnel", "Ecole Technique Regionale", "Academie des Metiers"],
+      ES:["Instituto Tecnico", "Escuela Profesional", "Centro de Formacion Tecnica"],
+      BR:["Instituto Tecnico Federal", "Centro Profissional", "Escola Tecnica Regional"],
+      MX:["Instituto Tecnologico", "Colegio Tecnico", "Centro de Formacion Tecnica"],
+      CN:["Technical Vocational College", "Applied Science Polytechnic", "Regional Skills Institute"],
+      JP:["Kosen Technical College", "Applied Engineering College", "Vocational Skills Institute"],
+      KR:["Polytechnic University College", "National Technical Institute", "Applied Skills College"],
+      ID:["Politeknik Regional", "Vocational Technology Institute", "Applied Skills College"],
+      NG:["Federal Polytechnic", "Technical College", "Skills Development Institute"],
+      ZA:["Technical and Vocational College", "Regional Polytechnic", "Applied Skills Institute"],
+      KE:["National Polytechnic", "Technical Training Institute", "Applied Science College"],
+      EG:["Technical Secondary Institute", "Applied Engineering College", "National Vocational Institute"],
+      SA:["Technical Training College", "Applied Technology Institute", "National Skills Institute"],
+      AE:["Applied Science College", "Emirates Technical Institute", "Vocational Training College"],
+      TR:["Meslek Yuksekokulu", "Technical Vocational College", "Applied Skills Institute"],
+      RU:["Polytechnic College", "Technical Training Institute", "Applied Engineering School"],
+      PH:["Technical Education Institute", "Applied Skills College", "Vocational Training Academy"],
+      CM:["National Technical College", "Applied Skills Institute", "Regional Vocational College"],
+      AR:["Instituto Tecnico Nacional", "Escuela Tecnica Regional", "Centro Profesional"],
+      GB:["Further Education College", "Technical Training Institute", "Applied Skills Academy"],
+      default:["Regional Polytechnic", "Applied Skills Institute", "Vocational Training College"]
+    };
+
+    return map[iso] || map.default;
+  }
+
+  function getCountryInstitutionNameParts(iso){
+    var map = {
+      US:["Jefferson", "Roosevelt", "Lincoln", "Franklin", "Riverside", "Oak Valley"],
+      UK:["Westminster", "Northbridge", "Bristol", "Oxford", "Leeds", "Manchester"],
+      IN:["Delhi", "Mumbai", "Bengaluru", "Chennai", "Kolkata", "Hyderabad"],
+      CA:["Toronto", "Vancouver", "Montreal", "Calgary", "Ottawa", "Halifax"],
+      AU:["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide", "Canberra"],
+      DE:["Berlin", "Hamburg", "Munich", "Cologne", "Stuttgart", "Leipzig"],
+      FR:["Paris", "Lyon", "Marseille", "Lille", "Nantes", "Bordeaux"],
+      ES:["Madrid", "Barcelona", "Valencia", "Seville", "Malaga", "Bilbao"],
+      BR:["Sao Paulo", "Rio", "Brasilia", "Salvador", "Recife", "Curitiba"],
+      MX:["Mexico City", "Guadalajara", "Monterrey", "Puebla", "Merida", "Tijuana"],
+      CN:["Beijing", "Shanghai", "Guangzhou", "Shenzhen", "Chengdu", "Wuhan"],
+      JP:["Tokyo", "Osaka", "Kyoto", "Nagoya", "Sapporo", "Fukuoka"],
+      KR:["Seoul", "Busan", "Incheon", "Daegu", "Daejeon", "Gwangju"],
+      ID:["Jakarta", "Bandung", "Surabaya", "Medan", "Makassar", "Yogyakarta"],
+      NG:["Lagos", "Abuja", "Kano", "Port Harcourt", "Ibadan", "Enugu"],
+      ZA:["Cape Town", "Johannesburg", "Pretoria", "Durban", "Bloemfontein", "Polokwane"],
+      KE:["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika"],
+      EG:["Cairo", "Alexandria", "Giza", "Aswan", "Mansoura", "Port Said"],
+      SA:["Riyadh", "Jeddah", "Dammam", "Medina", "Mecca", "Taif"],
+      AE:["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Al Ain", "Ras Al Khaimah"],
+      TR:["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya", "Konya"],
+      RU:["Moscow", "Saint Petersburg", "Kazan", "Novosibirsk", "Yekaterinburg", "Samara"],
+      PH:["Manila", "Cebu", "Davao", "Quezon", "Baguio", "Iloilo"],
+      CM:["Yaounde", "Douala", "Bamenda", "Garoua", "Bafoussam", "Maroua"],
+      AR:["Buenos Aires", "Cordoba", "Rosario", "Mendoza", "La Plata", "Salta"],
+      GB:["London", "Birmingham", "Glasgow", "Liverpool", "Cardiff", "Edinburgh"],
+      default:["Central", "Riverside", "National", "City", "Metropolitan", "Regional"]
+    };
+
+    return map[iso] || map.default;
+  }
+
+  function getCountryEliteUniversities(iso){
+    var map = {
+      US:["Harvard University", "Yale University", "Princeton University", "Columbia University", "University of Pennsylvania", "Cornell University", "Brown University", "Dartmouth College", "Massachusetts Institute of Technology", "Stanford University"],
+      UK:["University of Oxford", "University of Cambridge", "Imperial College London", "London School of Economics", "University College London"],
+      IN:["Indian Institute of Technology Delhi", "Indian Institute of Technology Bombay", "Indian Institute of Science Bengaluru", "Jawaharlal Nehru University", "All India Institute of Medical Sciences"],
+      CA:["University of Toronto", "McGill University", "University of British Columbia", "University of Waterloo"],
+      AU:["University of Melbourne", "Australian National University", "University of Sydney", "University of New South Wales"],
+      DE:["Technical University of Munich", "Heidelberg University", "Ludwig Maximilian University of Munich", "Humboldt University of Berlin"],
+      FR:["Sorbonne University", "Ecole Polytechnique", "Sciences Po", "Paris-Saclay University"],
+      ES:["University of Barcelona", "Autonomous University of Madrid", "Complutense University of Madrid"],
+      BR:["University of Sao Paulo", "State University of Campinas", "Federal University of Rio de Janeiro"],
+      MX:["National Autonomous University of Mexico", "Monterrey Institute of Technology", "Autonomous Metropolitan University"],
+      CN:["Tsinghua University", "Peking University", "Fudan University", "Shanghai Jiao Tong University"],
+      JP:["University of Tokyo", "Kyoto University", "Osaka University", "Tohoku University"],
+      KR:["Seoul National University", "Korea Advanced Institute of Science and Technology", "Yonsei University", "Korea University"],
+      ID:["University of Indonesia", "Bandung Institute of Technology", "Gadjah Mada University"],
+      NG:["University of Lagos", "University of Ibadan", "Ahmadu Bello University"],
+      ZA:["University of Cape Town", "University of the Witwatersrand", "Stellenbosch University"],
+      KE:["University of Nairobi", "Kenyatta University", "Strathmore University"],
+      EG:["Cairo University", "Ain Shams University", "Alexandria University"],
+      SA:["King Saud University", "King Abdulaziz University", "King Fahd University of Petroleum and Minerals"],
+      AE:["United Arab Emirates University", "Khalifa University", "American University of Sharjah"],
+      TR:["Bogazici University", "Middle East Technical University", "Istanbul Technical University"],
+      RU:["Lomonosov Moscow State University", "Saint Petersburg State University", "Novosibirsk State University"],
+      PH:["University of the Philippines Diliman", "Ateneo de Manila University", "De La Salle University"],
+      default:[]
+    };
+
+    return map[iso] || map.default;
+  }
+
+  function getSchoolStageSuffix(iso, age){
+    var years = Math.max(0, Number(age) || 0);
+
+    if (iso === "UK" || iso === "GB") {
+      if (years < 11) return "Primary School";
+      if (years < 16) return "Secondary School";
+      return "Sixth Form College";
+    }
+    if (iso === "IN") {
+      if (years < 11) return "Primary School";
+      if (years < 16) return "Secondary School";
+      return "Senior Secondary School";
+    }
+    if (years < 11) return "Primary School";
+    if (years < 16) return "Secondary School";
+    return "Senior High School";
+  }
+
+  function getInstitutionSuffixOptions(iso, credentialLevel, institutionType, age){
+    if (institutionType === "specialist_school") {
+      return getCountrySpecialistInstitutions(iso);
+    }
+    if (institutionType === "university") {
+      if (credentialLevel === "doctorate" || credentialLevel === "masters") {
+        return ["University", "National University", "Graduate Institute", "Institute of Advanced Studies"];
+      }
+      return ["University", "State University", "Institute of Technology", "Metropolitan University"];
+    }
+    return [getSchoolStageSuffix(iso, age)];
+  }
+
+  function buildCountryStageInstitutionName(person, credentialLevel, institutionType){
+    var iso = person && person.countryISO ? person.countryISO : "default";
+    var parts = getCountryInstitutionNameParts(iso);
+    var suffixOptions = getInstitutionSuffixOptions(iso, credentialLevel, institutionType, person && person.age);
+    var seed = hashString([person && person.id || "", iso, credentialLevel || "none", institutionType || "school", String(person && person.age || 0)].join("|"));
+    var area = parts.length ? parts[seed % parts.length] : "Central";
+    var suffix = suffixOptions.length ? suffixOptions[(seed >>> 8) % suffixOptions.length] : "School";
+
+    if (/School|College|University|Institute/.test(suffix)) {
+      return area + " " + suffix;
+    }
+
+    return area + " " + suffix;
+  }
+
+  function shouldUseEliteInstitutionName(person, institutionType){
+    var quality = Number(person && person.educationInstitutionQuality);
+    var education = App.utils.clamp(Number(person && person.educationIndex) || 0, 0, 100);
+    var profile = ensureCountryProfile(person && person.countryISO);
+    var baseline = ((Number(profile && profile.institutionScore) || 0.55) * 62) + ((Number(profile && profile.educationIndex) || 0.6) * 28) + (education * 0.12);
+    var effectiveQuality = Number.isFinite(quality) ? quality : baseline;
+    var seed = hashString([person && person.id || "", person && person.countryISO || "", "elite"].join("|"));
+    var roll = (seed % 1000) / 1000;
+    var threshold;
+
+    if (institutionType !== "university") return false;
+
+    threshold = effectiveQuality >= 92 ? 0.6 : (effectiveQuality >= 85 ? 0.32 : 0.0);
+    return roll < threshold;
+  }
+
+  function getEducationInstitutionType(person, levelKey){
+    var track = String(person && person.skillTrack || "general");
+    var score = App.utils.clamp(Number(person && person.educationIndex) || 0, 0, 100);
+
+    if (levelKey === "doctorate" || levelKey === "masters") {
+      return "university";
+    }
+    if (levelKey === "bachelor") {
+      if ((track === "technical" || track === "commercial" || track === "creative") && score < 84) {
+        return "specialist_school";
+      }
+      return "university";
+    }
+    if (levelKey === "highschool" && (track === "technical" || track === "commercial" || track === "creative") && score >= 62) {
+      return "specialist_school";
+    }
+    return "school";
+  }
+
+  function pickEducationCourseByTrack(track, levelKey, institutionType){
+    var key = String(track || "general");
+    var catalogs = {
+      foundation:["General Foundation Studies", "Civic and Life Skills", "Numeracy and Language Core"],
+      general:["General Studies", "Social Sciences", "Humanities"],
+      leadership:["Business Administration", "Public Policy", "Organizational Leadership"],
+      technical:["Computer Science", "Electrical Engineering", "Data Systems", "Mechatronics"],
+      commercial:["Economics", "Finance", "Accounting", "International Business"],
+      creative:["Design and Media Arts", "Architecture", "Creative Writing", "Digital Production"]
+    };
+    var specialistCatalog = {
+      leadership:["Diploma in Public Administration", "Diploma in Human Resource Management"],
+      technical:["Vocational Diploma in Applied ICT", "Vocational Diploma in Mechatronics", "Diploma in Network Systems"],
+      commercial:["Diploma in Accounting and Tax", "Diploma in Business Operations", "Diploma in Supply Chain Management"],
+      creative:["Diploma in Graphic Design", "Diploma in Film and Media", "Diploma in Product Design"],
+      general:["Diploma in Community Studies", "Diploma in Liberal Studies"]
+    };
+
+    if (institutionType === "specialist_school") {
+      return specialistCatalog[key] || specialistCatalog.general;
+    }
+    if (levelKey === "primary") {
+      return ["Primary Core Curriculum", "Basic Literacy and Numeracy", "Foundational Studies"];
+    }
+    if (levelKey === "none") {
+      return ["No Formal Course Completed"];
+    }
+    return catalogs[key] || catalogs.general;
+  }
+
+  function getEducationCourseLabel(person, levelKey, institutionType){
+    var track = person && person.skillTrack ? person.skillTrack : "general";
+    var options = pickEducationCourseByTrack(track, levelKey, institutionType);
+    var seed = hashString([person && person.id || "", person && person.countryISO || "", levelKey || "none", institutionType || "school", track].join("|"));
+    var index = options.length ? (seed % options.length) : 0;
+
+    return options[index] || "General Studies";
+  }
+
+  function getEducationCredentialLabel(iso, levelKey, educationIndex){
+    var score = App.utils.clamp(Number(educationIndex) || 0, 0, 100);
+    var style = getCountryCredentialStyle(iso);
+    var degreeNames = getCountryDegreeNaming(iso);
+
+    if (levelKey === "doctorate") {
+      if (score >= 99 && iso === "US") return "Doctor of Philosophy (PhD)";
+      return degreeNames.doctorate || style.labels.doctorate || "Doctoral Degree";
+    }
+    if (levelKey === "masters") {
+      if (score >= 93 && iso === "US") return "Master Degree with Distinction";
+      return degreeNames.masters || style.labels.masters || "Master Degree";
+    }
+    if (levelKey === "bachelor") {
+      if (score >= 82 && iso === "UK") return "Bachelor Degree with Honours";
+      return degreeNames.bachelor || style.labels.bachelor || "Bachelor Degree";
+    }
+    if (levelKey === "highschool") {
+      if (iso === "US") {
+        if (score < 60) return "GED (General Educational Development)";
+        if (score < 68) return "High School Diploma";
+        return "College Preparatory High School Diploma";
+      }
+      if (iso === "UK") {
+        if (score < 60) return "GCSE Level 2 Certificate";
+        if (score < 68) return "A-Level Certificate";
+        return "A-Level (Advanced)";
+      }
+      if (iso === "IN") {
+        if (score < 60) return "Secondary School Certificate (SSC)";
+        if (score < 68) return "Higher Secondary Certificate (HSC)";
+        return "Senior School Certificate";
+      }
+      if (score < 60) return "Secondary School Leaving Certificate";
+      if (score < 68) return style.labels.highschool || "High School Diploma";
+      return "College Preparatory Diploma";
+    }
+    if (levelKey === "primary") {
+      if (iso === "US") return "Middle School Completion Certificate";
+      if (iso === "UK") return "Key Stage Completion Certificate";
+      return style.labels.primary || "Primary School Leaving Certificate";
+    }
+
+    return style.labels.none || "No Formal Credential";
+  }
+
+  function getEducationInstitutionSector(person, profile, levelKey){
+    var seed = hashString([person.id || "", person.countryISO || "", levelKey || "none", "sector"].join("|"));
+    var normalized = (seed % 1000) / 1000;
+    var institutionScore = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1);
+    var privateChance = 0.2 + (institutionScore * 0.16) + ((levelKey === "bachelor" || levelKey === "masters" || levelKey === "doctorate") ? 0.1 : 0) + (App.utils.clamp(Number(person.educationIndex) || 0, 0, 100) * 0.001);
+
+    return normalized < App.utils.clamp(privateChance, 0.18, 0.72) ? "private" : "public";
+  }
+
+  function buildEducationInstitutionName(person, credentialLevel, institutionType){
+    var style = getCountryCredentialStyle(person.countryISO);
+    var eliteUniversities = getCountryEliteUniversities(person.countryISO);
+    var sourceList;
+    var generated;
+    var seed;
+    var index;
+
+    if (institutionType === "university" && eliteUniversities.length && shouldUseEliteInstitutionName(person, institutionType)) {
+      seed = hashString([person.id || "", person.countryISO || "", credentialLevel || "none", "elite"].join("|"));
+      index = seed % eliteUniversities.length;
+      return eliteUniversities[index];
+    }
+
+    generated = buildCountryStageInstitutionName(person, credentialLevel, institutionType);
+    if (generated) {
+      return generated;
+    }
+
+    if (institutionType === "specialist_school") {
+      sourceList = (style.specialistSchools && style.specialistSchools.length) ? style.specialistSchools : getCountrySpecialistInstitutions(person.countryISO);
+    } else {
+      sourceList = (credentialLevel === "bachelor" || credentialLevel === "masters" || credentialLevel === "doctorate") ? style.universities : style.schools;
+    }
+
+    seed = hashString([person.id || "", person.countryISO || "", credentialLevel || "none"].join("|"));
+    index = sourceList.length ? (seed % sourceList.length) : 0;
+    return sourceList[index] || "Local Public School";
+  }
+
+  function inferEducationInstitutionSectorFromName(name){
+    var text = String(name || "").toLowerCase();
+
+    if (!text) return null;
+    if (/\b(private|independent)\b/.test(text)) return "private";
+    if (/\b(public|state|national|government|federal)\b/.test(text)) return "public";
+    return null;
+  }
+
+  function shouldRegenerateInstitutionName(name){
+    var text = String(name || "").toLowerCase();
+
+    if (!text) return true;
+    return /\bstarlight\b|\bharmony\b|\bprosperity\b/.test(text);
+  }
+
+  function harmonizeEducationInstitutionNameSector(name, sector){
+    var text = String(name || "").trim();
+    var normalizedSector = sector === "private" ? "private" : "public";
+
+    if (!text) return text;
+
+    if (normalizedSector === "private") {
+      text = text.replace(/\bPublic\b/gi, "Private");
+      text = text.replace(/\bGovernment\b/gi, "Private");
+      text = text.replace(/\bFederal\b/gi, "Private");
+      return text;
+    }
+
+    text = text.replace(/\bPrivate\b/gi, "Public");
+    text = text.replace(/\bIndependent\b/gi, "Public");
+    return text;
+  }
+
+  function ensureEducationInstitutionData(person){
+    var profile;
+    var style;
+    var levelKey;
+    var institutionBaseline;
+
+    if (!person) return;
+
+    profile = ensureCountryProfile(person.countryISO);
+    style = getCountryCredentialStyle(person.countryISO);
+    levelKey = getEducationCredentialLevel(person.educationIndex);
+
+    person.educationCredentialLabel = getEducationCredentialLabel(person.countryISO, levelKey, person.educationIndex);
+    person.educationInstitutionType = getEducationInstitutionType(person, levelKey);
+    if (person.educationInstitutionSector !== "private" && person.educationInstitutionSector !== "public") {
+      person.educationInstitutionSector = getEducationInstitutionSector(person, profile, levelKey);
+    }
+    if (!person.educationInstitutionName) {
+      person.educationInstitutionName = buildEducationInstitutionName(person, levelKey, person.educationInstitutionType);
+    }
+    if (shouldRegenerateInstitutionName(person.educationInstitutionName)) {
+      person.educationInstitutionName = buildEducationInstitutionName(person, levelKey, person.educationInstitutionType);
+    }
+    person.educationInstitutionName = harmonizeEducationInstitutionNameSector(person.educationInstitutionName, person.educationInstitutionSector);
+    var inferredSector = inferEducationInstitutionSectorFromName(person.educationInstitutionName);
+    if (inferredSector) {
+      person.educationInstitutionSector = inferredSector;
+      person.educationInstitutionName = harmonizeEducationInstitutionNameSector(person.educationInstitutionName, person.educationInstitutionSector);
+    }
+    person.educationCourseLabel = getEducationCourseLabel(person, levelKey, person.educationInstitutionType);
+
+    institutionBaseline = ((Number(profile && profile.institutionScore) || 0.55) * 62) + ((Number(profile && profile.educationIndex) || 0.6) * 28);
+    if (!Number.isFinite(Number(person.educationInstitutionQuality))) {
+      person.educationInstitutionQuality = App.utils.clamp(institutionBaseline + (Number(person.educationIndex) || 0) * 0.12, 20, 100);
+    } else {
+      person.educationInstitutionQuality = App.utils.clamp(Number(person.educationInstitutionQuality), 20, 100);
+    }
+  }
+
+  function getHouseholdEducationBoost(household){
+    var classRank;
+    var classBonus;
+    var liquidityRatio;
+    var debtRatio;
+
+    if (!household) return 0;
+
+    classRank = HOUSEHOLD_CLASS_RANKS[household.classTier] != null ? HOUSEHOLD_CLASS_RANKS[household.classTier] : 1;
+    classBonus = (classRank - 1) * 7;
+    liquidityRatio = (household.cashOnHandGU || 0) / Math.max(1, household.monthlyExpensesGU || 1);
+    debtRatio = (household.debtGU || 0) / Math.max(1, household.monthlyIncomeGU || 1);
+
+    return classBonus + App.utils.clamp(liquidityRatio * 2.2, -4, 9) - App.utils.clamp(debtRatio * 2.1, 0, 8);
+  }
+
+  function estimateEducationIndexForPerson(person, householdOverride){
+    var profile;
+    var household;
+    var parentScores;
+    var parentAverage;
+    var age;
+    var countryEducation;
+    var institution;
+    var ageProgress;
+
+    if (!person) return 0;
+
+    profile = ensureCountryProfile(person.countryISO);
+    household = householdOverride || getHouseholdForPerson(person);
+    parentScores = (person.parentIds || []).map(function(parentId){
+      var parent = App.store.getPerson(parentId);
+      return parent ? Number(parent.educationIndex) : NaN;
+    }).filter(function(value){
+      return Number.isFinite(value);
+    });
+    parentAverage = parentScores.length ? App.utils.avg(parentScores) : 0;
+    age = Math.max(0, Number(person.age) || 0);
+    countryEducation = App.utils.clamp(Number(profile && profile.educationIndex) || 0.6, 0.1, 1);
+    institution = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1);
+
+    if (age < 6) {
+      ageProgress = 0;
+    } else if (age < 12) {
+      ageProgress = 8;
+    } else if (age < 18) {
+      ageProgress = 18;
+    } else if (age < 25) {
+      ageProgress = 28;
+    } else {
+      ageProgress = 34;
+    }
+
+    return App.utils.clamp(
+      ageProgress +
+      (countryEducation * 34) +
+      (institution * 18) +
+      getHouseholdEducationBoost(household) +
+      (parentAverage * 0.35),
+      0,
+      100
+    );
+  }
+
+  function ensureEducationData(person, householdOverride){
+    if (!person) return;
+
+    if (!Number.isFinite(Number(person.educationIndex))) {
+      person.educationIndex = estimateEducationIndexForPerson(person, householdOverride);
+    }
+
+    person.educationIndex = App.utils.clamp(Number(person.educationIndex) || 0, 0, 100);
+    person.educationAttainment = getEducationAttainment(person.educationIndex);
+    ensureEducationInstitutionData(person);
+  }
+
+  function progressEducationYearly(person){
+    var profile;
+    var household;
+    var uplift;
+
+    if (!person || !person.alive || person.age < 5 || person.age > 23) return;
+
+    profile = ensureCountryProfile(person.countryISO);
+    household = getHouseholdForPerson(person);
+    uplift = ((Number(profile && profile.institutionScore) || 0.55) - 0.45) * 1.8;
+    uplift += ((Number(profile && profile.educationIndex) || 0.6) - 0.5) * 1.6;
+    uplift += getHouseholdEducationBoost(household) * 0.06;
+    uplift = App.utils.clamp(uplift, -0.3, 2.2);
+    person.educationIndex = App.utils.clamp((Number(person.educationIndex) || 0) + uplift, 0, 100);
+    person.educationAttainment = getEducationAttainment(person.educationIndex);
+    ensureEducationInstitutionData(person);
+  }
+
+  function getChildhoodStageForAge(age){
+    var years = Math.max(0, Number(age) || 0);
+
+    if (years < 5) return "early_childhood";
+    if (years < 10) return "primary_foundation";
+    if (years < 14) return "lower_secondary";
+    if (years < 18) return "upper_secondary";
+    if (years < 23) return "tertiary_transition";
+    return "adult_complete";
+  }
+
+  function chooseSkillTrack(person){
+    var scores = {
+      leadership:0,
+      technical:0,
+      commercial:0,
+      creative:0,
+      general:1
+    };
+    var bestTrack = "general";
+
+    (person.traits || []).forEach(function(trait){
+      if (trait === "Strategist" || trait === "Ambitious" || trait === "Workaholic") {
+        scores.leadership += 2;
+      }
+      if (trait === "Innovator") {
+        scores.technical += 2;
+      }
+      if (trait === "Visionary") {
+        scores.creative += 2;
+        scores.leadership += 1;
+      }
+      if (trait === "Charismatic" || trait === "Networker") {
+        scores.commercial += 2;
+      }
+      if (trait === "Risk-taker") {
+        scores.commercial += 1;
+        scores.leadership += 1;
+      }
+      if (trait === "Frugal") {
+        scores.commercial += 1;
+      }
+    });
+
+    Object.keys(scores).forEach(function(track){
+      if (scores[track] > scores[bestTrack]) {
+        bestTrack = track;
+      }
+    });
+
+    return bestTrack;
+  }
+
+  function ensureSkillData(person){
+    var age;
+    var education;
+    var baseByAge;
+
+    if (!person) return;
+
+    age = Math.max(0, Number(person.age) || 0);
+    education = App.utils.clamp(Number(person.educationIndex) || 0, 0, 100);
+    baseByAge = age < 10 ? 8 : (age < 18 ? 18 : (age < 25 ? 28 : 34));
+
+    person.childhoodStage = person.childhoodStage || getChildhoodStageForAge(age);
+    person.skillTrack = person.skillTrack || (age < 12 ? "foundation" : chooseSkillTrack(person));
+    person.skills = person.skills && typeof person.skills === "object" ? person.skills : {};
+
+    SKILL_KEYS.forEach(function(key){
+      var existing = Number(person.skills[key]);
+      if (!Number.isFinite(existing)) {
+        person.skills[key] = App.utils.clamp((baseByAge * 0.45) + (education * 0.32), 0, 100);
+      } else {
+        person.skills[key] = App.utils.clamp(existing, 0, 100);
+      }
+    });
+
+    // Course and specialist-school pathways depend on track, so refresh education metadata here.
+    ensureEducationInstitutionData(person);
+  }
+
+  function applySkillFormationYearly(person){
+    var profile;
+    var household;
+    var age;
+    var stage;
+    var stageMultiplier;
+    var track;
+    var trackWeights;
+    var educationFactor;
+    var institutionFactor;
+    var householdFactor;
+
+    if (!person || !person.alive) return;
+
+    age = Math.max(0, Number(person.age) || 0);
+    profile = ensureCountryProfile(person.countryISO);
+    household = getHouseholdForPerson(person);
+    stage = getChildhoodStageForAge(age);
+    stageMultiplier = {
+      early_childhood:0.55,
+      primary_foundation:0.95,
+      lower_secondary:1.15,
+      upper_secondary:1.22,
+      tertiary_transition:1.08,
+      adult_complete:0.18
+    }[stage] || 0.2;
+
+    person.childhoodStage = stage;
+    if (!person.skillTrack || person.skillTrack === "foundation") {
+      person.skillTrack = age < 12 ? "foundation" : chooseSkillTrack(person);
+    }
+
+    track = SKILL_TRACKS[person.skillTrack] ? person.skillTrack : "general";
+    trackWeights = SKILL_TRACKS[track];
+    educationFactor = (App.utils.clamp(Number(person.educationIndex) || 0, 0, 100) / 100) * 1.35;
+    institutionFactor = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1) * 0.75;
+    householdFactor = App.utils.clamp(getHouseholdEducationBoost(household) * 0.04, -0.25, 0.5);
+
+    SKILL_KEYS.forEach(function(key){
+      var growth = (0.22 + educationFactor + institutionFactor + householdFactor) * stageMultiplier;
+      growth *= App.utils.clamp(Number(trackWeights[key]) || 1, 0.7, 1.6);
+
+      if (age > 58) {
+        growth -= 0.35;
+      }
+
+      person.skills[key] = App.utils.clamp((Number(person.skills[key]) || 0) + growth, 0, 100);
+    });
+  }
+
+  function getPersonSkillAverage(person){
+    if (!person || !person.skills) return 0;
+    return App.utils.avg(SKILL_KEYS.map(function(key){
+      return App.utils.clamp(Number(person.skills[key]) || 0, 0, 100);
+    }));
+  }
+
   function refreshCountryProfileDerived(profile){
     var laborForce = Math.max(0, floorInt(profile.laborForce));
     var employed = App.utils.clamp(floorInt(profile.employed), 0, laborForce);
     var unemployed = Math.max(0, laborForce - employed);
-    var medianWage = Math.max(1500, Number(profile.medianWageGU) || 0);
+    var medianWage = App.utils.clamp(Number(profile.medianWageGU) || 0, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
     var employmentRate = laborForce > 0 ? employed / laborForce : 0;
     var demandPerCapita = profile.population > 0 ? ((employed * medianWage * 0.72) / Math.max(1, profile.population)) : 0;
     var demandScore = App.utils.clamp(demandPerCapita / 28000, 0, 1);
@@ -374,10 +1607,46 @@
     profile.employed = employed;
     profile.unemployed = unemployed;
     profile.medianWageGU = medianWage;
-    profile.consumerDemandGU = Math.max(0, Math.round(employed * medianWage * 0.72));
+    profile.consumerDemandGU = App.utils.clamp(Math.round(employed * medianWage * 0.72), 0, MAX_COUNTRY_DEMAND_GU);
     profile.populationPressure = App.utils.clamp((employmentRate * 0.5) + (demandScore * 0.25) + (institutionScore * 0.25), 0, 1);
 
     return profile;
+  }
+
+  function enforceFinancialBounds(){
+    (App.store.people || []).forEach(function(person){
+      if (!person) return;
+      person.netWorthGU = App.utils.clamp(Number(person.netWorthGU) || 0, 100, MAX_PERSON_NET_WORTH_GU);
+      person.salaryGU = App.utils.clamp(Number(person.salaryGU) || 0, 0, MAX_PERSON_SALARY_GU);
+    });
+
+    (App.store.businesses || []).forEach(function(business){
+      if (!business) return;
+      business.revenueGU = App.utils.clamp(Number(business.revenueGU) || 0, 0, MAX_BUSINESS_REVENUE_GU);
+      business.profitGU = App.utils.clamp(Number(business.profitGU) || 0, -MAX_BUSINESS_PROFIT_GU, MAX_BUSINESS_PROFIT_GU);
+      business.valuationGU = App.utils.clamp(Number(business.valuationGU) || 0, 1000, MAX_BUSINESS_VALUATION_GU);
+      business.cashReservesGU = App.utils.clamp(Number(business.cashReservesGU) || 0, 0, MAX_BUSINESS_CASH_GU);
+      business.revenueHistory = (business.revenueHistory || []).map(function(value){
+        return App.utils.clamp(Number(value) || 0, 0, MAX_BUSINESS_REVENUE_GU);
+      }).slice(-20);
+    });
+
+    (App.store.households || []).forEach(function(household){
+      if (!household) return;
+      household.cashOnHandGU = App.utils.clamp(Number(household.cashOnHandGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU);
+      household.debtGU = App.utils.clamp(Number(household.debtGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU);
+      household.annualIncomeGU = App.utils.clamp(Number(household.annualIncomeGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU);
+      household.monthlyIncomeGU = App.utils.clamp(Number(household.monthlyIncomeGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU / 12);
+      household.monthlyExpensesGU = App.utils.clamp(Number(household.monthlyExpensesGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU / 12);
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = App.store.countryProfiles[iso];
+      if (!profile) return;
+      profile.medianWageGU = App.utils.clamp(Number(profile.medianWageGU) || 0, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+      profile.consumerDemandGU = App.utils.clamp(Number(profile.consumerDemandGU) || 0, 0, MAX_COUNTRY_DEMAND_GU);
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function bootstrapCountryProfiles(){
@@ -514,7 +1783,19 @@
     var utilization = (business.revenueGU || 0) / capacity;
 
     if (utilization <= 1) return 0;
-    return App.utils.clamp((utilization - 1) * 0.08, 0, 0.18);
+    if (utilization <= 1.15) return App.utils.clamp((utilization - 1) * 0.35, 0, 0.06);
+    if (utilization <= 1.5) return App.utils.clamp(0.06 + (utilization - 1.15) * 0.8, 0.06, 0.34);
+    return App.utils.clamp(0.34 + (utilization - 1.5) * 0.5, 0.34, 0.78);
+  }
+
+  function getNetWorthCarryRateAnnual(netWorthGU){
+    var worth = Math.max(0, Number(netWorthGU) || 0);
+
+    if (worth < 50000) return 0;
+    if (worth < 500000) return 0.01;
+    if (worth < 5000000) return 0.025;
+    if (worth < 50000000) return 0.045;
+    return 0.07;
   }
 
   function pickCountryByPopulationPressure(blocId){
@@ -835,12 +2116,526 @@
     });
   }
 
+  function ensureGovernorState(){
+    var governor = App.store.governor && typeof App.store.governor === "object" ? App.store.governor : {};
+
+    governor.enabled = governor.enabled !== false;
+    governor.annualLaunches = Math.max(0, Number(governor.annualLaunches) || 0);
+    governor.lastLaunchYear = Math.floor(Number(governor.lastLaunchYear) || -1);
+    governor.noLaunchYears = Math.max(0, Number(governor.noLaunchYears) || 0);
+    governor.emptyEcosystemTicksByBloc = governor.emptyEcosystemTicksByBloc && typeof governor.emptyEcosystemTicksByBloc === "object" ? governor.emptyEcosystemTicksByBloc : {};
+    governor.unemploymentTrapTicksByBloc = governor.unemploymentTrapTicksByBloc && typeof governor.unemploymentTrapTicksByBloc === "object" ? governor.unemploymentTrapTicksByBloc : {};
+    governor.agingLockTicks = Math.max(0, Number(governor.agingLockTicks) || 0);
+    governor.currencyConvergenceTicks = Math.max(0, Number(governor.currencyConvergenceTicks) || 0);
+    governor.cooldowns = governor.cooldowns && typeof governor.cooldowns === "object" ? governor.cooldowns : {};
+    governor.interventionCountsByDay = governor.interventionCountsByDay && typeof governor.interventionCountsByDay === "object" ? governor.interventionCountsByDay : {};
+    governor.signalSnapshot = governor.signalSnapshot && typeof governor.signalSnapshot === "object" ? governor.signalSnapshot : {};
+    governor.runCount = Math.max(0, Number(governor.runCount) || 0);
+    governor.lastRunDay = Math.max(0, Number(governor.lastRunDay) || 0);
+    App.store.governor = governor;
+    return governor;
+  }
+
+  function decayCounter(value, amount){
+    return Math.max(0, (Number(value) || 0) - Math.max(1, Number(amount) || 1));
+  }
+
+  function standardDeviation(values){
+    var sample = (values || []).filter(function(value){
+      return Number.isFinite(value);
+    });
+    var mean;
+
+    if (!sample.length) return 0;
+
+    mean = sample.reduce(function(sum, value){
+      return sum + value;
+    }, 0) / sample.length;
+
+    return Math.sqrt(sample.reduce(function(sum, value){
+      var delta = value - mean;
+      return sum + (delta * delta);
+    }, 0) / sample.length);
+  }
+
+  function getBlocPopulation(blocId){
+    return (App.store.getBlocProfiles ? App.store.getBlocProfiles(blocId) : []).reduce(function(sum, profile){
+      return sum + Math.max(0, Number(profile && profile.population) || 0);
+    }, 0);
+  }
+
+  function getBlocUnemploymentRate(blocId){
+    var aggregates = (App.store.getBlocProfiles ? App.store.getBlocProfiles(blocId) : []).reduce(function(state, profile){
+      state.laborForce += Math.max(0, Number(profile && profile.laborForce) || 0);
+      state.employed += Math.max(0, Number(profile && profile.employed) || 0);
+      return state;
+    }, { laborForce:0, employed:0 });
+
+    if (aggregates.laborForce <= 0) return 0;
+    return App.utils.clamp((aggregates.laborForce - aggregates.employed) / aggregates.laborForce, 0, 1);
+  }
+
+  function isGovernorCooldownReady(governor, key){
+    var currentDay = Math.max(0, Math.floor(App.store.simDay || 0));
+    return currentDay >= Math.max(0, Number(governor.cooldowns[key]) || 0);
+  }
+
+  function setGovernorCooldown(governor, key){
+    var currentDay = Math.max(0, Math.floor(App.store.simDay || 0));
+    var cooldownDays = Math.max(1, Number(GOVERNOR_CONFIG.cooldownDays[key]) || 1);
+
+    governor.cooldowns[key] = currentDay + cooldownDays;
+  }
+
+  function getGovernorInterventionsToday(governor){
+    var currentDay = String(Math.max(0, Math.floor(App.store.simDay || 0)));
+    return Math.max(0, Number(governor.interventionCountsByDay[currentDay]) || 0);
+  }
+
+  function canApplyGovernorIntervention(governor, key){
+    if (!isGovernorCooldownReady(governor, key)) return false;
+    return getGovernorInterventionsToday(governor) < GOVERNOR_CONFIG.maxInterventionsPerDay;
+  }
+
+  function recordGovernorIntervention(governor, key){
+    var currentDay = Math.max(0, Math.floor(App.store.simDay || 0));
+    var dayKey = String(currentDay);
+
+    Object.keys(governor.interventionCountsByDay || {}).forEach(function(existingKey){
+      var numericDay = Number(existingKey);
+      if (!Number.isFinite(numericDay)) return;
+      if (Math.abs(currentDay - numericDay) > 10) {
+        delete governor.interventionCountsByDay[existingKey];
+      }
+    });
+
+    governor.interventionCountsByDay[dayKey] = Math.max(0, Number(governor.interventionCountsByDay[dayKey]) || 0) + 1;
+    setGovernorCooldown(governor, key);
+  }
+
+  function emitGovernorIntervention(text, details){
+    var payload = details || {};
+    var tags = ["governor", payload.tag || "intervention", payload.intensity || "soft"];
+
+    emitNews("market", text, {
+      tags:tags,
+      scope:payload.scope || "global",
+      entities:payload.entities || {},
+      causes:(payload.causes || ["Simulation health governor applied a soft correction."]).slice(0, 3)
+    });
+  }
+
+  function recordLaunchWindow(year, launchCount){
+    var governor = ensureGovernorState();
+    var count = Math.max(0, Math.floor(Number(launchCount) || 0));
+
+    governor.annualLaunches = count;
+    governor.lastLaunchYear = Math.floor(Number(year) || 0);
+    governor.noLaunchYears = count <= 0 ? governor.noLaunchYears + 1 : 0;
+  }
+
+  function detectGovernorSignals(){
+    var governor = ensureGovernorState();
+    var activeBusinesses = (App.store.businesses || []).filter(function(business){
+      return !!(business && business.ownerId);
+    });
+    var owners = activeBusinesses.map(function(business){
+      return App.store.getPerson(business.ownerId);
+    }).filter(function(person){
+      return !!(person && person.alive);
+    });
+    var seniorOwners = owners.filter(function(person){
+      return (Number(person.age) || 0) >= GOVERNOR_CONFIG.agingSeniorAge;
+    }).length;
+    var seniorShare = owners.length ? seniorOwners / owners.length : 0;
+    var normalizedRates = App.store.blocs.map(function(bloc){
+      return (Number(bloc.rate) || 0) / Math.max(0.0001, Number(bloc.baseRate) || 1);
+    });
+    var convergenceStd = standardDeviation(normalizedRates);
+    var signals = {
+      noLaunchYears:governor.noLaunchYears,
+      noLaunch:governor.noLaunchYears >= GOVERNOR_CONFIG.noLaunchYearsThreshold,
+      emptyBlocIds:[],
+      unemploymentTrapBlocIds:[],
+      agingLock:false,
+      currencyConvergence:false,
+      currencyConvergenceStd:convergenceStd
+    };
+
+    App.store.blocs.forEach(function(bloc){
+      var blocId = bloc.id;
+      var population = getBlocPopulation(blocId);
+      var businessCount = activeBusinesses.filter(function(business){
+        return business.blocId === blocId;
+      }).length;
+      var businessesPerMillion = population > 0 ? (businessCount / Math.max(0.25, population / 1000000)) : businessCount;
+      var unemploymentRate = getBlocUnemploymentRate(blocId);
+
+      if (population >= 200000 && businessesPerMillion < GOVERNOR_CONFIG.emptyEcosystemMinDensityPerMillion) {
+        governor.emptyEcosystemTicksByBloc[blocId] = Math.max(0, Number(governor.emptyEcosystemTicksByBloc[blocId]) || 0) + SIM_DAYS_PER_TICK;
+      } else {
+        governor.emptyEcosystemTicksByBloc[blocId] = decayCounter(governor.emptyEcosystemTicksByBloc[blocId], SIM_DAYS_PER_TICK * 2);
+      }
+
+      if ((Number(governor.emptyEcosystemTicksByBloc[blocId]) || 0) >= GOVERNOR_CONFIG.emptyEcosystemTicksThreshold) {
+        signals.emptyBlocIds.push(blocId);
+      }
+
+      if (unemploymentRate >= GOVERNOR_CONFIG.unemploymentRateThreshold) {
+        governor.unemploymentTrapTicksByBloc[blocId] = Math.max(0, Number(governor.unemploymentTrapTicksByBloc[blocId]) || 0) + SIM_DAYS_PER_TICK;
+      } else {
+        governor.unemploymentTrapTicksByBloc[blocId] = decayCounter(governor.unemploymentTrapTicksByBloc[blocId], SIM_DAYS_PER_TICK * 2);
+      }
+
+      if ((Number(governor.unemploymentTrapTicksByBloc[blocId]) || 0) >= GOVERNOR_CONFIG.unemploymentTrapTicksThreshold) {
+        signals.unemploymentTrapBlocIds.push(blocId);
+      }
+    });
+
+    if (owners.length >= 6 && seniorShare >= GOVERNOR_CONFIG.agingShareThreshold && governor.noLaunchYears >= 1) {
+      governor.agingLockTicks += SIM_DAYS_PER_TICK;
+    } else {
+      governor.agingLockTicks = decayCounter(governor.agingLockTicks, SIM_DAYS_PER_TICK * 2);
+    }
+
+    signals.agingLock = governor.agingLockTicks >= GOVERNOR_CONFIG.agingLockTicksThreshold;
+
+    if (convergenceStd <= GOVERNOR_CONFIG.currencyConvergenceStdThreshold) {
+      governor.currencyConvergenceTicks += SIM_DAYS_PER_TICK;
+    } else {
+      governor.currencyConvergenceTicks = decayCounter(governor.currencyConvergenceTicks, SIM_DAYS_PER_TICK * 2);
+    }
+
+    signals.currencyConvergence = governor.currencyConvergenceTicks >= GOVERNOR_CONFIG.currencyConvergenceTicksThreshold;
+
+    governor.signalSnapshot = {
+      day:Math.max(0, Math.floor(App.store.simDay || 0)),
+      noLaunchYears:signals.noLaunchYears,
+      emptyBlocIds:signals.emptyBlocIds.slice(0),
+      unemploymentTrapBlocIds:signals.unemploymentTrapBlocIds.slice(0),
+      agingLockTicks:governor.agingLockTicks,
+      currencyConvergenceTicks:governor.currencyConvergenceTicks,
+      currencyConvergenceStd:signals.currencyConvergenceStd
+    };
+
+    return signals;
+  }
+
+  function findSeedEntrepreneurCandidate(blocId){
+    return App.store.getLivingPeople().filter(function(person){
+      if (!person || person.retired || person.businessId) return false;
+      if (person.employerBusinessId && person.jobTitle === "CEO") return false;
+      if (person.blocId !== blocId) return false;
+      if ((Number(person.age) || 0) < 24 || (Number(person.age) || 0) > 56) return false;
+      return true;
+    }).sort(function(first, second){
+      var firstScore = 0;
+      var secondScore = 0;
+
+      firstScore += hasEntrepreneurialTraits(first) ? 18 : 0;
+      firstScore += getTraitChannelScore(first, "mobility") * 0.9;
+      firstScore += getTraitChannelScore(first, "business") * 0.8;
+      firstScore += App.utils.clamp(Number(first.educationIndex) || 0, 0, 100) * 0.24;
+      firstScore += App.utils.clamp(Number(first.skills && first.skills.creativity) || 0, 0, 100) * 0.2;
+      firstScore += App.utils.clamp(Number(first.skills && first.skills.management) || 0, 0, 100) * 0.14;
+
+      secondScore += hasEntrepreneurialTraits(second) ? 18 : 0;
+      secondScore += getTraitChannelScore(second, "mobility") * 0.9;
+      secondScore += getTraitChannelScore(second, "business") * 0.8;
+      secondScore += App.utils.clamp(Number(second.educationIndex) || 0, 0, 100) * 0.24;
+      secondScore += App.utils.clamp(Number(second.skills && second.skills.creativity) || 0, 0, 100) * 0.2;
+      secondScore += App.utils.clamp(Number(second.skills && second.skills.management) || 0, 0, 100) * 0.14;
+
+      return secondScore - firstScore;
+    })[0] || null;
+  }
+
+  function applySeededEntrepreneur(blocId, reason){
+    var governor = ensureGovernorState();
+    var candidate;
+    var business;
+    var household;
+    var launchCapital;
+    var bloc = App.store.getBloc(blocId);
+
+    if (!canApplyGovernorIntervention(governor, "seededEntrepreneur")) return false;
+
+    candidate = findSeedEntrepreneurCandidate(blocId);
+    if (!candidate) return false;
+
+    business = createBusiness(candidate);
+    seedBusiness(business);
+    household = getHouseholdForPerson(candidate);
+    launchCapital = Math.min(candidate.netWorthGU * 0.1, Math.max(2200, business.cashReservesGU * 0.35));
+    if (household) {
+      launchCapital += Math.min(household.cashOnHandGU || 0, Math.max(900, (household.monthlyExpensesGU || 0) * 0.8));
+      household.cashOnHandGU = Math.max(0, (household.cashOnHandGU || 0) - Math.min(household.cashOnHandGU || 0, launchCapital * 0.55));
+      refreshHouseholdSnapshot(household);
+    }
+
+    business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + launchCapital);
+    business.reputation = clampScore((business.reputation || 50) + 3.5);
+    App.store.businesses.push(business);
+    candidate.businessId = business.id;
+    candidate.pulse = 1;
+    syncBusinessLeadership(business);
+    syncPerson(candidate);
+
+    governor.noLaunchYears = 0;
+    governor.annualLaunches = Math.max(1, Number(governor.annualLaunches) || 0);
+    recordGovernorIntervention(governor, "seededEntrepreneur");
+
+    emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor seeded a new founder: <strong>" + candidate.name + "</strong> launched <strong>" + business.name + "</strong>.", {
+      tag:"seed",
+      intensity:"soft",
+      scope:"bloc",
+      entities:{
+        personIds:[candidate.id],
+        businessIds:[business.id],
+        countryIsos:[business.countryISO],
+        blocIds:[business.blocId]
+      },
+      causes:[
+        reason || "Launch drought threatened business renewal.",
+        "Soft governor intervention seeded entrepreneurship momentum."
+      ]
+    });
+    return true;
+  }
+
+  function applyCapitalEasing(blocId, reason){
+    var governor = ensureGovernorState();
+    var targets;
+    var totalInjection = 0;
+    var bloc = App.store.getBloc(blocId);
+
+    if (!canApplyGovernorIntervention(governor, "capitalEasing")) return false;
+
+    targets = App.store.businesses.filter(function(business){
+      return business && business.blocId === blocId && business.stage !== "defunct";
+    }).map(function(business){
+      return {
+        business:business,
+        cashCoverage:getCashCoverageMonths(business)
+      };
+    }).filter(function(item){
+      return item.cashCoverage < 1.5 || (item.business.profitGU || 0) < 0;
+    }).sort(function(first, second){
+      return first.cashCoverage - second.cashCoverage;
+    }).slice(0, 3);
+
+    if (!targets.length) return false;
+
+    targets.forEach(function(item){
+      var business = item.business;
+      var injection = Math.max(1800, (Number(business.revenueGU) || 0) * 0.0045);
+      injection = Math.min(injection, Math.max(6000, (Number(business.valuationGU) || 0) * 0.008));
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + injection);
+      business.reputation = clampScore((business.reputation || 50) + 0.8);
+      totalInjection += injection;
+    });
+
+    recordGovernorIntervention(governor, "capitalEasing");
+    emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor applied temporary capital easing to <strong>" + targets.length + "</strong> firms.", {
+      tag:"capital-easing",
+      intensity:"soft",
+      scope:"bloc",
+      entities:{
+        businessIds:targets.map(function(item){ return item.business.id; }),
+        countryIsos:targets.map(function(item){ return item.business.countryISO; }),
+        blocIds:blocId ? [blocId] : []
+      },
+      causes:[
+        reason || "Business density and resilience dropped below healthy range.",
+        "Soft liquidity bridge of " + App.utils.fmtL(totalInjection, bloc || App.store.getBloc("NA")) + " stabilized near-term operations."
+      ]
+    });
+    return true;
+  }
+
+  function createArrivalForBloc(blocId, causeText){
+    var bloc = App.store.getBloc(blocId);
+    var arrival;
+
+    if (!bloc) return null;
+    if (App.store.getLivingCount() >= 140) return null;
+
+    arrival = createCitizen({
+      blocId:bloc.id,
+      countryISO:pickCountryByPopulationPressure(bloc.id) || undefined,
+      age:App.utils.randInt(21, 43),
+      netWorthGU:App.utils.rand(1800, 26000)
+    });
+    App.store.people.push(arrival);
+    seedHousehold(arrival);
+    syncPerson(arrival);
+    emitGovernorIntervention(bloc.flag + " Governor opened calibrated migration relief: <strong>" + arrival.name + "</strong> arrived with " + App.utils.fmtCountry(arrival.netWorthGU, arrival.countryISO) + ".", {
+      tag:"migration-relief",
+      intensity:"soft",
+      scope:"bloc",
+      entities:{
+        personIds:[arrival.id],
+        countryIsos:[arrival.countryISO],
+        blocIds:[arrival.blocId]
+      },
+      causes:[
+        causeText || "Labor and ecosystem replenishment needed in under-active markets.",
+        "Calibrated arrival boost added fresh labor and founder potential."
+      ]
+    });
+    return arrival;
+  }
+
+  function applyMigrationRelief(blocId, reason){
+    var governor = ensureGovernorState();
+    var arrival;
+
+    if (!canApplyGovernorIntervention(governor, "migrationRelief")) return false;
+
+    arrival = createArrivalForBloc(blocId, reason);
+    if (!arrival) return false;
+    recordGovernorIntervention(governor, "migrationRelief");
+    return true;
+  }
+
+  function applyHiringIncentive(blocId, reason){
+    var governor = ensureGovernorState();
+    var targets;
+    var totalHires = 0;
+    var bloc = App.store.getBloc(blocId);
+
+    if (!canApplyGovernorIntervention(governor, "hiringIncentive")) return false;
+
+    targets = App.store.businesses.filter(function(business){
+      return business && business.blocId === blocId && business.stage !== "defunct";
+    }).filter(function(business){
+      return (Number(business.profitGU) || 0) > 0 && getCashCoverageMonths(business) >= 2;
+    }).sort(function(first, second){
+      return (Number(second.profitGU) || 0) - (Number(first.profitGU) || 0);
+    }).slice(0, 4);
+
+    targets.forEach(function(business){
+      var leadershipFloor = Math.max((business.leadership || []).length, 1);
+      var current = Math.max(leadershipFloor, Number(business.employees) || leadershipFloor);
+      var room = Math.max(0, 2000 - current);
+      var requested = Math.min(room, App.utils.randInt(1, 3));
+      var hires = reserveLabor(business.countryISO, requested);
+
+      if (hires <= 0) return;
+      business.employees = Math.max(leadershipFloor, Math.min(2000, current + hires));
+      business.reputation = clampScore((business.reputation || 50) + 0.35);
+      totalHires += hires;
+    });
+
+    if (totalHires <= 0) return false;
+
+    recordGovernorIntervention(governor, "hiringIncentive");
+    emitGovernorIntervention((bloc ? bloc.flag + " " : "") + "Governor hiring incentives unlocked <strong>" + totalHires + "</strong> new jobs.", {
+      tag:"hiring-incentive",
+      intensity:"soft",
+      scope:"bloc",
+      entities:{
+        businessIds:targets.map(function(business){ return business.id; }),
+        countryIsos:targets.map(function(business){ return business.countryISO; }),
+        blocIds:blocId ? [blocId] : []
+      },
+      causes:[
+        reason || "Unemployment stayed elevated beyond healthy persistence.",
+        "Short-lived incentive nudged hiring without hard market overrides."
+      ]
+    });
+    return true;
+  }
+
+  function applyCurrencyDivergenceNudge(reason){
+    var governor = ensureGovernorState();
+    var ordered;
+    var weakest;
+    var strongest;
+    var weakestNorm;
+    var strongestNorm;
+
+    if (!canApplyGovernorIntervention(governor, "forexNudge")) return false;
+    if ((App.store.blocs || []).length < 2) return false;
+
+    ordered = App.store.blocs.slice().sort(function(first, second){
+      var firstNorm = (Number(first.rate) || 0) / Math.max(0.0001, Number(first.baseRate) || 1);
+      var secondNorm = (Number(second.rate) || 0) / Math.max(0.0001, Number(second.baseRate) || 1);
+      return firstNorm - secondNorm;
+    });
+    weakest = ordered[0];
+    strongest = ordered[ordered.length - 1];
+    if (!weakest || !strongest || weakest.id === strongest.id) return false;
+
+    weakestNorm = (Number(weakest.rate) || 0) / Math.max(0.0001, Number(weakest.baseRate) || 1);
+    strongestNorm = (Number(strongest.rate) || 0) / Math.max(0.0001, Number(strongest.baseRate) || 1);
+    if (Math.abs(strongestNorm - weakestNorm) > 0.08) return false;
+
+    weakest.rate = Math.max(weakest.baseRate * 0.55, Math.min(weakest.baseRate * 2.2, weakest.rate * 1.006));
+    strongest.rate = Math.max(strongest.baseRate * 0.55, Math.min(strongest.baseRate * 2.2, strongest.rate * 0.994));
+    weakest.rateHistory = Array.isArray(weakest.rateHistory) ? weakest.rateHistory : [];
+    strongest.rateHistory = Array.isArray(strongest.rateHistory) ? strongest.rateHistory : [];
+    weakest.rateHistory.push(weakest.rate);
+    strongest.rateHistory.push(strongest.rate);
+    if (weakest.rateHistory.length > 60) weakest.rateHistory.shift();
+    if (strongest.rateHistory.length > 60) strongest.rateHistory.shift();
+
+    recordGovernorIntervention(governor, "forexNudge");
+    emitGovernorIntervention("Governor applied a soft currency divergence nudge between " + weakest.flag + " " + weakest.name + " and " + strongest.flag + " " + strongest.name + ".", {
+      tag:"forex-nudge",
+      intensity:"soft",
+      scope:"global",
+      entities:{
+        blocIds:[weakest.id, strongest.id]
+      },
+      causes:[
+        reason || "Bloc currencies were converging into low-volatility lock.",
+        "A bounded adjustment restored relative signal separation."
+      ]
+    });
+    return true;
+  }
+
+  function runSimulationHealthGovernors(){
+    var governor = ensureGovernorState();
+    var signals;
+    var seedTarget;
+    var emptyTarget;
+    var unemploymentTarget;
+
+    if (!governor.enabled) return;
+
+    governor.runCount += 1;
+    governor.lastRunDay = Math.max(0, Math.floor(App.store.simDay || 0));
+    signals = detectGovernorSignals();
+
+    seedTarget = signals.emptyBlocIds[0] || (App.store.blocs[0] && App.store.blocs[0].id);
+    if ((signals.noLaunch || signals.agingLock) && seedTarget) {
+      applySeededEntrepreneur(seedTarget, signals.agingLock ? "Aging ownership and weak succession renewal raised stagnation risk." : "No new launches persisted across yearly windows.");
+    }
+
+    emptyTarget = signals.emptyBlocIds[0];
+    if (emptyTarget) {
+      applyCapitalEasing(emptyTarget, "Business ecosystem density remained below stability threshold.");
+      applyMigrationRelief(emptyTarget, "Ecosystem thinning required calibrated arrival support.");
+    }
+
+    unemploymentTarget = signals.unemploymentTrapBlocIds[0];
+    if (unemploymentTarget) {
+      applyHiringIncentive(unemploymentTarget, "Prolonged unemployment exceeded trap threshold in bloc labor markets.");
+    }
+
+    if (signals.currencyConvergence) {
+      applyCurrencyDivergenceNudge("Sustained currency convergence weakened macro differentiation signals.");
+    }
+  }
+
   function getFallbackSpawnPos(iso, preferredState){
     if (iso === "US") {
       var stateCode = preferredState || App.utils.pick(App.data.US_STATE_CODES);
       var centroid = App.data.US_STATE_CENTROIDS[stateCode];
       return {
-        pos: App.utils.latLngToSVG(centroid[0] + App.utils.rand(-0.8, 0.8), centroid[1] + App.utils.rand(-1, 1)),
+        pos: App.utils.latLngToSVG(centroid[0], centroid[1]),
         iso:"US",
         state:stateCode
       };
@@ -849,14 +2644,14 @@
     if (App.data.CENTROIDS[iso]) {
       var pair = App.data.CENTROIDS[iso];
       return {
-        pos: App.utils.latLngToSVG(pair[0] + App.utils.rand(-2.5, 2.5), pair[1] + App.utils.rand(-2.5, 2.5)),
+        pos: App.utils.latLngToSVG(pair[0], pair[1]),
         iso:iso,
         state:null
       };
     }
 
     return {
-      pos: App.utils.latLngToSVG(App.utils.rand(10, 60), App.utils.rand(-20, 120)),
+      pos:{ x:500, y:253 },
       iso:iso,
       state:null
     };
@@ -994,7 +2789,93 @@
     return "senior";
   }
 
+  function pickDeterministicOrientation(person){
+    var seed;
+    var roll;
+
+    if (!person) return "straight";
+
+    seed = hashString([(person.id || ""), (person.sex || ""), (person.countryISO || "")].join("|"));
+    roll = (seed % 1000) / 1000;
+
+    if (roll < 0.045) {
+      return person.sex === "female" ? "lesbian" : "gay";
+    }
+    if (roll < 0.135) {
+      return "bi";
+    }
+    return "straight";
+  }
+
+  function normalizeOrientationForSex(orientation, sex){
+    var normalized = String(orientation || "").toLowerCase();
+
+    if (normalized === "bi" || normalized === "straight") return normalized;
+    if (normalized === "gay") return sex === "female" ? "lesbian" : "gay";
+    if (normalized === "lesbian") return sex === "male" ? "gay" : "lesbian";
+    return "straight";
+  }
+
+  function ensureRelationshipIdentity(person){
+    if (!person) return;
+
+    if (person.sex !== "male" && person.sex !== "female") {
+      person.sex = "male";
+    }
+
+    if (!person.sexualOrientation) {
+      person.sexualOrientation = pickDeterministicOrientation(person);
+    }
+
+    person.sexualOrientation = normalizeOrientationForSex(person.sexualOrientation, person.sex);
+  }
+
+  function isOrientationOpenToSex(person, targetSex){
+    var orientation;
+
+    if (!person) return false;
+    ensureRelationshipIdentity(person);
+    orientation = person.sexualOrientation;
+
+    if (orientation === "bi") return targetSex === "male" || targetSex === "female";
+    if (orientation === "straight") return targetSex && targetSex !== person.sex;
+    if (orientation === "gay") return person.sex === "male" && targetSex === "male";
+    if (orientation === "lesbian") return person.sex === "female" && targetSex === "female";
+    return targetSex && targetSex !== person.sex;
+  }
+
+  function areMarriageCompatible(first, second){
+    if (!first || !second) return false;
+    ensureRelationshipIdentity(first);
+    ensureRelationshipIdentity(second);
+    return isOrientationOpenToSex(first, second.sex) && isOrientationOpenToSex(second, first.sex);
+  }
+
+  function getGeneratedSpouseSex(person){
+    var sexes = ["male", "female"].filter(function(candidateSex){
+      return isOrientationOpenToSex(person, candidateSex);
+    });
+
+    if (!sexes.length) {
+      return person.sex === "male" ? "female" : "male";
+    }
+
+    return App.utils.pick(sexes);
+  }
+
+  function getGeneratedSpouseOrientation(person, spouseSex){
+    if (person.sex === spouseSex) {
+      if (spouseSex === "female") {
+        return Math.random() < 0.7 ? "lesbian" : "bi";
+      }
+      return Math.random() < 0.7 ? "gay" : "bi";
+    }
+
+    return Math.random() < 0.78 ? "straight" : "bi";
+  }
+
   function syncPerson(person){
+    ensureRelationshipIdentity(person);
     person.name = App.utils.formatPersonName(person.firstName, person.lastName, person.countryISO, person.nameOrder);
     person.age = ageForPerson(person);
     person.lifeStage = lifeStageForAge(person.age, person.alive);
@@ -1075,14 +2956,37 @@
     var sex = options.sex || (Math.random() < 0.5 ? "male" : "female");
     var state = iso === "US" ? (options.state || null) : null;
     var spawn = options.anchorPerson ? getNearbySpawn(options.anchorPerson, iso, state) : getSpawnPos(iso, state);
+    var spawnAttempts = 0;
+        if (App.map && typeof App.map.isPointInCountry === "function") {
+          while (spawnAttempts < 8 && (!spawn || !spawn.pos || !App.map.isPointInCountry(iso, spawn.pos.x, spawn.pos.y))) {
+            spawn = options.anchorPerson ? getNearbySpawn(options.anchorPerson, iso, state) : getSpawnPos(iso, state);
+            spawnAttempts += 1;
+          }
+
+          if ((!spawn || !spawn.pos || !App.map.isPointInCountry(iso, spawn.pos.x, spawn.pos.y)) && App.map.getCountrySpawnPoint) {
+            spawn = App.map.getCountrySpawnPoint(iso, state) || spawn;
+          }
+
+          if ((!spawn || !spawn.pos || !App.map.isPointInCountry(iso, spawn.pos.x, spawn.pos.y)) && App.data.CENTROIDS[iso]) {
+            var centroidPair = App.data.CENTROIDS[iso];
+            spawn = {
+              pos:App.utils.latLngToSVG(centroidPair[0], centroidPair[1]),
+              iso:iso,
+              state:iso === "US" ? state : null
+            };
+          }
+        }
+
     var pool = App.data.NAME_POOLS[iso];
     var lastName = options.lastName || pickLastName(iso, bloc.id);
+    var personId = randomId();
     var person = {
-      id:randomId(),
+      id:personId,
       firstName:options.firstName || pickFirstName(iso, bloc.id, sex),
       lastName:lastName,
       name:"",
       sex:sex,
+      sexualOrientation:options.sexualOrientation || pickDeterministicOrientation({ id:personId, sex:sex, countryISO:iso }),
       blocId:bloc.id,
       countryISO:iso,
       state:spawn.state,
@@ -1115,12 +3019,23 @@
       lastLifeEventYear:options.lastLifeEventYear != null ? options.lastLifeEventYear : currentYear(),
       decisionProfileBase:options.decisionProfileBase || null,
       decisionProfile:options.decisionProfile || null,
-      temporaryStates:options.temporaryStates || null
+      temporaryStates:options.temporaryStates || null,
+      educationCredentialLabel:options.educationCredentialLabel || null,
+      educationInstitutionName:options.educationInstitutionName || null,
+      educationInstitutionType:options.educationInstitutionType || null,
+      educationInstitutionSector:options.educationInstitutionSector || null,
+      educationCourseLabel:options.educationCourseLabel || null,
+      educationInstitutionQuality:options.educationInstitutionQuality != null ? options.educationInstitutionQuality : null,
+      childhoodStage:options.childhoodStage || null,
+      skillTrack:options.skillTrack || null,
+      skills:options.skills || null
     };
 
     syncPerson(person);
     initializeTraits(person);
+    ensureEducationData(person);
     ensureDecisionData(person);
+    ensureSkillData(person);
     syncPerson(person);
     return person;
   }
@@ -1133,7 +3048,7 @@
     var revenueSeed = employees * medianWage * getIndustryValue(INDUSTRY_PRODUCTIVITY_MULTIPLIERS, industry, 2.6) * App.utils.rand(0.72, 1.18);
     var business = {
       id:randomId(),
-      name:owner.lastName + " " + App.utils.pick(App.data.BIZ_SFX),
+      name:generateBusinessName(owner, industry),
       industry:industry,
       ownerId:owner.id,
       founderId:owner.id,
@@ -1291,8 +3206,38 @@
     };
   }
 
-  function leadershipCandidateScore(candidate, business){
+  function getInstitutionPrestigeSignal(candidate, role){
+    var education = Number(candidate && candidate.educationIndex) || 0;
+    var quality = Number(candidate && candidate.educationInstitutionQuality);
+    var prestige = Number.isFinite(quality) ? App.utils.clamp(quality, 20, 100) : App.utils.clamp(35 + (education * 0.62), 20, 100);
+    var roleImportance = Math.max(1, Number(role && role.importance) || 3);
+    var roleMultiplier = 0.12 + (roleImportance * 0.05);
+
+    return {
+      prestige:prestige,
+      score:App.utils.clamp((prestige - 50) * roleMultiplier, -8, 18)
+    };
+  }
+
+  function getPromotionReadinessScore(candidate, role, business){
+    var tierScoreMap = {
+      executive:82,
+      leadership:68,
+      senior:56,
+      mid:46,
+      junior:36,
+      entry:24
+    };
+    var roleTierFloor = role && role.tier === "executive" ? 70 : (role && role.tier === "leadership" ? 58 : 46);
+    var candidateTierScore = tierScoreMap[candidate && candidate.jobTier] || (candidate && candidate.employerBusinessId === (business && business.id) ? 50 : 34);
+    var delta = candidateTierScore - roleTierFloor;
+
+    return App.utils.clamp(delta * 0.48, -10, 10);
+  }
+
+  function leadershipCandidateScore(candidate, business, role){
     var score = 0;
+    var prestigeSignal;
 
     ensureDecisionData(candidate);
     if (candidate.lineageId === business.lineageId) score += 200;
@@ -1302,6 +3247,16 @@
     score += (candidate.decisionProfile.discipline - 50) * 0.9;
     score += (candidate.decisionProfile.adaptability - 50) * 0.7;
     score += (candidate.decisionProfile.ethics - 50) * 0.5;
+    score += App.utils.clamp((Number(candidate.educationIndex) || 0) * 0.35, 0, 35);
+    score += App.utils.clamp((Number(candidate.skills && candidate.skills.management) || 0) * 0.35, 0, 24);
+    score += App.utils.clamp((Number(candidate.skills && candidate.skills.social) || 0) * 0.24, 0, 16);
+    score += App.utils.clamp((Number(candidate.skills && candidate.skills.financialDiscipline) || 0) * 0.2, 0, 14);
+    prestigeSignal = getInstitutionPrestigeSignal(candidate, role);
+    score += prestigeSignal.score;
+    if (candidate.employerBusinessId === business.id) {
+      score += App.utils.clamp((prestigeSignal.prestige - 60) * 0.22, 0, 8);
+      score += getPromotionReadinessScore(candidate, role, business);
+    }
     score += ((business.reputation || 50) - 50) * 0.4;
     return score;
   }
@@ -1331,11 +3286,11 @@
     return null;
   }
 
-  function findLeadershipCandidate(business, takenIds){
+  function findLeadershipCandidate(business, takenIds, role){
     return App.store.getLivingPeople().filter(function(candidate){
       return isLeadershipEligible(candidate, business, takenIds);
     }).sort(function(first, second){
-      return leadershipCandidateScore(second, business) - leadershipCandidateScore(first, business);
+      return leadershipCandidateScore(second, business, role) - leadershipCandidateScore(first, business, role);
     })[0] || null;
   }
 
@@ -1375,7 +3330,7 @@
       } else {
         person = findExistingRoleHolder(business, role.roleKey, takenIds);
         if (!person) {
-          person = findLeadershipCandidate(business, takenIds);
+          person = findLeadershipCandidate(business, takenIds, role);
         }
         if (!person) {
           person = createLeadershipHire(business, role, owner || App.store.getPerson(business.founderId));
@@ -1551,6 +3506,17 @@
     );
   }
 
+  function getLeaderInstitutionPrestigeLean(person, business){
+    var quality = Number(person && person.educationInstitutionQuality);
+    var education = Number(person && person.educationIndex) || 0;
+    var ownPrestige = Number.isFinite(quality) ? App.utils.clamp(quality, 20, 100) : App.utils.clamp(35 + (education * 0.62), 20, 100);
+    var profile = ensureCountryProfile((person && person.countryISO) || (business && business.countryISO));
+    var countryBaseline = App.utils.clamp((Number(profile && profile.institutionScore) || 0.55) * 100, 20, 100);
+    var delta = ownPrestige - countryBaseline;
+
+    return App.utils.clamp((delta * 0.26) + ((ownPrestige - 50) * 0.18), -14, 18);
+  }
+
   function getLeaderCashLean(person){
     ensureDecisionData(person);
 
@@ -1641,6 +3607,8 @@
     if (metrics.cashCoverage > 5) reasons.push({ text:"Deep cash reserves supported growth plans.", weight:(metrics.cashCoverage - 5) * 18 });
     if (metrics.reputation > 68) reasons.push({ text:"Strong reputation made growth feel safer.", weight:(metrics.reputation - 68) * 1.6 });
     if (metrics.reputation < 38) reasons.push({ text:"Damaged reputation limited room to maneuver.", weight:(38 - metrics.reputation) * 1.8 });
+    if (metrics.institutionPrestige > 70) reasons.push({ text:"Leadership education prestige supported hiring confidence and merit promotions.", weight:(metrics.institutionPrestige - 70) * 1.8 });
+    if (metrics.institutionPrestige < 44) reasons.push({ text:"Low institutional prestige made leadership favor conservative staffing and slower promotions.", weight:(44 - metrics.institutionPrestige) * 2.2 });
     if (metrics.geoPressure > 1.5) reasons.push({ text:"Geopolitical pressure made the firm more defensive.", weight:(metrics.geoPressure - 1.5) * 16 });
     if (metrics.trend > 0.07) reasons.push({ text:"Rising revenue momentum favored expansion.", weight:metrics.trend * 120 });
     if (metrics.trend < -0.07) reasons.push({ text:"Falling revenue momentum increased retrenchment pressure.", weight:Math.abs(metrics.trend) * 120 });
@@ -1687,6 +3655,7 @@
     var cashPolicy;
     var successionBias;
     var decisionTraitEffects = [];
+    var institutionPrestige = 50;
 
     if (!business) return null;
 
@@ -1701,6 +3670,7 @@
       profitMargin:profitMargin,
       cashCoverage:cashCoverage,
       reputation:business.reputation || 50,
+      institutionPrestige:50,
       geoPressure:bloc ? bloc.geoPressure : 0,
       stage:business.stage
     };
@@ -1716,6 +3686,7 @@
       var businessTrait = getTraitChannelScore(entry.person, "business");
       var mobilityTrait = getTraitChannelScore(entry.person, "mobility");
       var familyTrait = getTraitChannelScore(entry.person, "family");
+      var prestigeLean = getLeaderInstitutionPrestigeLean(entry.person, business);
       var weightedTraitEffects = collectTraitEffects(entry.person, ["business"]).map(function(effect){
         return {
           trait:effect.trait,
@@ -1734,9 +3705,23 @@
       scores.cash -= businessTrait * 0.32 * weights.cash;
       scores.succession += familyTrait * 0.5 * weights.succession;
       scores.expansion += mobilityTrait * 0.4 * weights.expansion;
+      scores.expansion += prestigeLean * 0.24 * weights.expansion;
+      scores.staffing += prestigeLean * 0.44 * weights.staffing;
+      scores.succession -= prestigeLean * 0.18 * weights.succession;
 
       decisionTraitEffects = decisionTraitEffects.concat(weightedTraitEffects);
     });
+
+    if (makers.length) {
+      institutionPrestige = makers.reduce(function(sum, entry){
+        var value = Number(entry.person && entry.person.educationInstitutionQuality);
+        if (!Number.isFinite(value)) {
+          value = App.utils.clamp(35 + ((Number(entry.person && entry.person.educationIndex) || 0) * 0.62), 20, 100);
+        }
+        return sum + App.utils.clamp(value, 20, 100);
+      }, 0) / makers.length;
+      metrics.institutionPrestige = institutionPrestige;
+    }
 
     scores.expansion = clampTraitDelta(scores.expansion, 160);
     scores.staffing = clampTraitDelta(scores.staffing, 140);
@@ -1971,6 +3956,8 @@
     if (household && household.financialStress > 70) {
       baseIncome *= 0.92;
     }
+    baseIncome *= App.utils.clamp(0.8 + ((Number(person.educationIndex) || 0) * 0.005), 0.8, 1.3);
+    baseIncome *= App.utils.clamp(0.86 + (getPersonSkillAverage(person) * 0.0032), 0.86, 1.18);
     return Math.max(0, baseIncome);
   }
 
@@ -2299,11 +4286,14 @@
   }
 
   function createGeneratedSpouse(person, explicitAge){
+    var spouseSex = getGeneratedSpouseSex(person);
+    var spouseOrientation = getGeneratedSpouseOrientation(person, spouseSex);
     var spouse = createCitizen({
       blocId:person.blocId,
       countryISO:person.countryISO,
       state:person.state,
-      sex:person.sex === "male" ? "female" : "male",
+      sex:spouseSex,
+      sexualOrientation:spouseOrientation,
       age:explicitAge != null ? explicitAge : App.utils.clamp(person.age + App.utils.randInt(-6, 6), 22, 60),
       netWorthGU:App.utils.rand(1500, 18000),
       anchorPerson:person,
@@ -2320,6 +4310,7 @@
 
   function createChild(parents, age){
     var householdAnchor = parents[0];
+    var household = getHouseholdForPerson(householdAnchor);
     var child = createCitizen({
       blocId:householdAnchor.blocId,
       countryISO:householdAnchor.countryISO,
@@ -2332,6 +4323,9 @@
       netWorthGU:App.utils.rand(100, 1200),
       anchorPerson:householdAnchor
     });
+
+    ensureEducationData(child, household);
+    ensureSkillData(child);
 
     App.store.people.push(child);
     addChildToParents(child, parents);
@@ -2414,7 +4408,7 @@
     var candidates = App.store.getLivingPeople().filter(function(candidate){
       if (candidate.id === person.id) return false;
       if (candidate.spouseId) return false;
-      if (candidate.sex === person.sex) return false;
+      if (!areMarriageCompatible(person, candidate)) return false;
       if (candidate.countryISO !== person.countryISO) return false;
       if (candidate.age < 22 || candidate.age > 50) return false;
       if (isCloseRelative(person, candidate)) return false;
@@ -2507,6 +4501,7 @@
     var household;
 
     if (!spouse || !spouse.alive) return;
+    if (spouse.sex !== "male") return;
     if (mother.age < 24 || mother.age > 42) return;
 
     children = getSharedChildren(mother, spouse);
@@ -2580,6 +4575,9 @@
     launchReadiness = getHouseholdLaunchReadiness(person);
     chance += mobilityTrait * 0.0024;
     chance += businessTrait * 0.0016;
+    chance += (Number(person.educationIndex) || 0) * 0.00035;
+    chance += App.utils.clamp((Number(person.skills && person.skills.creativity) || 0) * 0.00018, 0, 0.012);
+    chance += App.utils.clamp((Number(person.skills && person.skills.social) || 0) * 0.00014, 0, 0.01);
     chance += launchReadiness * 0.01;
     chance -= getPersonFinancialStress(person) * 0.08;
     chance = App.utils.clamp(chance, 0.006, 0.14);
@@ -3097,7 +5095,11 @@
       syncPerson(person);
       if (person.age >= 8) grantTraitMilestone(person, 8);
       if (person.age >= 16) grantTraitMilestone(person, 16);
+      ensureEducationData(person);
+      progressEducationYearly(person);
       ensureDecisionData(person);
+      ensureSkillData(person);
+      applySkillFormationYearly(person);
       syncPerson(person);
     });
     syncHouseholds();
@@ -3122,9 +5124,15 @@
   }
 
   function processYearlyLaunches(){
+    var beforeCount = (App.store.businesses || []).length;
+    var afterCount;
+
     App.store.getLivingPeople().forEach(function(person){
       tryLaunchBusiness(person);
     });
+
+    afterCount = (App.store.businesses || []).length;
+    recordLaunchWindow(currentYear(), Math.max(0, afterCount - beforeCount));
   }
 
   function markYearlyEvents(){
@@ -3216,7 +5224,9 @@
         person.lastLifeEventYear = currentYear();
       }
       initializeTraits(person);
+      ensureEducationData(person);
       ensureDecisionData(person);
+      ensureSkillData(person);
       syncPerson(person);
     });
 
@@ -3289,8 +5299,10 @@
       }).slice(-60);
     });
 
+    refreshLegacyBusinessNames();
     syncCorporateLadders();
     syncHouseholds();
+    enforceFinancialBounds();
     (App.store.households || []).forEach(refreshHouseholdSnapshot);
     updateBlocGdp();
     validateCountryProfiles();
@@ -3508,10 +5520,14 @@
       var annualGrowthTarget;
       var dailyRevenueRate;
       var dailyRevenueNoise;
+      var dailyRevenueMultiplier;
+      var demandUtilization;
+      var overCapacityCorrection;
       var margin;
       var reserveShareRate;
       var cashDelta = 0;
       var ownerShare = 0;
+      var ownerPayoutCap = 0;
       var employeeDelta = 0;
       var requestedEmployeeDelta = 0;
       var leadershipFloor;
@@ -3531,6 +5547,8 @@
       var coveredByCash = 0;
       var ageYears = 0;
       var cashCoverage = 0;
+      var wealthCarryRateAnnual = 0;
+      var wealthCarry = 0;
       var shouldRecordDecision = false;
 
       ensureDecisionData(person);
@@ -3558,15 +5576,18 @@
         ((annualTargetRevenue / Math.max(1, business.revenueGU || 1)) - 1) +
         (getRevenueTrend(business) * 0.24) -
         (bloc.geoPressure * 0.02) -
-        (demandPenalty * 0.5) +
+        (demandPenalty * 1.15) +
         clampTraitDelta(ownerBusinessTrait / 180, 0.05) +
         clampTraitDelta(ownerMobilityTrait / 260, 0.03);
       annualGrowthTarget = App.utils.clamp(annualGrowthTarget, annualGrowthBands.min, annualGrowthBands.max);
       dailyRevenueRate = dailyRateFromAnnualChange(annualGrowthTarget);
       dailyRevenueNoise = App.utils.rand(-0.0016, 0.0019);
+      demandUtilization = Math.max(0, (business.revenueGU || 0) / Math.max(1, getBusinessDemandCapacityGU(business)));
+      overCapacityCorrection = demandUtilization > 1 ? App.utils.clamp((demandUtilization - 1) * 0.015, 0, 0.12) : 0;
+      dailyRevenueMultiplier = App.utils.clamp(1 + dailyRevenueRate + dailyRevenueNoise - overCapacityCorrection, 0.9, 1.03);
       business.revenueGU = Math.max(
         getCountryMedianWage(business.countryISO) * 1.2,
-        (business.revenueGU || 0) * Math.max(0.975, 1 + dailyRevenueRate + dailyRevenueNoise)
+        (business.revenueGU || 0) * dailyRevenueMultiplier
       );
 
       payrollAnnual = getLeadershipPayrollAnnual(business) + getAnonymousPayrollAnnual(business);
@@ -3589,6 +5610,14 @@
       if (dailyProfit > 0) {
         cashDelta = dailyProfit * reserveShareRate;
         ownerShare = dailyProfit - cashDelta;
+        ownerPayoutCap = Math.max(
+          ((business.valuationGU || 0) * 0.18 / YEAR_DAYS) * SIM_DAYS_PER_TICK,
+          (getCountryMedianWage(business.countryISO) * 0.25 / DAYS_PER_MONTH) * SIM_DAYS_PER_TICK
+        );
+        if (ownerShare > ownerPayoutCap) {
+          cashDelta += ownerShare - ownerPayoutCap;
+          ownerShare = ownerPayoutCap;
+        }
         business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + cashDelta);
         person.netWorthGU += ownerShare;
       } else {
@@ -3597,6 +5626,12 @@
         business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) - coveredByCash);
         cashDelta = -coveredByCash;
         person.netWorthGU -= (loss - coveredByCash);
+      }
+
+      wealthCarryRateAnnual = getNetWorthCarryRateAnnual(person.netWorthGU);
+      if (wealthCarryRateAnnual > 0) {
+        wealthCarry = person.netWorthGU * wealthCarryRateAnnual * (SIM_DAYS_PER_TICK / YEAR_DAYS);
+        person.netWorthGU = Math.max(100, person.netWorthGU - wealthCarry);
       }
 
       if (decision.staffingAction === "hire" && Math.random() < chanceForDays(0.28, DAYS_PER_MONTH)) {
@@ -3862,6 +5897,7 @@
 
     App.store.simDay += SIM_DAYS_PER_TICK;
     processBusinessTick();
+    enforceFinancialBounds();
 
     if (currentYear() > previousYear) {
       runYearlyLifecycle();
@@ -3885,6 +5921,7 @@
     updateBlocGdp();
     pushEconomicHistory();
     updateForex();
+    runSimulationHealthGovernors();
     if (App.persistence && App.persistence.autoCheckpoint) {
       App.persistence.autoCheckpoint();
     }

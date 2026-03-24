@@ -122,6 +122,31 @@ html,body{
 
 #macros .v{color:var(--cyan);}
 
+#reset-world-btn{
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:#ffcc8a;
+  background:rgba(231, 76, 60, 0.12);
+  border:1px solid rgba(231, 76, 60, 0.35);
+  border-radius:3px;
+  padding:4px 8px;
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
+  flex-shrink:0;
+}
+
+#reset-world-btn:hover{
+  background:rgba(231, 76, 60, 0.2);
+  color:#ffd7a6;
+  border-color:rgba(231, 76, 60, 0.5);
+}
+
+#reset-world-btn:active{
+  background:rgba(231, 76, 60, 0.28);
+}
+
 #fxbar{
   background:#07101a;
   border-bottom:1px solid var(--border);
@@ -255,6 +280,18 @@ html,body{
   color:var(--text2);
   font-family:var(--mono);
 }
+
+.gmark{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:700;
+  line-height:1;
+  margin-right:1px;
+}
+
+.g-male{color:var(--blue);}
+.g-female{color:#ff8ab0;}
 
 .prbadges{
   display:flex;
@@ -410,13 +447,20 @@ html,body{
   border-color:var(--amber);
 }
 
-#spd-ctrl{
+#sim-controls{
   position:absolute;
   bottom:10px;
   left:10px;
   display:flex;
-  gap:3px;
+  align-items:center;
+  gap:6px;
   z-index:50;
+}
+
+#sim-ctrl,
+#spd-ctrl{
+  display:flex;
+  gap:3px;
 }
 
 .sb{
@@ -440,7 +484,7 @@ html,body{
 
 #map-legend{
   position:absolute;
-  bottom:10px;
+  top:36px;
   right:10px;
   display:flex;
   flex-direction:column;
@@ -485,6 +529,12 @@ html,body{
   line-height:1;
 }
 
+.gender-inline{
+  font-size:14px;
+  vertical-align:middle;
+  margin-left:4px;
+}
+
 .dtitle{
   font-size:9px;
   color:var(--amber);
@@ -502,6 +552,10 @@ html,body{
   gap:5px;
 }
 
+.sg > *{
+  min-width:0;
+}
+
 .sg.sg3{
   grid-template-columns:repeat(3, 1fr);
 }
@@ -511,6 +565,21 @@ html,body{
   border:1px solid var(--border);
   padding:6px;
   border-radius:3px;
+  min-width:0;
+}
+
+.sbox.sbox-tip{
+  cursor:help;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.sbox.sbox-tip:hover,
+.sbox.sbox-tip:focus,
+.sbox.sbox-tip.is-tip-active{
+  border-color:rgba(74,158,221,.7);
+  box-shadow:0 0 0 1px rgba(74,158,221,.24), inset 0 1px 0 rgba(255,255,255,.04);
+  transform:translateY(-1px);
+  outline:none;
 }
 
 .sl{
@@ -524,8 +593,12 @@ html,body{
 
 .sv{
   font-family:var(--mono);
-  font-size:12px;
+  font-size:11px;
   font-weight:bold;
+  line-height:1.25;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:break-word;
 }
 
 .sv.g{color:var(--green);}
@@ -533,6 +606,8 @@ html,body{
 .sv.r{color:var(--red);}
 .sv.b{color:var(--blue);}
 .sv.c{color:var(--cyan);}
+.sv.gender-male{color:var(--blue);}
+.sv.gender-female{color:#ff8ab0;}
 
 .mc{
   background:var(--bg2);
@@ -554,6 +629,45 @@ html,body{
   width:100%;
   height:50px;
   display:block;
+}
+
+
+.floating-rich-tip{
+  position:fixed;
+  left:0;
+  top:0;
+  width:min(340px, calc(100vw - 16px));
+  border:1px solid rgba(74,158,221,.62);
+  background:linear-gradient(145deg, rgba(15,34,52,.96), rgba(7,22,36,.96));
+  border-radius:6px;
+  padding:9px 10px;
+  box-shadow:0 10px 24px rgba(0,0,0,.48), 0 0 0 1px rgba(74,158,221,.14);
+  opacity:0;
+  transform:translateY(5px) scale(0.985);
+  transition:opacity .11s ease, transform .11s ease;
+  pointer-events:none;
+  z-index:1400;
+}
+
+.floating-rich-tip.is-visible{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+
+.rt-head{
+  font-size:8px;
+  letter-spacing:1.6px;
+  font-family:var(--mono);
+  text-transform:uppercase;
+  color:#9ccdf5;
+  margin-bottom:5px;
+}
+
+.rt-body{
+  color:#d4e6f8;
+  font-family:var(--mono);
+  font-size:9px;
+  line-height:1.5;
 }
 
 .bc{
@@ -610,6 +724,7 @@ html,body{
 .blogo-svg{
   display:block;
   overflow:visible;
+  filter:drop-shadow(0 2px 8px rgba(0,0,0,0.28));
 }
 
 .bcn{
@@ -626,6 +741,8 @@ html,body{
   cursor:pointer;
   text-decoration:none;
   transition:color .15s ease;
+  overflow-wrap:anywhere;
+  word-break:break-word;
 }
 
 .entity-link:hover{
@@ -651,7 +768,13 @@ html,body{
 }
 
 .brow:last-child{border:none;}
-.brow span{color:var(--text);}
+.brow span{
+  color:var(--text);
+  min-width:0;
+  text-align:right;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
 
 .traits{
   display:flex;

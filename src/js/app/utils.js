@@ -17,6 +17,21 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function avg(values){
+    var list = Array.isArray(values) ? values : [];
+    var total = 0;
+    var count = 0;
+
+    list.forEach(function(value){
+      var numeric = Number(value);
+      if (!Number.isFinite(numeric)) return;
+      total += numeric;
+      count += 1;
+    });
+
+    return count ? (total / count) : 0;
+  }
+
   function simDayToDate(day){
     var calendar = (App.data && App.data.CALENDAR) ? App.data.CALENDAR : null;
     if (!calendar) {
@@ -119,6 +134,11 @@
 
     if (!Number.isFinite(abs)) {
       return (negative ? "-" : "") + prefix + "0";
+    }
+
+    if (abs >= 1e27) {
+      formatted = abs.toExponential(2).replace("e+", "e");
+      return (negative ? "-" : "") + prefix + formatted;
     }
 
     for (var i = 0; i < suffixes.length; i += 1) {
@@ -235,11 +255,76 @@
     }).length;
   }
 
+  function getBusinessStopWords(){
+    var naming = App.data && App.data.BUSINESS_NAMING;
+    var words = naming && Array.isArray(naming.stopWords) ? naming.stopWords : [];
+    var map = {};
+
+    words.forEach(function(word){
+      if (!word) return;
+      map[String(word).toLowerCase()] = true;
+    });
+
+    return map;
+  }
+
+  function extractBusinessTokens(name, options){
+    var settings = options || {};
+    var stopWords = getBusinessStopWords();
+    var rawTokens = String(name || "").replace(/&/g, " & ").split(/\s+/).map(function(token){
+      return token.replace(/[^A-Za-z0-9]/g, "");
+    }).filter(Boolean);
+
+    if (settings.includeAll) {
+      return rawTokens;
+    }
+
+    return rawTokens.filter(function(token){
+      return !stopWords[token.toLowerCase()];
+    });
+  }
+
+  function getBusinessMonogram(name){
+    var tokens = extractBusinessTokens(name);
+    var fallbackTokens;
+
+    if (!tokens.length) {
+      fallbackTokens = extractBusinessTokens(name, { includeAll:true });
+      tokens = fallbackTokens.length ? fallbackTokens : [];
+    }
+
+    if (!tokens.length) return "?";
+    if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+    return (tokens[0].charAt(0) + tokens[1].charAt(0)).toUpperCase();
+  }
+
+  function getBusinessTicker(name){
+    var tokens = extractBusinessTokens(name);
+    var fallbackTokens;
+    var initials;
+
+    if (!tokens.length) {
+      fallbackTokens = extractBusinessTokens(name, { includeAll:true });
+      tokens = fallbackTokens.length ? fallbackTokens : [];
+    }
+
+    if (!tokens.length) return "BIZ";
+    if (tokens.length === 1) return tokens[0].slice(0, 4).toUpperCase();
+
+    initials = tokens.slice(0, 4).map(function(token){
+      return token.charAt(0);
+    }).join("").toUpperCase();
+
+    if (initials.length >= 3) return initials.slice(0, 4);
+    return (tokens[0].slice(0, 2) + tokens[1].slice(0, 2)).slice(0, 4).toUpperCase();
+  }
+
   App.utils = {
     rand:rand,
     randInt:randInt,
     pick:pick,
     clamp:clamp,
+    avg:avg,
     fmtDay:fmtDay,
     fmtYear:fmtYear,
     simDayToDate:simDayToDate,
@@ -257,6 +342,8 @@
     formatPersonName:formatPersonName,
     getLifeStageLabel:getLifeStageLabel,
     getPersonRoles:getPersonRoles,
-    familyCount:familyCount
+    familyCount:familyCount,
+    getBusinessMonogram:getBusinessMonogram,
+    getBusinessTicker:getBusinessTicker
   };
 })(window);

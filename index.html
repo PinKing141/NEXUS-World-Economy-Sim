@@ -16,6 +16,7 @@
   <div id="logo">NEXUS <span>WORLD</span></div>
   <div id="ticker-wrap"><div id="ticker-inner"></div></div>
   <div id="macros">GDP <span class="v" id="gv">-</span> | FIRMS <span class="v" id="fv">0</span> | PEOPLE <span class="v" id="pv">0</span></div>
+  <button id="reset-world-btn" type="button" title="Clear save data and restart from day zero">RESET WORLD</button>
   <div id="clock"><div id="ct">Y1 Q1</div><div class="yr" id="cy">DAY 0</div></div>
 </div>
 <div id="fxbar"></div>
@@ -40,10 +41,16 @@
         <button class="zb" id="zreset" title="Reset">R</button>
         <button class="zb" id="zout" title="Zoom out">-</button>
       </div>
-      <div id="spd-ctrl">
-        <button class="sb act" data-speed="1">1x</button>
-        <button class="sb" data-speed="2">2x</button>
-        <button class="sb" data-speed="4">4x</button>
+      <div id="sim-controls">
+        <div id="sim-ctrl">
+          <button class="sb" id="pause-sim-btn" type="button" title="Pause simulation">Pause</button>
+          <button class="sb" id="play-sim-btn" type="button" title="Resume simulation">Play</button>
+        </div>
+        <div id="spd-ctrl">
+          <button class="sb act" data-speed="1">1x</button>
+          <button class="sb" data-speed="2">2x</button>
+          <button class="sb" data-speed="4">4x</button>
+        </div>
       </div>
     </div>
 

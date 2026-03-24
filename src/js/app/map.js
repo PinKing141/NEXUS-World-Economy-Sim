@@ -150,11 +150,28 @@
   }
 
   function getFallbackSpawnPoint(iso, preferredState) {
+    var geometry = getCountryGeometry(iso);
+    var sampled;
+    var viewBox;
+
     if (iso === "US") {
       var stateCode = preferredState || App.utils.pick(App.data.US_STATE_CODES);
       var centroid = App.data.US_STATE_CENTROIDS[stateCode];
+
+      if (centroid) {
+        var stateCenter = App.utils.latLngToSVG(centroid[0], centroid[1]);
+        sampled = sampleNearPointInCountry("US", stateCenter, 16, 12, 42);
+        if (!sampled && (!geometry || pointInCountryGeometry(geometry, stateCenter.x, stateCenter.y))) {
+          sampled = stateCenter;
+        }
+      }
+
+      if (!sampled && geometry) {
+        sampled = sampleCountryGeometryPoint(geometry, 160);
+      }
+
       return {
-        pos: App.utils.latLngToSVG(centroid[0] + App.utils.rand(-0.8, 0.8), centroid[1] + App.utils.rand(-1, 1)),
+        pos: sampled || { x: 500, y: 253 },
         iso: "US",
         state: stateCode
       };
@@ -162,15 +179,38 @@
 
     if (App.data.CENTROIDS[iso]) {
       var pair = App.data.CENTROIDS[iso];
+      var center = App.utils.latLngToSVG(pair[0], pair[1]);
+
+      sampled = sampleNearPointInCountry(iso, center, 12, 10, 38);
+      if (!sampled && (!geometry || pointInCountryGeometry(geometry, center.x, center.y))) {
+        sampled = center;
+      }
+      if (!sampled && geometry) {
+        sampled = sampleCountryGeometryPoint(geometry, 180);
+      }
+
       return {
-        pos: App.utils.latLngToSVG(pair[0] + App.utils.rand(-2.5, 2.5), pair[1] + App.utils.rand(-2.5, 2.5)),
+        pos: sampled || center,
         iso: iso,
         state: null
       };
     }
 
+    if (geometry) {
+      sampled = sampleCountryGeometryPoint(geometry, 220);
+      if (sampled) {
+        return {
+          pos: sampled,
+          iso: iso,
+          state: null
+        };
+      }
+    }
+
+    viewBox = getMapViewBox();
+
     return {
-      pos: App.utils.latLngToSVG(App.utils.rand(10, 60), App.utils.rand(-20, 120)),
+      pos: { x: viewBox.width * 0.5, y: viewBox.height * 0.5 },
       iso: iso,
       state: null
     };
@@ -207,6 +247,7 @@
       "g[id] > path, g[id] > g > path, g[id] > circle { transition: fill 0.35s ease, stroke 0.2s ease, opacity 0.2s ease; }",
       "text { user-select:none; fill:#48627d; font-family:'Share Tech Mono', monospace; font-size:6px; letter-spacing:0.08em; }",
       "#nexus-node-layer text { pointer-events:none; fill:#5a7a9a; }",
+      "#nexus-node-layer .pnode circle, #nexus-node-layer .pnode text { transition: cx 0.22s ease, cy 0.22s ease, r 0.22s ease, opacity 0.22s ease, fill 0.22s ease, x 0.22s ease, y 0.22s ease, font-size 0.22s ease; }",
       "#nexus-node-layer .pnode { cursor:pointer; }",
       "#Ocean, #World { stroke:none !important; }"
     ].join(" ");
@@ -507,39 +548,140 @@
     var haloPad = 0.95 * Math.pow(zoom, -0.42) + 0.25;
     var showAdultLabels = zoom >= 3.2;
     var labelFontSize = 2.5 * Math.pow(zoom, -0.2);
-    if (!nodeSvg) return;
+    var ownerDocument;
+    var seenIds = {};
 
-    var html = "";
+    if (!nodeSvg) return;
+    ownerDocument = App.store.mapSvg.ownerDocument || document;
+
     App.store.getPublicPeople().forEach(function (person) {
-      var business = App.store.getAssociatedBusiness(person);
-      var baseRadius = business ? Math.min(4.5, 1 + Math.log10(Math.max(1, business.valuationGU / 8000)) * 1.1) : 1;
-      var radius = Math.max(0.16, baseRadius * nodeScale);
-      var color = App.data.STATUS_COLOR[person.status] || "#00d4ff";
-      var selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
-      var isMinor = person.age < 18;
-      var opacity = isMinor ? 0.55 : (selected ? 1 : 0.85);
+      var node;
+      var halo;
+      var selectedRing;
+      var core;
+      var label;
+      var business;
+      var baseRadius;
+      var radius;
+      var color;
+      var selected;
+      var isMinor;
+      var opacity;
+
+      if (person && person.countryISO && !isPointInCountry(person.countryISO, person.svgX, person.svgY)) {
+        var correctedSpawn = getCountrySpawnPoint(person.countryISO, person.state || null);
+        if (correctedSpawn && correctedSpawn.pos && isPointInCountry(person.countryISO, correctedSpawn.pos.x, correctedSpawn.pos.y)) {
+          person.svgX = correctedSpawn.pos.x;
+          person.svgY = correctedSpawn.pos.y;
+          if (person.countryISO === "US") {
+            person.state = correctedSpawn.state || person.state || null;
+          }
+        } else {
+          return;
+        }
+      }
+
+      business = App.store.getAssociatedBusiness(person);
+      baseRadius = business ? Math.min(4.5, 1 + Math.log10(Math.max(1, business.valuationGU / 8000)) * 1.1) : 1;
+      radius = Math.max(0.16, baseRadius * nodeScale);
+      color = App.data.STATUS_COLOR[person.status] || "#00d4ff";
+      selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
+      isMinor = person.age < 18;
+      opacity = isMinor ? 0.55 : (selected ? 1 : 0.85);
 
       if (isMinor) {
         radius = Math.max(0.7, radius * 0.72);
       }
 
-      html += "<g class='pnode' data-person-id='" + person.id + "'>";
+      seenIds[person.id] = true;
+      node = nodeSvg.querySelector(".pnode[data-person-id='" + person.id + "']");
+
+      if (!node) {
+        node = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "g");
+        node.setAttribute("class", "pnode");
+        node.setAttribute("data-person-id", person.id);
+      }
+
+      halo = node.querySelector("circle[data-role='pulse']");
+      selectedRing = node.querySelector("circle[data-role='selected']");
+      core = node.querySelector("circle[data-role='core']");
+
       if (person.pulse) {
-        html += "<circle cx='" + person.svgX + "' cy='" + person.svgY + "' r='" + (radius + (haloPad * 2.6)) + "' fill='none' stroke='" + color + "' stroke-width='" + Math.max(0.12, 0.48 * nodeScale) + "' opacity='0.35'></circle>";
+        if (!halo) {
+          halo = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
+          halo.setAttribute("data-role", "pulse");
+          node.appendChild(halo);
+        }
+        halo.setAttribute("cx", person.svgX);
+        halo.setAttribute("cy", person.svgY);
+        halo.setAttribute("r", radius + (haloPad * 2.6));
+        halo.setAttribute("fill", "none");
+        halo.setAttribute("stroke", color);
+        halo.setAttribute("stroke-width", Math.max(0.12, 0.48 * nodeScale));
+        halo.setAttribute("opacity", "0.35");
+      } else if (halo) {
+        halo.remove();
       }
+
       if (selected) {
-        html += "<circle cx='" + person.svgX + "' cy='" + person.svgY + "' r='" + (radius + (haloPad * 1.8)) + "' fill='none' stroke='" + color + "' stroke-width='" + Math.max(0.16, 0.7 * nodeScale) + "'></circle>";
+        if (!selectedRing) {
+          selectedRing = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
+          selectedRing.setAttribute("data-role", "selected");
+          node.appendChild(selectedRing);
+        }
+        selectedRing.setAttribute("cx", person.svgX);
+        selectedRing.setAttribute("cy", person.svgY);
+        selectedRing.setAttribute("r", radius + (haloPad * 1.8));
+        selectedRing.setAttribute("fill", "none");
+        selectedRing.setAttribute("stroke", color);
+        selectedRing.setAttribute("stroke-width", Math.max(0.16, 0.7 * nodeScale));
+      } else if (selectedRing) {
+        selectedRing.remove();
       }
-      html += "<circle cx='" + person.svgX + "' cy='" + person.svgY + "' r='" + radius + "' fill='" + color + "' opacity='" + opacity + "'></circle>";
+
+      if (!core) {
+        core = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
+        core.setAttribute("data-role", "core");
+        node.appendChild(core);
+      }
+      core.setAttribute("cx", person.svgX);
+      core.setAttribute("cy", person.svgY);
+      core.setAttribute("r", radius);
+      core.setAttribute("fill", color);
+      core.setAttribute("opacity", opacity);
+
+      label = node.querySelector("text[data-role='label']");
       if (person.age >= 16 && (selected || showAdultLabels)) {
-        html += "<text x='" + (person.svgX + radius + (0.9 * Math.pow(zoom, -0.35))) + "' y='" + (person.svgY + (labelFontSize * 0.45)) + "' font-family='Share Tech Mono, monospace' font-size='" + labelFontSize + "' fill='#5a7a9a'>" + person.name.split(" ")[0] + "</text>";
+        if (!label) {
+          label = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("data-role", "label");
+          node.appendChild(label);
+        }
+        label.setAttribute("x", person.svgX + radius + (0.9 * Math.pow(zoom, -0.35)));
+        label.setAttribute("y", person.svgY + (labelFontSize * 0.45));
+        label.setAttribute("font-family", "Share Tech Mono, monospace");
+        label.setAttribute("font-size", labelFontSize);
+        label.setAttribute("fill", "#5a7a9a");
+        label.textContent = person.name.split(" ")[0];
+      } else if (label) {
+        label.remove();
       }
-      html += "</g>";
+
+      if (!node.parentNode) {
+        nodeSvg.appendChild(node);
+      }
     });
 
-    nodeSvg.innerHTML = html;
     Array.prototype.forEach.call(nodeSvg.querySelectorAll(".pnode"), function (node) {
       var id = node.getAttribute("data-person-id");
+
+      if (!seenIds[id]) {
+        node.remove();
+        return;
+      }
+
+      if (node.__nexusBound) return;
+
       node.addEventListener("click", function (event) {
         event.stopPropagation();
         App.store.selectPerson(id);
@@ -549,6 +691,7 @@
         showNodeTip(event, id);
       });
       node.addEventListener("mouseleave", hideTip);
+      node.__nexusBound = true;
     });
   }
 

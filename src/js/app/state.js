@@ -1,6 +1,24 @@
 (function(global){
   var App = global.Nexus || (global.Nexus = {});
 
+  function createGovernorState(){
+    return {
+      enabled:true,
+      annualLaunches:0,
+      lastLaunchYear:-1,
+      noLaunchYears:0,
+      emptyEcosystemTicksByBloc:{},
+      unemploymentTrapTicksByBloc:{},
+      agingLockTicks:0,
+      currencyConvergenceTicks:0,
+      cooldowns:{},
+      interventionCountsByDay:{},
+      signalSnapshot:{},
+      runCount:0,
+      lastRunDay:0
+    };
+  }
+
   var store = {
     blocs: [],
     isoToBloc: {},
@@ -15,14 +33,17 @@
     traitEffectStats: {},
     econHist: {},
     tickerData: {},
+    businessNamingMode: "v2",
     selectedBlocId: "NA",
     selection: { type:null, id:null },
     simSpeed: 1,
+    lastNonZeroSimSpeed: 1,
     simDay: 0,
     accumulator: 0,
     countryNames: {},
     countryData: {},
     countryProfiles: {},
+    governor: createGovernorState(),
     mapObject: null,
     mapSvg: null,
     mapDocument: null,
@@ -90,14 +111,17 @@
     store.traitEffectStats = {};
     store.econHist = {};
     store.tickerData = {};
+    store.businessNamingMode = "v2";
     store.selectedBlocId = "NA";
     store.selection = { type:null, id:null };
     store.simSpeed = 1;
+    store.lastNonZeroSimSpeed = 1;
     store.simDay = 0;
     store.accumulator = 0;
     store.countryNames = {};
     store.countryData = {};
     store.countryProfiles = {};
+    store.governor = createGovernorState();
     store.mapObject = null;
     store.mapSvg = null;
     store.mapDocument = null;
@@ -300,8 +324,10 @@
   };
 
   store.setSimSpeed = function(speed){
-    store.simSpeed = Math.max(0, Math.min(8, Number(speed) || 0));
-    if (Number(speed) > 0) {
+    var normalized = Math.max(0, Math.min(8, Number(speed) || 0));
+    store.simSpeed = normalized;
+    if (normalized > 0) {
+      store.lastNonZeroSimSpeed = normalized;
       store.pauseReasonEventId = null;
     }
   };

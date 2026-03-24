@@ -57,6 +57,167 @@
     return "<span class='entity-link' data-" + type + "-id='" + id + "'>" + label + "</span>";
   }
 
+  function escapeAttrText(value){
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  var COUNTRY_CREDENTIAL_LABELS = {
+    US:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Primary School Certificate", none:"No Formal Qualification" },
+    UK:{ doctorate:"Doctorate", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"A-Level Qualification", primary:"GCSE Foundation", none:"No Formal Qualification" },
+    IN:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Higher Secondary Certificate", primary:"Secondary School Certificate", none:"No Formal Qualification" },
+    CA:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary School Diploma", primary:"Elementary Certificate", none:"No Formal Qualification" },
+    AU:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Secondary Certificate", primary:"Primary Certificate", none:"No Formal Qualification" },
+    DE:{ doctorate:"Doktorgrad", masters:"Masterabschluss", bachelor:"Bachelorabschluss", highschool:"Abitur", primary:"Grundschule Abschluss", none:"Keine formale Qualifikation" },
+    FR:{ doctorate:"Doctorat", masters:"Master", bachelor:"Licence", highschool:"Baccalaureat", primary:"Certificat Primaire", none:"Aucune qualification formelle" },
+    ES:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Grado Universitario", highschool:"Bachillerato", primary:"Certificado Primario", none:"Sin titulacion formal" },
+    BR:{ doctorate:"Doutorado", masters:"Mestrado", bachelor:"Bacharelado", highschool:"Ensino Medio", primary:"Ensino Fundamental", none:"Sem qualificacao formal" },
+    MX:{ doctorate:"Doctorado", masters:"Maestria", bachelor:"Licenciatura", highschool:"Preparatoria", primary:"Primaria", none:"Sin certificacion formal" },
+    CN:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Middle School Diploma", primary:"Compulsory Education Certificate", none:"No Formal Qualification" },
+    JP:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Upper Secondary Diploma", primary:"Compulsory School Certificate", none:"No Formal Qualification" },
+    KR:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Middle School Completion", none:"No Formal Qualification" },
+    ID:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Sarjana Degree", highschool:"SMA Diploma", primary:"SMP Certificate", none:"No Formal Qualification" },
+    NG:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior Secondary Certificate", primary:"Basic Education Certificate", none:"No Formal Qualification" },
+    ZA:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"National Senior Certificate", primary:"General Education Certificate", none:"No Formal Qualification" },
+    KE:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"KCSE Certificate", primary:"KCPE Certificate", none:"No Formal Qualification" },
+    EG:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Thanaweya Diploma", primary:"Preparatory Certificate", none:"No Formal Qualification" },
+    SA:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary Education Certificate", primary:"Intermediate School Certificate", none:"No Formal Qualification" },
+    AE:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary School Certificate", primary:"Preparatory Certificate", none:"No Formal Qualification" },
+    TR:{ doctorate:"Doktora", masters:"Yuksek Lisans", bachelor:"Lisans", highschool:"Lise Diplomasi", primary:"Ilkogretim Belgesi", none:"Resmi nitelik yok" },
+    RU:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Secondary General Certificate", primary:"Basic School Certificate", none:"No Formal Qualification" },
+    PH:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"Senior High School Diploma", primary:"Junior High Certificate", none:"No Formal Qualification" },
+    default:{ doctorate:"Doctoral Degree", masters:"Master Degree", bachelor:"Bachelor Degree", highschool:"High School Diploma", primary:"Primary Certificate", none:"No Formal Qualification" }
+  };
+
+  function getFloatingRichTooltip(){
+    var node = document.getElementById("floating-rich-tip");
+
+    if (node) return node;
+
+    node = document.createElement("div");
+    node.id = "floating-rich-tip";
+    node.className = "floating-rich-tip";
+    node.innerHTML = "<div class='rt-head'>Details</div><div class='rt-body'>Hover highlighted cards for context.</div>";
+    document.body.appendChild(node);
+    return node;
+  }
+
+  function positionFloatingRichTooltip(node, clientX, clientY){
+    var offset = 14;
+    var width;
+    var height;
+    var left;
+    var top;
+    var maxLeft;
+    var maxTop;
+
+    if (!node) return;
+
+    width = node.offsetWidth || 300;
+    height = node.offsetHeight || 120;
+    maxLeft = Math.max(8, window.innerWidth - width - 8);
+    maxTop = Math.max(8, window.innerHeight - height - 8);
+
+    left = clientX + offset;
+    top = clientY + offset;
+
+    if (left > maxLeft) {
+      left = Math.max(8, clientX - width - offset);
+    }
+    if (top > maxTop) {
+      top = Math.max(8, clientY - height - offset);
+    }
+
+    node.style.left = left + "px";
+    node.style.top = top + "px";
+  }
+
+  function showFloatingRichTooltip(title, body, clientX, clientY){
+    var node = getFloatingRichTooltip();
+    var heading = node.querySelector(".rt-head");
+    var text = node.querySelector(".rt-body");
+
+    if (heading) heading.textContent = title || "Details";
+    if (text) text.textContent = body || "No detail available.";
+    node.classList.add("is-visible");
+    positionFloatingRichTooltip(node, Number(clientX) || 0, Number(clientY) || 0);
+  }
+
+  function hideFloatingRichTooltip(){
+    var node = document.getElementById("floating-rich-tip");
+    if (!node) return;
+    node.classList.remove("is-visible");
+  }
+
+  function buildRichTooltipAttrs(title, body){
+    return " tabindex='0' data-rich-tip-title='" + escapeAttrText(title || "Details") + "' data-rich-tip-body='" + escapeAttrText(body || "No detail available.") + "'";
+  }
+
+  function bindInspectorRichTooltips(container){
+    if (!container) return;
+
+    Array.prototype.forEach.call(container.querySelectorAll(".sbox[data-rich-tip-body]"), function(node){
+      var onEnter = function(event){
+        var clientX = event && Number.isFinite(event.clientX) ? event.clientX : 0;
+        var clientY = event && Number.isFinite(event.clientY) ? event.clientY : 0;
+
+        node.classList.add("is-tip-active");
+        showFloatingRichTooltip(node.getAttribute("data-rich-tip-title"), node.getAttribute("data-rich-tip-body"), clientX, clientY);
+      };
+      var onLeave = function(){
+        node.classList.remove("is-tip-active");
+        hideFloatingRichTooltip();
+      };
+      var onMove = function(event){
+        var tip = document.getElementById("floating-rich-tip");
+        if (!tip || !tip.classList.contains("is-visible")) return;
+        positionFloatingRichTooltip(tip, event.clientX, event.clientY);
+      };
+      var onFocus = function(){
+        var rect = node.getBoundingClientRect();
+
+        node.classList.add("is-tip-active");
+        showFloatingRichTooltip(node.getAttribute("data-rich-tip-title"), node.getAttribute("data-rich-tip-body"), rect.right, rect.top + (rect.height / 2));
+      };
+      var onBlur = function(){
+        node.classList.remove("is-tip-active");
+        hideFloatingRichTooltip();
+      };
+
+      node.addEventListener("mouseenter", onEnter);
+      node.addEventListener("mouseleave", onLeave);
+      node.addEventListener("mousemove", onMove);
+      node.addEventListener("focus", onFocus);
+      node.addEventListener("blur", onBlur);
+    });
+  }
+
+  function getCountryCredentialLabels(iso){
+    return COUNTRY_CREDENTIAL_LABELS[iso] || COUNTRY_CREDENTIAL_LABELS.default;
+  }
+
+  function getCountryEducationCredentialLabel(iso, educationScore){
+    var value = Math.max(0, Math.min(100, Number(educationScore) || 0));
+    var labels = getCountryCredentialLabels(iso);
+
+    if (value >= 96) return labels.doctorate;
+    if (value >= 88) return labels.masters;
+    if (value >= 75) return labels.bachelor;
+    if (value >= 55) return labels.highschool;
+    if (value >= 35) return labels.primary;
+    return labels.none;
+  }
+
+  function formatInstitutionTypeLabel(value){
+    var key = String(value || "school");
+    if (key === "specialist_school") return "SPECIALIST SCHOOL";
+    return key.replace(/_/g, " ").toUpperCase();
+  }
+
   function renderPersonLink(person, label){
     if (!person) return "Unknown";
     return renderEntityLink("person", person.id, label || person.name);
@@ -141,6 +302,41 @@
       ].join("");
     }
 
+    if (archetype === "chevron") {
+      return [
+        "<path d='M 4 12 L 16 12 L 22 22 L 10 22 Z' fill='" + fillPrimary + "' opacity='0.95'></path>",
+        "<path d='M 14 12 L 26 12 L 32 22 L 20 22 Z' fill='" + fillSecondary + "' opacity='0.9'></path>",
+        "<path d='M 24 12 L 36 12 L 42 22 L 30 22 Z' fill='" + accent + "' opacity='0.95'></path>",
+        "<path d='M 8 25 L 20 25 L 26 35 L 14 35 Z' fill='" + fillSecondary + "' opacity='0.9'></path>",
+        "<path d='M 18 25 L 30 25 L 36 35 L 24 35 Z' fill='" + fillPrimary + "' opacity='0.95'></path>"
+      ].join("");
+    }
+
+    if (archetype === "wave") {
+      return [
+        "<path d='M 2 16 C 8 8, 16 8, 22 16 C 28 24, 36 24, 42 16' fill='none' stroke='" + fillPrimary + "' stroke-width='" + (3 + (variant % 2)) + "' stroke-linecap='round'></path>",
+        "<path d='M 2 28 C 8 20, 16 20, 22 28 C 28 36, 36 36, 42 28' fill='none' stroke='" + fillSecondary + "' stroke-width='3' stroke-linecap='round' opacity='0.9'></path>",
+        "<circle cx='" + (10 + (accentIndex % 4) * 8) + "' cy='22' r='3.2' fill='" + accent + "'></circle>"
+      ].join("");
+    }
+
+    if (archetype === "orbit") {
+      return [
+        "<circle cx='22' cy='22' r='8' fill='" + fillPrimary + "'></circle>",
+        "<ellipse cx='22' cy='22' rx='16' ry='7.5' fill='none' stroke='" + fillSecondary + "' stroke-width='2.8' opacity='0.92' transform='rotate(" + ((variant % 4) * 22) + " 22 22)'></ellipse>",
+        "<ellipse cx='22' cy='22' rx='16' ry='7.5' fill='none' stroke='" + accent + "' stroke-width='2' stroke-dasharray='16 16' opacity='0.95' transform='rotate(" + (45 + (accentIndex % 4) * 22) + " 22 22)'></ellipse>",
+        "<circle cx='35' cy='22' r='2.6' fill='" + accent + "'></circle>"
+      ].join("");
+    }
+
+    if (archetype === "prism") {
+      return [
+        "<polygon points='6,32 20,8 34,32' fill='" + fillPrimary + "' opacity='0.92'></polygon>",
+        "<polygon points='20,8 34,32 38,24 24,2' fill='" + fillSecondary + "' opacity='0.9'></polygon>",
+        "<polygon points='14,20 20,10 26,20' fill='" + accent + "' opacity='0.96'></polygon>"
+      ].join("");
+    }
+
     return [
       (logo && logo.frame === "circle" ? "<circle cx='22' cy='22' r='18' fill='" + fillPrimary + "'></circle>" : ""),
       (logo && logo.frame === "square" ? "<rect x='5' y='5' width='34' height='34' rx='" + (rounded ? 8 : 0) + "' fill='" + fillPrimary + "'></rect>" : ""),
@@ -160,7 +356,11 @@
       accentIndex:0,
       useGradient:true,
       frame:"circle",
-      monogram:(business && business.name ? business.name.charAt(0).toUpperCase() : "?")
+      halo:true,
+      texture:"clean",
+      strokeWeight:1,
+      regionMark:(business && business.countryISO ? String(business.countryISO).slice(0, 2).toUpperCase() : "WW"),
+      monogram:(business && business.name ? App.utils.getBusinessMonogram(business.name) : "?")
     };
     var palette = logo.palette || {};
     var suffix = (business && business.id ? business.id : "fallback") + "-" + (contextKey || "default") + "-" + size;
@@ -169,10 +369,18 @@
     var fillPrimary = logo.useGradient ? "url(#" + primaryId + ")" : palette.primary;
     var fillSecondary = logo.useGradient ? "url(#" + secondaryId + ")" : palette.secondary;
     var rotation = (logo.archetype === "ring" || logo.archetype === "fold") ? (logo.rotation || 0) : 0;
+    var texture = logo.texture || "clean";
+    var frameRadius = logo.rounded ? 12 : 9;
+    var edgeStroke = Math.max(1, Number(logo.strokeWeight) || 1);
+    var badge = (logo.regionMark || "").slice(0, 2).toUpperCase();
 
     return [
       "<svg class='blogo-svg' viewBox='0 0 44 44' width='" + size + "' height='" + size + "' aria-hidden='true'>",
       "<defs>",
+      "<radialGradient id='blogo-bg-" + suffix + "' cx='30%' cy='25%' r='85%'>",
+      "<stop offset='0%' stop-color='rgba(255,255,255,0.12)'></stop>",
+      "<stop offset='100%' stop-color='#0b131d'></stop>",
+      "</radialGradient>",
       "<linearGradient id='" + primaryId + "' x1='0%' y1='0%' x2='100%' y2='100%'>",
       "<stop offset='0%' stop-color='" + palette.primary + "'></stop>",
       "<stop offset='100%' stop-color='" + palette.accent + "'></stop>",
@@ -182,12 +390,17 @@
       "<stop offset='100%' stop-color='" + palette.primary + "'></stop>",
       "</linearGradient>",
       "</defs>",
-      "<rect x='2' y='2' width='40' height='40' rx='12' fill='#0d1722' stroke='rgba(190,210,225,0.12)'></rect>",
+      "<rect x='2' y='2' width='40' height='40' rx='" + frameRadius + "' fill='url(#blogo-bg-" + suffix + ")' stroke='rgba(190,210,225,0.18)' stroke-width='" + edgeStroke + "'></rect>",
+      (logo.halo ? "<circle cx='22' cy='22' r='18' fill='none' stroke='" + palette.accent + "' stroke-opacity='0.18' stroke-width='1.2'></circle>" : ""),
+      (texture === "scanline" ? "<g opacity='0.12'><path d='M 4 10 L 40 10 M 4 16 L 40 16 M 4 22 L 40 22 M 4 28 L 40 28 M 4 34 L 40 34' stroke='rgba(190,210,225,0.7)' stroke-width='0.8'></path></g>" : ""),
+      (texture === "grain" ? "<g opacity='0.12'><circle cx='10' cy='11' r='0.8' fill='#fff'></circle><circle cx='17' cy='8' r='0.7' fill='#fff'></circle><circle cx='31' cy='13' r='0.9' fill='#fff'></circle><circle cx='14' cy='31' r='0.8' fill='#fff'></circle><circle cx='30' cy='30' r='0.7' fill='#fff'></circle></g>" : ""),
       "<g transform='translate(4 4) scale(0.82)'>",
       "<g transform='rotate(" + rotation + " 22 22)'>",
       renderLogoSymbol(logo, fillPrimary, fillSecondary, palette.accent),
       "</g>",
       "</g>",
+      (badge ? "<rect x='27.8' y='28.2' width='12.2' height='9.8' rx='3' fill='rgba(8,18,30,0.86)' stroke='rgba(190,210,225,0.22)'></rect>" : ""),
+      (badge ? "<text x='33.9' y='33.3' font-family='Share Tech Mono, monospace' font-size='4.3' font-weight='700' fill='#d8e7f7' text-anchor='middle' dominant-baseline='middle'>" + badge + "</text>" : ""),
       "</svg>"
     ].join("");
   }
@@ -206,6 +419,18 @@
 
   function formatDecisionValue(value){
     return DECISION_LABELS[value] || value || "Unknown";
+  }
+
+  function getGenderClass(person){
+    return person && person.sex === "female" ? "female" : "male";
+  }
+
+  function getGenderSymbol(person){
+    return person && person.sex === "female" ? "&#9792;" : "&#9794;";
+  }
+
+  function getGenderLabel(person){
+    return person && person.sex === "female" ? "Female" : "Male";
   }
 
   function getDominantProfileTags(person){
@@ -326,7 +551,6 @@
       var currency = App.utils.getCurrency(person.countryISO);
       var selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
       var roles = App.utils.getPersonRoles(person);
-
       return [
         "<div class='pr " + (selected ? "sel" : "") + "' data-person-id='" + person.id + "'>",
         "<div class='prn'><span>" + countryFlag + " " + person.name + "</span><span class='st s-" + person.status + "'>" + person.status + "</span></div>",
@@ -527,6 +751,7 @@
     var ownedBusiness = App.store.getBusiness(person.businessId);
     var business = App.store.getAssociatedBusiness(person);
     var employmentBusiness = App.store.getEmploymentBusiness ? App.store.getEmploymentBusiness(person) : null;
+    var profile = App.store.getCountryProfile ? App.store.getCountryProfile(person.countryISO) : null;
     var currency = App.utils.getCurrency(person.countryISO);
     var location = App.utils.locationLabel(person, false);
     var birthDay = person.birthDay != null ? person.birthDay : App.store.simDay;
@@ -539,10 +764,35 @@
     });
     var heir = ownedBusiness && App.sim.getPotentialHeir ? App.sim.getPotentialHeir(person) : null;
     var traitSnapshot = (person.lastTraitEffects && person.lastTraitEffects.length) ? person.lastTraitEffects : ((business && business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
+    var skills = person.skills || {};
+    var skillAverage = Math.round(((Number(skills.management) || 0) + (Number(skills.technical) || 0) + (Number(skills.social) || 0) + (Number(skills.financialDiscipline) || 0) + (Number(skills.creativity) || 0)) / 5);
+    var educationScore = Math.round(Number(person.educationIndex) || 0);
+    var educationAttainment = String(person.educationAttainment || "none").toUpperCase();
+    var credentialLabel = String(person.educationCredentialLabel || "No Formal Qualification");
+    var institutionType = String(person.educationInstitutionType || (educationScore >= 75 ? "university" : "school"));
+    var institutionSector = String(person.educationInstitutionSector || "public");
+    var educationCourse = String(person.educationCourseLabel || "General Studies");
+    var institutionName = String(person.educationInstitutionName || (institutionType === "university" ? "National University" : "Local Public School"));
+    var institutionQuality = Math.round(Number(person.educationInstitutionQuality));
+    var institutionContext = profile ? Math.round((Number(profile.institutionScore) || 0.55) * 100) : null;
+    var educationTipTitle = credentialLabel + " - " + educationScore + "/100";
+    var educationTipBody = [
+      "Attainment: " + educationAttainment,
+      "Course Completed: " + educationCourse,
+      "Institution: " + institutionName,
+      "Institution Type: " + formatInstitutionTypeLabel(institutionType),
+      "Institution Sector: " + institutionSector.toUpperCase(),
+      "Institution Quality: " + (Number.isFinite(institutionQuality) ? institutionQuality + "/100" : "--"),
+      "Country Institution Context: " + (institutionContext != null ? institutionContext + "/100" : "--"),
+      "Higher prestige raises leadership hiring and promotion odds."
+    ].join(" | ");
     var notes = [
       "AGE " + App.utils.displayAge(person),
       App.utils.getLifeStageLabel(person).toUpperCase()
     ];
+    var genderClass = getGenderClass(person);
+    var genderSymbol = getGenderSymbol(person);
+    var genderLabel = getGenderLabel(person);
 
     if (person.retired) notes.push("RETIRED");
     if (!person.alive) notes.push("DIED " + App.utils.fmtDay(person.deathDay || App.store.simDay));
@@ -564,14 +814,26 @@
       "<div class='prbadges detail-badges'>" + renderBadgeRow(App.utils.getPersonRoles(person), "rbadge") + "</div>",
       "</div>",
       "<div class='sg sg3'>",
-      "<div class='sbox'><div class='sl'>Net Worth (" + currency.code + ")</div><div class='sv " + (person.netWorthGU > 30000 ? "g" : person.netWorthGU > 0 ? "a" : "r") + "'>" + App.utils.fmtCountry(person.netWorthGU, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Net Worth (Home)</div><div class='sv " + (person.netWorthGU > 30000 ? "g" : person.netWorthGU > 0 ? "a" : "r") + "'>" + App.utils.fmtCountry(person.netWorthGU, person.countryISO) + "</div></div>",
       "<div class='sbox'><div class='sl'>Net Worth (GU)</div><div class='sv c'>" + App.utils.fmtGU(person.netWorthGU) + "</div></div>",
       "<div class='sbox'><div class='sl'>Net Worth (USD)</div><div class='sv b'>" + App.utils.fmtUSD(person.netWorthGU) + "</div></div>",
       "</div>",
-      "<div class='sg'>",
+      "<div class='sg sg3'>",
       "<div class='sbox'><div class='sl'>Family Size</div><div class='sv b'>" + ((spouse ? 1 : 0) + children.length) + "</div></div>",
       "<div class='sbox'><div class='sl'>Lineage</div><div class='sv a'>" + person.lineageId.split("-")[0].toUpperCase() + "</div></div>",
+      "<div class='sbox'><div class='sl'>Gender</div><div class='sv gender-" + genderClass + "'>" + genderSymbol + " " + genderLabel + "</div></div>",
       "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Education Index", "Raw education index: " + educationScore + "/100 | " + educationTipBody) + "><div class='sl'>Education</div><div class='sv a'>" + educationScore + "/100</div></div>",
+      "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Credential", educationTipBody) + "><div class='sl'>Credential</div><div class='sv c'>" + credentialLabel.toUpperCase() + "</div></div>",
+      "<div class='sbox sbox-tip'" + buildRichTooltipAttrs(educationTipTitle, educationTipBody) + "><div class='sl'>Institution</div><div class='sv b'>" + institutionName + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Skill Track</div><div class='sv c'>" + String(person.skillTrack || "general").toUpperCase() + "</div></div>",
+      "<div class='sbox'><div class='sl'>Human Capital</div><div class='sv b'>" + skillAverage + "/100</div></div>",
+      "</div>",
+      "<div class='country-note'>Skills: Mgmt <strong>" + Math.round(Number(skills.management) || 0) + "</strong>, Tech <strong>" + Math.round(Number(skills.technical) || 0) + "</strong>, Social <strong>" + Math.round(Number(skills.social) || 0) + "</strong>, Finance <strong>" + Math.round(Number(skills.financialDiscipline) || 0) + "</strong>, Creativity <strong>" + Math.round(Number(skills.creativity) || 0) + "</strong>.</div>",
+      "<div class='country-note'>Education currently affects baseline earnings, leadership candidacy, and founder launch odds.</div>",
       (employmentBusiness && person.jobTitle ? "<div class='sg'><div class='sbox'><div class='sl'>Employer</div><div class='sv a'>" + renderBusinessLink(employmentBusiness, employmentBusiness.name) + "</div></div><div class='sbox'><div class='sl'>Salary (GU)</div><div class='sv c'>" + App.utils.fmtGU(person.salaryGU || 0) + "</div></div></div>" : ""),
       renderHouseholdSummary(person),
       "<div class='sg'>",
@@ -594,6 +856,7 @@
     if (bloc.rateHistory.length > 1) {
       drawLine(document.getElementById("fch"), bloc.rateHistory.map(function(rate){ return 1 / rate; }), bloc.label);
     }
+    bindInspectorRichTooltips(el);
   }
 
   function renderBusinessDetail(business){
@@ -693,6 +956,15 @@
     var stateDirectory = "";
     var employmentRate = profile && profile.laborForce > 0 ? (profile.employed / profile.laborForce) : null;
     var pressureLabel = "stable pressure";
+    var countryEducationScore = profile ? Math.round((Number(profile.educationIndex) || 0) * 100) : 0;
+    var countryInstitutionScore = profile ? Math.round((Number(profile.institutionScore) || 0) * 100) : null;
+    var countryCredentialLabel = getCountryEducationCredentialLabel(iso, countryEducationScore);
+    var countryEducationTipBody = [
+      "Education Index: " + countryEducationScore + "/100",
+      "Typical Credential: " + countryCredentialLabel,
+      "Institution Context: " + (countryInstitutionScore != null ? countryInstitutionScore + "/100" : "--"),
+      "Country: " + App.store.getCountryName(iso)
+    ].join(" | ");
     var populationPanel;
 
     function fmtCount(value){
@@ -716,6 +988,12 @@
         "<div class='sbox'><div class='sl'>Median Wage</div><div class='sv b'>" + App.utils.fmtCountry(profile.medianWageGU, iso) + "</div></div>",
         "<div class='sbox'><div class='sl'>Consumer Demand</div><div class='sv g'>" + App.utils.fmtCountry(profile.consumerDemandGU, iso) + "</div></div>",
         "<div class='sbox'><div class='sl'>Pressure Trend</div><div class='sv " + (pressureLabel.indexOf("growing") === 0 ? "g" : (pressureLabel.indexOf("shrinking") === 0 ? "r" : "a")) + "'>" + pressureLabel + "</div></div>",
+        "</div>",
+        "<div class='sg sg3'>",
+        "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Country Education Index", countryEducationTipBody) + "><div class='sl'>Education Index</div><div class='sv a'>" + countryEducationScore + "/100</div></div>",
+        "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Country Credential Band", countryEducationTipBody) + "><div class='sl'>Credential Band</div><div class='sv c'>" + countryCredentialLabel.toUpperCase() + "</div></div>",
+        "<div class='sbox sbox-tip'" + buildRichTooltipAttrs("Country Institution Score", countryEducationTipBody) + "><div class='sl'>Institution Score</div><div class='sv b'>" + (countryInstitutionScore != null ? countryInstitutionScore + "/100" : "--") + "</div></div>",
+        "<div class='sbox'><div class='sl'>Population Layer</div><div class='sv c'>Active</div></div>",
         "</div>"
       ].join("");
     } else {
@@ -768,6 +1046,8 @@
       renderCountryBusinessList(businesses),
       stateDirectory
     ].join("");
+
+    bindInspectorRichTooltips(el);
   }
 
   function renderInspector(){
@@ -823,10 +1103,19 @@
 
   function syncSpeedButtons(){
     var activeSpeed = Number(App.store.simSpeed);
+    var isPaused = activeSpeed <= 0;
+    var pauseButton = document.getElementById("pause-sim-btn");
+    var playButton = document.getElementById("play-sim-btn");
+
     Array.prototype.forEach.call(document.querySelectorAll(".sb"), function(node){
       var nodeSpeed = Number(node.getAttribute("data-speed"));
-      node.classList.toggle("act", nodeSpeed === activeSpeed);
+      if (Number.isFinite(nodeSpeed) && node.hasAttribute("data-speed")) {
+        node.classList.toggle("act", nodeSpeed === activeSpeed);
+      }
     });
+
+    if (pauseButton) pauseButton.classList.toggle("act", isPaused);
+    if (playButton) playButton.classList.toggle("act", !isPaused);
   }
 
   function updateFxBar(){
@@ -846,7 +1135,7 @@
       var previous = previousData[business.id] ? previousData[business.id].val : business.valuationGU;
       var bloc = App.store.getBloc(business.blocId);
       App.store.tickerData[business.id] = {
-        name:business.name.split(" ")[0].slice(0, 4).toUpperCase(),
+        name:App.utils.getBusinessTicker ? App.utils.getBusinessTicker(business.name) : business.name.split(" ")[0].slice(0, 4).toUpperCase(),
         val:business.valuationGU,
         local:App.utils.fmtCountry(business.valuationGU, business.countryISO || "US"),
         chg:previous ? ((business.valuationGU - previous) / previous) * 100 : 0,
@@ -1104,6 +1393,18 @@
     renderSelection();
   }
 
+  function resetWorldFromStart(){
+    var approved = global.confirm("Reset world to day zero? This clears your saved snapshot and reloads the simulation.");
+
+    if (!approved) return;
+
+    if (App.persistence && typeof App.persistence.clearLatest === "function") {
+      App.persistence.clearLatest();
+    }
+
+    global.location.reload();
+  }
+
   function initUI(){
     document.getElementById("plist").addEventListener("click", function(event){
       var row = event.target.closest(".pr");
@@ -1141,6 +1442,28 @@
       if (!button) return;
       App.store.setSimSpeed(Number(button.getAttribute("data-speed")));
       syncSpeedButtons();
+    });
+
+    document.getElementById("sim-ctrl").addEventListener("click", function(event){
+      var button = event.target.closest("button");
+      var resumeSpeed;
+
+      if (!button) return;
+
+      if (button.id === "pause-sim-btn") {
+        App.store.setSimSpeed(0);
+      } else if (button.id === "play-sim-btn") {
+        resumeSpeed = Number(App.store.lastNonZeroSimSpeed) > 0 ? Number(App.store.lastNonZeroSimSpeed) : 1;
+        App.store.setSimSpeed(resumeSpeed);
+      } else {
+        return;
+      }
+
+      syncSpeedButtons();
+    });
+
+    document.getElementById("reset-world-btn").addEventListener("click", function(){
+      resetWorldFromStart();
     });
 
     syncSpeedButtons();

@@ -211,7 +211,107 @@
 
   var INDUSTRIES = ["Technology","Finance","Retail","Manufacturing","Real Estate","F&B","Healthcare","Media","Logistics","Energy"];
   var TRAITS = ["Visionary","Risk-taker","Conservative","Networker","Workaholic","Innovator","Strategist","Charismatic","Frugal","Ambitious"];
-  var BIZ_SFX = ["Corp","Industries","Group","Holdings","Ventures","Labs","Capital","Works","Co","Ltd"];
+  var BUSINESS_NAMING = {
+    legacySuffixes:["Corp","Industries","Group","Holdings","Ventures","Labs","Capital","Works","Co","Ltd"],
+    fallbackSuffixes:["Group","Holdings","Works","Co","Ltd"],
+    industrySuffixes:{
+      Technology:["Systems","Technologies","Labs","Digital","Dynamics","Networks"],
+      Finance:["Capital","Partners","Investments","Wealth","Advisors","Holdings"],
+      Retail:["Trading","Mercantile","Stores","Co","Group","Goods"],
+      Manufacturing:["Industries","Industrial","Works","Forge","Manufacturing","Foundry"],
+      "Real Estate":["Properties","Estates","Holdings","Developments","Realty","Property Group"],
+      "F&B":["Foods","Kitchen","Provisions","Table","Beverages","Food Co"],
+      Healthcare:["Health","Medical","Care","Bioworks","Clinics","Labs"],
+      Media:["Media","Studios","Publishing","Networks","Creative","Broadcast"],
+      Logistics:["Logistics","Transit","Freight","Shipping","Supply","Cargo"],
+      Energy:["Energy","Power","Resources","Grid","Utilities","Works"]
+    },
+    industryNouns:{
+      Technology:["Systems","Digital","Labs","Networks","Logic","Works"],
+      Finance:["Capital","Partners","Wealth","Advisors","Exchange","Holdings"],
+      Retail:["Trading","Stores","Mercantile","Goods","Supply","Market"],
+      Manufacturing:["Industries","Works","Forge","Industrial","Foundry","Mills"],
+      "Real Estate":["Properties","Estates","Developments","Realty","Holdings","Land"],
+      "F&B":["Foods","Kitchen","Table","Provisions","Beverages","Harvest"],
+      Healthcare:["Health","Medical","Care","Bioworks","Clinics","Life"],
+      Media:["Media","Studios","Publishing","Networks","Creative","Press"],
+      Logistics:["Logistics","Transit","Freight","Shipping","Cargo","Supply"],
+      Energy:["Energy","Power","Resources","Grid","Utilities","Fuel"]
+    },
+    scopeDescriptors:{
+      local:["Main Street","Harbor","Town","Market","Corner","Metro","Local","Union","Civic","Anchor"],
+      mixed:["Summit","Atlas","Keystone","Frontier","Blue Ridge","Northstar","Bridge","Prime","Crest","Pioneer"],
+      global:["Global","Continental","Pacific","Sterling","Orbit","Vertex","Horizon","United","Apex","World"]
+    },
+    stopWords:["and","the","of","co","company","corp","corporation","group","holdings","ventures","labs","capital","works","ltd","partners","systems","technologies","digital","dynamics","networks","investments","wealth","advisors","trading","mercantile","stores","goods","industrial","manufacturing","foundry","properties","estates","developments","realty","foods","kitchen","provisions","table","beverages","health","medical","care","bioworks","clinics","media","studios","publishing","creative","broadcast","logistics","transit","freight","shipping","supply","cargo","energy","power","resources","grid","utilities","exchange","market","life","fuel","property"],
+    reservedBrandNames:["Samsung","Hyundai","Toyota","Xiaomi","Huawei","Alibaba","Tata","Infosys","Wipro","Reliance","Aramco","Emirates","Etisalat","Safaricom","Dangote","MTN"],
+    countryModes:{
+      CN:"sinophoneCoined",
+      HK:"sinophoneCoined",
+      TW:"sinophoneCoined",
+      SG:"sinophoneCoined",
+      JP:"japaneseCoined",
+      KR:"koreanCoined",
+      KP:"koreanCoined",
+      VN:"vietnameseCoined",
+      IN:"southAsiaCoined",
+      PK:"southAsiaCoined",
+      BD:"southAsiaCoined",
+      LK:"southAsiaCoined",
+      NP:"southAsiaCoined",
+      AE:"gulfGeobrand",
+      SA:"gulfGeobrand",
+      QA:"gulfGeobrand",
+      KW:"gulfGeobrand",
+      OM:"gulfGeobrand",
+      BH:"gulfGeobrand"
+    },
+    modeWeights:{
+      founderWeighted:{ surnameSuffix:26, descriptorSurname:18, acronymSuffix:14, spousePartners:12, descriptorBrand:10, coinedIndustry:12, coinedSuffix:8 },
+      sinophoneCoined:{ coined:50, coinedIndustry:25, surnameIndustry:15, acronymSuffix:5, descriptorBrand:5 },
+      koreanCoined:{ coined:50, coinedIndustry:25, surnameIndustry:15, acronymSuffix:5, descriptorBrand:5 },
+      japaneseCoined:{ coined:50, coinedIndustry:25, surnameIndustry:15, acronymSuffix:5, descriptorBrand:5 },
+      vietnameseCoined:{ coined:50, coinedIndustry:25, surnameIndustry:15, acronymSuffix:5, descriptorBrand:5 },
+      southAsiaCoined:{ coined:35, surnameIndustry:25, coinedSuffix:20, acronymSuffix:15, descriptorSurname:5 },
+      gulfGeobrand:{ geoIndustry:45, geoInstitution:25, familyHolding:20, acronymInstitution:10 }
+    },
+    coinedPools:{
+      sinophoneCoined:{
+        starts:["Xin","Jin","Hua","Qiao","Long","Ming","Jia","Zhen","Wei","Lan","Bao","Shen"],
+        middles:["a","i","o","e","u","ia","ao"],
+        ends:["sen","tek","lin","wei","hua","ron","tai","ming","yuan","dao","xon","lian"],
+        middleChance:0.32
+      },
+      koreanCoined:{
+        starts:["Han","Seo","Min","Dae","Jin","Sun","Mira","Hwa","Yong","Kyu","Do","Sae"],
+        middles:["a","eo","i","u","yeo","o"],
+        ends:["jin","won","sol","tek","min","ra","se","do","hwa","tech","com","lym"],
+        middleChance:0.28
+      },
+      japaneseCoined:{
+        starts:["Aki","Sora","Nori","Yama","Kawa","Tomo","Mira","Shin","Hoshi","Kiyo","Asa","Taka"],
+        middles:["na","ri","ka","yo","mi","to"],
+        ends:["ta","moto","den","sai","ki","nex","ra","to","no","zen","chi","lix"],
+        middleChance:0.24
+      },
+      vietnameseCoined:{
+        starts:["Viet","Gia","Minh","Thanh","Bao","An","Phu","Tien","Song","Lam","Nam","Quang"],
+        middles:["a","h","i","o","an","ph"],
+        ends:["phat","linh","viet","son","tek","dat","loc","anh","gia","min","long","duc"],
+        middleChance:0.26
+      },
+      southAsiaCoined:{
+        starts:["Infi","Tara","Veda","Omni","Prava","Astra","Rishi","Nexa","Suri","Vanta","Mitra","Kavi"],
+        middles:["a","i","o","ra","va","ya"],
+        ends:["sys","tek","soft","core","works","logic","line","vera","link","tron","leaf","axis"],
+        middleChance:0.22
+      },
+      gulfGeobrand:{
+        geo:["Emirate","Gulf","Arabian","Desert","Pearl","Falcon","Crescent","Oasis","Horizon","Royal"],
+        institutional:["Exchange","Telecom","Capital","Holdings","Logistics","Properties","Energy","Group","Infrastructure","Ventures"]
+      }
+    }
+  };
   var NAMES = {
     NA:{
       male:["James","Michael","Robert","Noah","William","Daniel","Elijah","Benjamin","Henry","Mason"],
@@ -468,7 +568,7 @@
     CALENDAR:CALENDAR,
     INDUSTRIES:INDUSTRIES,
     TRAITS:TRAITS,
-    BIZ_SFX:BIZ_SFX,
+    BUSINESS_NAMING:BUSINESS_NAMING,
     NAMES:NAMES,
     NAME_POOLS:NAME_POOLS,
     BLOC_NAME_POOLS:BLOC_NAME_POOLS,
