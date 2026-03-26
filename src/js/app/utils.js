@@ -175,11 +175,29 @@
   }
 
   function locationLabel(person, compact){
+    var city = String(person && person.city || "").trim();
+    var subdivision = String(person && (person.subdivision || person.state) || "").trim();
+    var countryName;
+
     if (person.countryISO === "US" && person.state) {
       var stateName = App.data.US_STATE_NAMES[person.state] || person.state;
+      if (city) {
+        return compact ? (city + ", " + person.state + ", US") : (city + ", " + stateName + ", United States");
+      }
       return compact ? (stateName + ", US") : (stateName + ", United States");
     }
-    return App.store.getCountryName(person.countryISO);
+
+    countryName = App.store.getCountryName(person.countryISO);
+    if (subdivision) {
+      if (city) {
+        return compact ? (city + ", " + subdivision + ", " + person.countryISO) : (city + ", " + subdivision + ", " + countryName);
+      }
+      return compact ? (subdivision + ", " + person.countryISO) : (subdivision + ", " + countryName);
+    }
+    if (city) {
+      return compact ? (city + ", " + person.countryISO) : (city + ", " + countryName);
+    }
+    return countryName;
   }
 
   function displayAge(person){

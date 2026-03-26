@@ -47,7 +47,10 @@
     App.store.reset();
     App.ui.initUI();
 
-    Promise.resolve(App.data && App.data.loadCountryData ? App.data.loadCountryData() : null).then(function(){
+    Promise.all([
+      Promise.resolve(App.data && App.data.loadCountryData ? App.data.loadCountryData() : null),
+      Promise.resolve(App.data && App.data.loadWorldCitiesData ? App.data.loadWorldCitiesData() : null)
+    ]).then(function(){
       var loadResult = null;
 
       if (App.persistence && App.persistence.restoreLatest) {

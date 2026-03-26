@@ -1,0 +1,430 @@
+TEST 1
+
+Tier 1-3 Closure Validation
+Runs causal gate checks + scenario shocks with rollback. Use this as hard completion criteria for foundations.
+SYSTEM FAIL
+Passed
+6
+Failed
+10
+Triggered Hard Failures
+3
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityPASS
+educationEmploymentCorr: 0.06 | educationSalaryCorr: 0.326 | incomeSavingsCorr: 1
+1.2Household economic realityFAIL
+incomeStressCorr: -0.159 | stressChildEducationCorr: 0.305 | childSampleSize: 18
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 40 | lowDisciplineCount: 9 | highDisciplineMedianSalary: 114609 | lowDisciplineMedianSalary: 181320
+1.5No dead systemsFAIL
+educationSalaryCorr: 0.326 | incomeSavingsCorr: 1 | stressChildEducationCorr: 0.305
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: 6 | unemploymentRateDelta: 0 | avgSalaryDelta: -169
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 2679913348 | demandDelta: -84960
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 45 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 165482
+2.4Career progression realismFAIL
+employedCount: 77 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkPASS
+employeesRevenueCorr: 0.5 | sampleSize: 27
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: -2880 | revenueDelta: 9622862693 | profitDelta: 3048991157
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 2794493869 | firmEmployeeDelta: 3 | businessCountDelta: 0
+3.4Hiring feedback loopPASS
+pass: true | revenueDelta: 9716221487 | firmEmployeeDelta: 2
+3.5Firm lifecyclePASS
+launchEvents: 26 | bankruptcyEvents: 11 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 33400736 | wageRange: 79408 | firmCount: 27
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentCLEAR
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieCLEAR
+HF-6Population has no economic impactCLEARTier 1-3 Closure Validation
+Runs causal gate checks + scenario shocks with rollback. Use this as hard completion criteria for foundations.
+SYSTEM FAIL
+Passed
+6
+Failed
+10
+Triggered Hard Failures
+3
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityPASS
+educationEmploymentCorr: 0.06 | educationSalaryCorr: 0.326 | incomeSavingsCorr: 1
+1.2Household economic realityFAIL
+incomeStressCorr: -0.159 | stressChildEducationCorr: 0.305 | childSampleSize: 18
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 40 | lowDisciplineCount: 9 | highDisciplineMedianSalary: 114609 | lowDisciplineMedianSalary: 181320
+1.5No dead systemsFAIL
+educationSalaryCorr: 0.326 | incomeSavingsCorr: 1 | stressChildEducationCorr: 0.305
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: 6 | unemploymentRateDelta: 0 | avgSalaryDelta: -169
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 2679913348 | demandDelta: -84960
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 45 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 165482
+2.4Career progression realismFAIL
+employedCount: 77 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkPASS
+employeesRevenueCorr: 0.5 | sampleSize: 27
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: -2880 | revenueDelta: 9622862693 | profitDelta: 3048991157
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 2794493869 | firmEmployeeDelta: 3 | businessCountDelta: 0
+3.4Hiring feedback loopPASS
+pass: true | revenueDelta: 9716221487 | firmEmployeeDelta: 2
+3.5Firm lifecyclePASS
+launchEvents: 26 | bankruptcyEvents: 11 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 33400736 | wageRange: 79408 | firmCount: 27
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentCLEAR
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieCLEAR
+HF-6Population has no economic impactCLEAR
+
+TEST 2 - aFTER Reset
+
+Tier 1-3 Closure Validation
+Runs causal gate checks + scenario shocks with rollback. Use this as hard completion criteria for foundations.
+SYSTEM FAIL
+Passed
+4
+Failed
+12
+Triggered Hard Failures
+4
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityFAIL
+educationEmploymentCorr: 0.007 | educationSalaryCorr: 0.294 | incomeSavingsCorr: 0.988
+1.2Household economic realityFAIL
+incomeStressCorr: -0.25 | stressChildEducationCorr: 0.315 | childSampleSize: 18
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 40 | lowDisciplineCount: 9 | highDisciplineMedianSalary: 114705 | lowDisciplineMedianSalary: 169052
+1.5No dead systemsFAIL
+educationSalaryCorr: 0.294 | incomeSavingsCorr: 0.988 | stressChildEducationCorr: 0.315
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: -9 | unemploymentRateDelta: 0 | avgSalaryDelta: -2062
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 912141143 | demandDelta: 4320
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 45 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 153488
+2.4Career progression realismFAIL
+employedCount: 74 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkPASS
+employeesRevenueCorr: 0.458 | sampleSize: 26
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: -239040 | revenueDelta: -62400 | profitDelta: 699481
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 336738 | firmEmployeeDelta: -2 | businessCountDelta: 0
+3.4Hiring feedback loopFAIL
+pass: false | revenueDelta: -51600 | firmEmployeeDelta: -2
+3.5Firm lifecyclePASS
+launchEvents: 26 | bankruptcyEvents: 12 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 285713486 | wageRange: 79305 | firmCount: 26
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentTRIGGERED
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieCLEAR
+HF-6Population has no economic impactCLEAR
+Last run: 27 June 2029
+
+Test 3 - After Reset
+
+Tier 1-3 Closure Validation
+Runs causal gate checks + scenario shocks with rollback. Use this as hard completion criteria for foundations.
+SYSTEM FAIL
+Passed
+3
+Failed
+13
+Triggered Hard Failures
+5
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityFAIL
+educationEmploymentCorr: -0.399 | educationSalaryCorr: 0.312 | incomeSavingsCorr: -0.43
+1.2Household economic realityFAIL
+incomeStressCorr: -0.755 | stressChildEducationCorr: 0.594 | childSampleSize: 7
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 24 | lowDisciplineCount: 7 | highDisciplineMedianSalary: 109967 | lowDisciplineMedianSalary: 97689
+1.5No dead systemsFAIL
+educationSalaryCorr: 0.312 | incomeSavingsCorr: -0.43 | stressChildEducationCorr: 0.594
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: -11 | unemploymentRateDelta: 0 | avgSalaryDelta: 10246
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 19599580 | demandDelta: 73440
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 47 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 99786
+2.4Career progression realismFAIL
+employedCount: 47 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkPASS
+employeesRevenueCorr: 0.699 | sampleSize: 19
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: 25920 | revenueDelta: 24109513 | profitDelta: 13412283
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 6236159 | firmEmployeeDelta: -6 | businessCountDelta: -1
+3.4Hiring feedback loopFAIL
+pass: false | revenueDelta: 8338978 | firmEmployeeDelta: -2
+3.5Firm lifecycleFAIL
+launchEvents: 0 | bankruptcyEvents: 0 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 210636 | wageRange: 41246 | firmCount: 19
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentTRIGGERED
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieTRIGGERED
+HF-6Population has no economic impactCLEAR
+Last run: 2 January 2026
+
+Test 4 - AFTER RESET
+
+Passed
+5
+Failed
+11
+Triggered Hard Failures
+5
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityFAIL
+educationEmploymentCorr: -0.345 | educationSalaryCorr: 0.359 | incomeSavingsCorr: 0.999
+1.2Household economic realityPASS
+incomeStressCorr: -0.147 | stressChildEducationCorr: -0.036 | childSampleSize: 7
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergencePASS
+highDisciplineCount: 28 | lowDisciplineCount: 8 | highDisciplineMedianSalary: 107751 | lowDisciplineMedianSalary: 96858
+1.5No dead systemsPASS
+educationSalaryCorr: 0.359 | incomeSavingsCorr: 0.999 | stressChildEducationCorr: -0.036
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: -1 | unemploymentRateDelta: 0 | avgSalaryDelta: -5526
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 969471608 | demandDelta: 41760
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 55 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 115201
+2.4Career progression realismFAIL
+employedCount: 55 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkFAIL
+employeesRevenueCorr: 0.136 | sampleSize: 19
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: -97200 | revenueDelta: 3899667255 | profitDelta: 1147653766
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 1147287124 | firmEmployeeDelta: 0 | businessCountDelta: 0
+3.4Hiring feedback loopFAIL
+pass: false | revenueDelta: 3899662455 | firmEmployeeDelta: -9
+3.5Firm lifecycleFAIL
+launchEvents: 0 | bankruptcyEvents: 0 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 9798579 | wageRange: 36708 | firmCount: 19
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentTRIGGERED
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieTRIGGERED
+HF-6Population has no economic impactCLEAR
+Last run: 20 February 2026
+
+TEST 5 - AFTER REST
+
+Passed
+6
+Failed
+10
+Triggered Hard Failures
+4
+Growth Loop
+Fail
+Recession Loop
+Pass
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityPASS
+educationEmploymentCorr: 0.072 | educationSalaryCorr: 0.451 | incomeSavingsCorr: 0.409
+1.2Household economic realityPASS
+incomeStressCorr: -0.745 | stressChildEducationCorr: -0.676 | childSampleSize: 7
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 19 | lowDisciplineCount: 3 | highDisciplineMedianSalary: 85120 | lowDisciplineMedianSalary: 128979
+1.5No dead systemsPASS
+educationSalaryCorr: 0.451 | incomeSavingsCorr: 0.409 | stressChildEducationCorr: -0.676
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: -8 | unemploymentRateDelta: 0 | avgSalaryDelta: 1670
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 143511 | demandDelta: -162720
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 33 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 85466
+2.4Career progression realismFAIL
+employedCount: 33 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkFAIL
+employeesRevenueCorr: -0.154 | sampleSize: 13
+3.2Demand to revenue linkPASS
+pass: true | demandDelta: -113760 | revenueDelta: -782821 | profitDelta: -738459
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 186437 | firmEmployeeDelta: -8 | businessCountDelta: -1
+3.4Hiring feedback loopFAIL
+pass: false | revenueDelta: -809221 | firmEmployeeDelta: -7
+3.5Firm lifecycleFAIL
+launchEvents: 0 | bankruptcyEvents: 0 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 109274 | wageRange: 37010 | firmCount: 13
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsCLEAR
+HF-3Firms do not affect employmentTRIGGERED
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieTRIGGERED
+HF-6Population has no economic impactCLEAR
+Last run: 17 January 2026
+
+TEST 6 - TEST 5 SAVE
+
+
+Passed
+3
+Failed
+13
+Triggered Hard Failures
+4
+Growth Loop
+Fail
+Recession Loop
+Fail
+Labour Pressure Loop
+Fail
+Tier 1 Gates
+1.1Life path causalityFAIL
+educationEmploymentCorr: -0.164 | educationSalaryCorr: 0.501 | incomeSavingsCorr: -0.168
+1.2Household economic realityFAIL
+incomeStressCorr: -0.681 | stressChildEducationCorr: 0.212 | childSampleSize: 4
+1.3Population-workforce linkPASS
+scarcityWageCorr: 0.965 | countryCount: 241
+1.4Trait and state divergenceFAIL
+highDisciplineCount: 24 | lowDisciplineCount: 1 | highDisciplineMedianSalary: 103574 | lowDisciplineMedianSalary: 36983
+1.5No dead systemsFAIL
+educationSalaryCorr: 0.501 | incomeSavingsCorr: -0.168 | stressChildEducationCorr: 0.212
+Tier 2 Gates
+2.1Employment loop integrityFAIL
+pass: false | employedDelta: 3 | unemploymentRateDelta: 0 | avgSalaryDelta: -17949
+2.2Unemployment pressure loopFAIL
+pass: false | unemploymentRateDelta: 0 | householdIncomeDelta: 177426346 | demandDelta: 208800
+2.3Skill impact validityFAIL
+highSkillCount: 0 | lowSkillCount: 57 | highSkillMedianSalary: 0 | lowSkillMedianSalary: 106513
+2.4Career progression realismFAIL
+employedCount: 57 | progressionShare: 1 | executiveShare: 1 | tierCounts: [object Object]
+2.5Labour scarcity signalFAIL
+scarcityWagePressureCorr: 0
+Tier 3 Gates
+3.1Production-market linkFAIL
+employeesRevenueCorr: -0.028 | sampleSize: 19
+3.2Demand to revenue linkFAIL
+pass: false | demandDelta: 42480 | revenueDelta: 263479071 | profitDelta: 154443040
+3.3Profit pressure behaviorFAIL
+pass: false | firmProfitDelta: 76303934 | firmEmployeeDelta: -4 | businessCountDelta: -1
+3.4Hiring feedback loopPASS
+pass: true | revenueDelta: 263561819 | firmEmployeeDelta: 3
+3.5Firm lifecycleFAIL
+launchEvents: 0 | bankruptcyEvents: 0 | stageCounts: [object Object]
+3.6Firm differentiationPASS
+productivityRange: 328414 | wageRange: 56050 | firmCount: 19
+Hard Failure Conditions
+HF-1Unemployment does not affect demandTRIGGERED
+HF-2Demand does not affect firmsTRIGGERED
+HF-3Firms do not affect employmentCLEAR
+HF-4Wages ignore labor conditionsTRIGGERED
+HF-5Firms never grow or dieTRIGGERED
+HF-6Population has no economic impactCLEAR
+Last run: 3 January 2026
+
+AUTOMATED REGRESSION RUN - 25 March 2026
+Command: npm run test:closure
+Report file: tests/closure_test_notes/closure-latest-run.json
+
+Baseline:
+- ok: false
+- passed: 18
+- failed: 3
+- failedGateIds: 1.1, 1.4, 1.5
+
+Sequential +1Y runs:
+- Run 1 (Day 360): ok=true, passed=21, failed=0, failedGateIds=[]
+- Run 2 (Day 720): ok=false, passed=20, failed=1, failedGateIds=[2.3]
+- Run 3 (Day 1080): ok=false, passed=20, failed=1, failedGateIds=[3.1]
+
+Overall:
+- pass: false

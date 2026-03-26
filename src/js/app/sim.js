@@ -30,6 +30,73 @@
   var STOCK_MAX_TAPE_ITEMS = 120;
   var LONG_UNEMPLOYMENT_DAYS = 180;
   var LABOR_MOBILITY_FLOW_CAP = 12;
+  var POLICY_STANCE_KEYS = ["supportive", "neutral", "tightening"];
+  var COUNTRY_POLICY_STANCE_EFFECTS = {
+    supportive:{
+      demandGrowthBias:0.025,
+      wagePressureBias:-0.02,
+      talentShortageBias:-0.015,
+      debtRateBias:-0.008,
+      rolloverChanceBias:0.04,
+      distressBias:-0.06,
+      bailoutBias:0.035,
+      migrationPressureBias:0.055
+    },
+    neutral:{
+      demandGrowthBias:0,
+      wagePressureBias:0,
+      talentShortageBias:0,
+      debtRateBias:0,
+      rolloverChanceBias:0,
+      distressBias:0,
+      bailoutBias:0,
+      migrationPressureBias:0
+    },
+    tightening:{
+      demandGrowthBias:-0.018,
+      wagePressureBias:0.018,
+      talentShortageBias:0.012,
+      debtRateBias:0.007,
+      rolloverChanceBias:-0.035,
+      distressBias:0.07,
+      bailoutBias:-0.03,
+      migrationPressureBias:-0.05
+    }
+  };
+  var BLOC_POLICY_STANCE_EFFECTS = {
+    supportive:{
+      demandGrowthBias:0.015,
+      wagePressureBias:-0.012,
+      talentShortageBias:-0.008,
+      debtRateBias:-0.005,
+      rolloverChanceBias:0.025,
+      distressBias:-0.04,
+      bailoutBias:0.02,
+      migrationPressureBias:0.03
+    },
+    neutral:{
+      demandGrowthBias:0,
+      wagePressureBias:0,
+      talentShortageBias:0,
+      debtRateBias:0,
+      rolloverChanceBias:0,
+      distressBias:0,
+      bailoutBias:0,
+      migrationPressureBias:0
+    },
+    tightening:{
+      demandGrowthBias:-0.012,
+      wagePressureBias:0.012,
+      talentShortageBias:0.008,
+      debtRateBias:0.004,
+      rolloverChanceBias:-0.02,
+      distressBias:0.045,
+      bailoutBias:-0.02,
+      migrationPressureBias:-0.028
+    }
+  };
+  var closureValidationMode = false;
+  var JOB_TIER_ORDER = ["entry", "junior", "mid", "senior", "leadership", "executive"];
   var CORE_LEADERSHIP_ROLES = {
     ceo:{ roleKey:"ceo", title:"CEO", department:"Executive", tier:"executive", importance:5 },
     coo:{ roleKey:"coo", title:"COO", department:"Operations", tier:"executive", importance:4 },
@@ -251,6 +318,55 @@
     Logistics:{ engineer:0.11, operator:0.36, sales:0.18, accountant:0.14, factory_worker:0.21 },
     Energy:{ engineer:0.22, operator:0.31, sales:0.12, accountant:0.13, factory_worker:0.22 }
   };
+  var INDUSTRY_BEHAVIOR_PROFILES = {
+    Technology:{ volatility:0.16, talentSensitivity:1.24, leverageAppetite:0.98, supplySensitivity:0.42, customerElasticity:0.5, innovationBias:1.35 },
+    Finance:{ volatility:0.22, talentSensitivity:1.08, leverageAppetite:1.42, supplySensitivity:0.2, customerElasticity:0.46, innovationBias:0.86 },
+    Retail:{ volatility:0.1, talentSensitivity:0.82, leverageAppetite:0.9, supplySensitivity:0.94, customerElasticity:1.22, innovationBias:0.7 },
+    Manufacturing:{ volatility:0.13, talentSensitivity:0.94, leverageAppetite:1.1, supplySensitivity:1.18, customerElasticity:0.8, innovationBias:0.88 },
+    "Real Estate":{ volatility:0.18, talentSensitivity:0.76, leverageAppetite:1.5, supplySensitivity:0.52, customerElasticity:0.74, innovationBias:0.64 },
+    "F&B":{ volatility:0.11, talentSensitivity:0.72, leverageAppetite:0.86, supplySensitivity:1.06, customerElasticity:1.1, innovationBias:0.62 },
+    Healthcare:{ volatility:0.1, talentSensitivity:1.06, leverageAppetite:0.92, supplySensitivity:0.58, customerElasticity:0.44, innovationBias:0.82 },
+    Media:{ volatility:0.18, talentSensitivity:1.16, leverageAppetite:1.04, supplySensitivity:0.38, customerElasticity:1.16, innovationBias:1.08 },
+    Logistics:{ volatility:0.14, talentSensitivity:0.84, leverageAppetite:1.08, supplySensitivity:1.28, customerElasticity:0.78, innovationBias:0.72 },
+    Energy:{ volatility:0.2, talentSensitivity:0.92, leverageAppetite:1.22, supplySensitivity:1.14, customerElasticity:0.62, innovationBias:0.76 }
+  };
+  var INDUSTRY_SUPPLY_DEPENDENCIES = {
+    Technology:["Finance", "Energy", "Logistics"],
+    Finance:["Technology", "Media"],
+    Retail:["Manufacturing", "Logistics", "Energy"],
+    Manufacturing:["Energy", "Logistics", "Finance"],
+    "Real Estate":["Finance", "Energy", "Logistics"],
+    "F&B":["Manufacturing", "Logistics", "Energy"],
+    Healthcare:["Technology", "Energy", "Logistics"],
+    Media:["Technology", "Finance"],
+    Logistics:["Energy", "Manufacturing", "Finance"],
+    Energy:["Finance", "Logistics"]
+  };
+  var INDUSTRY_TRADE_EXPOSURE = {
+    Technology:0.62,
+    Finance:0.35,
+    Retail:0.58,
+    Manufacturing:0.76,
+    "Real Estate":0.28,
+    "F&B":0.64,
+    Healthcare:0.42,
+    Media:0.44,
+    Logistics:0.82,
+    Energy:0.69
+  };
+  var INDUSTRY_REROUTE_ADAPTABILITY = {
+    Technology:0.66,
+    Finance:0.48,
+    Retail:0.54,
+    Manufacturing:0.58,
+    "Real Estate":0.34,
+    "F&B":0.46,
+    Healthcare:0.52,
+    Media:0.57,
+    Logistics:0.72,
+    Energy:0.5
+  };
+  var BANKRUPTCY_STAGE_ORDER = ["stable", "distress", "restructuring", "fire_sale", "bailout", "liquidation"];
   var HOUSEHOLD_CLASS_RANKS = {
     strained:0,
     working:1,
@@ -258,6 +374,40 @@
     affluent:3,
     elite:4
   };
+  var HOUSEHOLD_ASSET_CLASS_ALLOCATION = {
+    strained:{ cash:0.92, equity:0.02, business:0.01, property:0.04, trust:0.01 },
+    working:{ cash:0.78, equity:0.08, business:0.03, property:0.1, trust:0.01 },
+    middle:{ cash:0.55, equity:0.18, business:0.06, property:0.18, trust:0.03 },
+    affluent:{ cash:0.34, equity:0.28, business:0.09, property:0.24, trust:0.05 },
+    elite:{ cash:0.2, equity:0.3, business:0.16, property:0.24, trust:0.1 }
+  };
+  var HOUSEHOLD_ASSET_RETURN_BASE = {
+    cash:0.008,
+    equity:0.052,
+    business:0.069,
+    property:0.032,
+    trust:0.036
+  };
+  var HOUSEHOLD_CONSUMPTION_PROPENSITY = {
+    strained:0.97,
+    working:0.91,
+    middle:0.84,
+    affluent:0.74,
+    elite:0.62
+  };
+  var INDUSTRY_CONSUMER_SPENDING_BASE = {
+    Technology:0.11,
+    Finance:0.09,
+    Retail:0.18,
+    Manufacturing:0.1,
+    "Real Estate":0.08,
+    "F&B":0.16,
+    Healthcare:0.12,
+    Media:0.06,
+    Logistics:0.06,
+    Energy:0.04
+  };
+  var HOUSEHOLD_HOMEOWNERSHIP_PROPERTY_MONTHS = 26;
   var GOVERNOR_CONFIG = {
     noLaunchYearsThreshold:2,
     emptyEcosystemMinDensityPerMillion:1.2,
@@ -614,6 +764,11 @@
 
   function normalizeBusinessNameText(name){
     return String(name || "").replace(/\s*&\s*/g, " & ").replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeText(value){
+    var text = String(value || "").trim();
+    return text || null;
   }
 
   function normalizeBusinessNameKey(name){
@@ -1083,8 +1238,200 @@
       GB:["London", "Birmingham", "Glasgow", "Liverpool", "Cardiff", "Edinburgh"],
       default:["Central", "Riverside", "National", "City", "Metropolitan", "Regional"]
     };
+    var fallback = map[iso] || map.default;
+    if (App.data && typeof App.data.getCountryInstitutionNameParts === "function") {
+      return App.data.getCountryInstitutionNameParts(iso, fallback);
+    }
+    return fallback;
+  }
 
-    return map[iso] || map.default;
+  function normalizeUSStateCode(value){
+    var normalized = normalizeText(value);
+    var codes;
+    var index;
+    var code;
+
+    if (!normalized || !App.data || !App.data.US_STATE_NAMES) return null;
+    if (/^[A-Z]{2}$/.test(normalized) && App.data.US_STATE_NAMES[normalized]) {
+      return normalized;
+    }
+
+    codes = App.data.US_STATE_CODES || Object.keys(App.data.US_STATE_NAMES);
+    for (index = 0; index < codes.length; index += 1) {
+      code = codes[index];
+      if (normalizeText(App.data.US_STATE_NAMES[code]) === normalized) {
+        return code;
+      }
+    }
+
+    return null;
+  }
+
+  function normalizeSubdivisionForStorage(iso, subdivision){
+    var normalized = normalizeText(subdivision);
+
+    if (!normalized) return null;
+    if (iso === "US") return normalizeUSStateCode(normalized) || normalized;
+    return normalized;
+  }
+
+  function normalizeSubdivisionForLookup(iso, subdivision){
+    var normalized = normalizeSubdivisionForStorage(iso, subdivision);
+
+    if (!normalized) return null;
+    if (iso === "US" && App.data && App.data.US_STATE_NAMES && App.data.US_STATE_NAMES[normalized]) {
+      return App.data.US_STATE_NAMES[normalized];
+    }
+    return normalized;
+  }
+
+  function getCountryCityPool(iso, limit, subdivision){
+    var lookupSubdivision = normalizeSubdivisionForLookup(iso, subdivision);
+
+    if (!App.data) return [];
+    if (lookupSubdivision && typeof App.data.getWorldCitiesByCountryState === "function") {
+      var subdivisionCities = App.data.getWorldCitiesByCountryState(iso, lookupSubdivision, limit || 24);
+      if (subdivisionCities.length) return subdivisionCities;
+    }
+    if (typeof App.data.getWorldCitiesByCountry !== "function") return [];
+    return App.data.getWorldCitiesByCountry(iso, limit || 24);
+  }
+
+  function getCountryCityDetailsPool(iso, limit, subdivision){
+    var details;
+    var lookupSubdivision = normalizeSubdivisionForLookup(iso, subdivision);
+
+    if (!App.data || typeof App.data.getWorldCityDetailsByCountry !== "function") return [];
+    details = App.data.getWorldCityDetailsByCountry(iso, limit || 24);
+    if (lookupSubdivision) {
+      details = details.filter(function(detail){
+        return normalizeText(detail && detail.state) === lookupSubdivision;
+      });
+    }
+    return details;
+  }
+
+  function getCitySelectionWeight(iso, detail, residentByCity, talentByCity, businessByCity){
+    var cityKey = String(detail && detail.name || "").trim().toLowerCase();
+    var population = Math.max(0, Number(detail && detail.population) || 0);
+    var residentCount = Math.max(0, Number(residentByCity[cityKey]) || 0);
+    var talentCount = Math.max(0, Number(talentByCity[cityKey]) || 0);
+    var businessCount = Math.max(0, Number(businessByCity[cityKey]) || 0);
+    var populationSignal = population > 0 ? (Math.log10(population + 1) / 7) : 0;
+    var residentSignal = residentCount > 0 ? (Math.log10(residentCount + 1) / 2.5) : 0;
+    var talentSignal = talentCount > 0 ? (Math.log10(talentCount + 1) / 2.2) : 0;
+    var businessSignal = businessCount > 0 ? (Math.log10(businessCount + 1) / 2.2) : 0;
+
+    // Urban gravity: larger and already-active cities attract additional firms, talent, and residents.
+    return App.utils.clamp(0.45 + (populationSignal * 2.4) + (residentSignal * 1.35) + (talentSignal * 1.1) + (businessSignal * 1.45), 0.1, 9.5);
+  }
+
+  function pickCountryCity(iso, seedKey, subdivision){
+    var cities = getCountryCityPool(iso, 24, subdivision);
+    var details = getCountryCityDetailsPool(iso, 24, subdivision);
+    var residentByCity = {};
+    var talentByCity = {};
+    var businessByCity = {};
+    var weighted = [];
+    var totalWeight = 0;
+    var seed;
+    var roll;
+    var running = 0;
+
+    if (details.length) {
+      (App.store.people || []).forEach(function(person){
+        var cityKey;
+        if (!person || !person.alive || person.countryISO !== iso) return;
+        cityKey = String(person.city || "").trim().toLowerCase();
+        if (!cityKey) return;
+        residentByCity[cityKey] = (residentByCity[cityKey] || 0) + 1;
+        if ((Number(person.educationIndex) || 0) >= 68 || person.jobTier === "executive" || person.jobTier === "leadership") {
+          talentByCity[cityKey] = (talentByCity[cityKey] || 0) + 1;
+        }
+      });
+
+      (App.store.businesses || []).forEach(function(business){
+        var cityKey;
+        if (!business || business.countryISO !== iso || business.stage === "defunct") return;
+        cityKey = String(business.hqCity || "").trim().toLowerCase();
+        if (!cityKey) return;
+        businessByCity[cityKey] = (businessByCity[cityKey] || 0) + 1;
+      });
+
+      details.forEach(function(detail){
+        var cityName = normalizeText(detail && detail.name);
+        var weight;
+        if (!cityName) return;
+        weight = getCitySelectionWeight(iso, detail, residentByCity, talentByCity, businessByCity);
+        weighted.push({ name:cityName, weight:weight });
+        totalWeight += weight;
+      });
+    }
+
+    if (weighted.length && totalWeight > 0) {
+      if (!seedKey) {
+        roll = Math.random() * totalWeight;
+      } else {
+        seed = hashString(String(seedKey));
+        roll = ((seed % 1000000) / 1000000) * totalWeight;
+      }
+
+      for (var i = 0; i < weighted.length; i += 1) {
+        running += weighted[i].weight;
+        if (running >= roll) return weighted[i].name;
+      }
+      return weighted[weighted.length - 1].name;
+    }
+
+    if (!cities.length) return null;
+    if (!seedKey) return App.utils.pick(cities);
+
+    seed = hashString(String(seedKey));
+    return cities[seed % cities.length] || null;
+  }
+
+  function resolveSubdivisionForCity(iso, city, fallbackSubdivision){
+    var resolved = normalizeSubdivisionForStorage(iso, fallbackSubdivision);
+    if (!iso || !city || !App.data || typeof App.data.getWorldCitySubdivision !== "function") {
+      return resolved || null;
+    }
+    return normalizeSubdivisionForStorage(iso, App.data.getWorldCitySubdivision(iso, city, normalizeSubdivisionForLookup(iso, resolved))) || resolved || null;
+  }
+
+  function setPersonSubdivisionFields(person, iso, subdivision){
+    var normalized = normalizeSubdivisionForStorage(iso, subdivision) || null;
+    if (!person) return;
+
+    person.subdivision = normalized;
+    person.state = iso === "US" ? normalized : null;
+  }
+
+  function ensurePersonCityData(person){
+    var iso;
+    var subdivision;
+    var city;
+    var birthCity;
+
+    if (!person) return;
+    iso = String(person.countryISO || "").trim().toUpperCase();
+    if (!iso) return;
+
+    subdivision = normalizeSubdivisionForStorage(iso, person.subdivision || person.state);
+    city = normalizeText(person.city);
+    birthCity = normalizeText(person.birthCity);
+
+    if (!city) {
+      city = pickCountryCity(iso, [person.id || "", iso, App.store.simDay, "sync-city"].join("|"), subdivision);
+    }
+    if (!birthCity) {
+      birthCity = city || pickCountryCity(iso, [person.id || "", iso, App.store.simDay, "sync-birth-city"].join("|"), subdivision);
+    }
+
+    subdivision = resolveSubdivisionForCity(iso, city, subdivision);
+    setPersonSubdivisionFields(person, iso, subdivision);
+
+    person.city = city || null;
+    person.birthCity = birthCity || person.city || null;
   }
 
   function getCountryEliteUniversities(iso){
@@ -1420,6 +1767,7 @@
     var age;
     var countryEducation;
     var institution;
+    var infrastructure;
     var ageProgress;
 
     if (!person) return 0;
@@ -1436,6 +1784,7 @@
     age = Math.max(0, Number(person.age) || 0);
     countryEducation = App.utils.clamp(Number(profile && profile.educationIndex) || 0.6, 0.1, 1);
     institution = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1);
+    infrastructure = App.utils.clamp(Number(profile && profile.developmentInfrastructureIndex) || (institution * 0.78), 0.1, 1);
 
     if (age < 6) {
       ageProgress = 0;
@@ -1453,6 +1802,7 @@
       ageProgress +
       (countryEducation * 34) +
       (institution * 18) +
+      (infrastructure * 14) +
       getHouseholdEducationBoost(household) +
       (parentAverage * 0.35),
       0,
@@ -1483,6 +1833,7 @@
     household = getHouseholdForPerson(person);
     uplift = ((Number(profile && profile.institutionScore) || 0.55) - 0.45) * 1.8;
     uplift += ((Number(profile && profile.educationIndex) || 0.6) - 0.5) * 1.6;
+    uplift += ((Number(profile && profile.developmentInfrastructureIndex) || 0.52) - 0.5) * 1.2;
     uplift += getHouseholdEducationBoost(household) * 0.06;
     uplift = App.utils.clamp(uplift, -0.3, 2.2);
     person.educationIndex = App.utils.clamp((Number(person.educationIndex) || 0) + uplift, 0, 100);
@@ -1543,10 +1894,76 @@
     return bestTrack;
   }
 
+  function getDeterministicPersonSignal(person, salt){
+    var source = String((person && person.id) || "person") + "|" + String(salt || "seed");
+    var hash = 0;
+    var index;
+
+    for (index = 0; index < source.length; index += 1) {
+      hash = ((hash * 31) + source.charCodeAt(index)) >>> 0;
+    }
+
+    return (hash % 1000) / 999;
+  }
+
+  function getSeededSkillValue(person, key, age, education){
+    var track = SKILL_TRACKS[person && person.skillTrack] || SKILL_TRACKS.general;
+    var occupationKey = String(person && person.occupationCategory || "").toLowerCase();
+    var occupationWeights = OCCUPATION_SKILL_WEIGHTS[occupationKey] || OCCUPATION_SKILL_WEIGHTS.default;
+    var baseByAge = age < 10 ? 8 : (age < 18 ? 18 : (age < 25 ? 28 : (age < 40 ? 34 : 36)));
+    var trackWeight = Number(track[key]) || 1;
+    var occupationWeight = Number(occupationWeights[key]) || 1;
+    var experienceBoost = App.utils.clamp((Number(person && person.workExperienceYears) || 0) * 1.35, 0, 18);
+    var educationComponent = education * 0.34;
+    var ageComponent = baseByAge * 0.44;
+    var specializationComponent = ((trackWeight - 1) * 15) + ((occupationWeight - 1) * 12);
+    var noise = (getDeterministicPersonSignal(person, key) - 0.5) * 7;
+
+    if (key === "management" && ((person && person.jobTier === "executive") || (person && person.jobTier === "leadership"))) {
+      specializationComponent += 6;
+    }
+    if (key === "financialDiscipline" && occupationKey === "accountant") {
+      specializationComponent += 4;
+    }
+    if (key === "social" && occupationKey === "sales") {
+      specializationComponent += 4;
+    }
+    if (key === "technical" && occupationKey === "engineer") {
+      specializationComponent += 4;
+    }
+
+    return App.utils.clamp(ageComponent + educationComponent + experienceBoost + specializationComponent + noise, 0, 100);
+  }
+
+  function shouldReseedSkillProfile(person, age, education){
+    var values;
+    var maxValue;
+    var minValue;
+    var spread;
+    var average;
+    var expectedFloor;
+
+    if (!person || !person.skills) return true;
+
+    values = SKILL_KEYS.map(function(key){
+      return App.utils.clamp(Number(person.skills[key]) || 0, 0, 100);
+    });
+    maxValue = Math.max.apply(null, values);
+    minValue = Math.min.apply(null, values);
+    spread = maxValue - minValue;
+    average = App.utils.avg(values);
+    expectedFloor = App.utils.clamp((age < 18 ? 10 : 18) + (education * 0.22), 0, 100);
+
+    if (!Number.isFinite(average) || average <= 0) return true;
+    if (spread < 0.75 && age >= 16) return true;
+    if (average < expectedFloor - 4) return true;
+    return false;
+  }
+
   function ensureSkillData(person){
     var age;
     var education;
-    var baseByAge;
+    var reseedSkills;
     var rawExperience;
     var rawUnemployment;
     var rawLastEmployed;
@@ -1555,16 +1972,16 @@
 
     age = Math.max(0, Number(person.age) || 0);
     education = App.utils.clamp(Number(person.educationIndex) || 0, 0, 100);
-    baseByAge = age < 10 ? 8 : (age < 18 ? 18 : (age < 25 ? 28 : 34));
 
     person.childhoodStage = person.childhoodStage || getChildhoodStageForAge(age);
     person.skillTrack = person.skillTrack || (age < 12 ? "foundation" : chooseSkillTrack(person));
     person.skills = person.skills && typeof person.skills === "object" ? person.skills : {};
+    reseedSkills = shouldReseedSkillProfile(person, age, education);
 
     SKILL_KEYS.forEach(function(key){
       var existing = Number(person.skills[key]);
-      if (!Number.isFinite(existing)) {
-        person.skills[key] = App.utils.clamp((baseByAge * 0.45) + (education * 0.32), 0, 100);
+      if (!Number.isFinite(existing) || reseedSkills) {
+        person.skills[key] = getSeededSkillValue(person, key, age, education);
       } else {
         person.skills[key] = App.utils.clamp(existing, 0, 100);
       }
@@ -1587,6 +2004,48 @@
 
     // Course and specialist-school pathways depend on track, so refresh education metadata here.
     ensureEducationInstitutionData(person);
+  }
+
+  function alignEmploymentSkills(person, role){
+    var occupationHint;
+    var skillFloors = {
+      management:26,
+      technical:24,
+      social:24,
+      financialDiscipline:22,
+      creativity:20
+    };
+    var tier = String(role && role.tier || person && person.jobTier || "entry").toLowerCase();
+    var tierBoost = tier === "executive" ? 18 : (tier === "leadership" ? 13 : (tier === "senior" ? 9 : (tier === "mid" ? 5 : (tier === "junior" ? 2 : 0))));
+
+    if (!person || !role) return;
+
+    ensureSkillData(person);
+    occupationHint = getRoleOccupationHint(role);
+
+    if (occupationHint === "executive") {
+      skillFloors.management += 18 + tierBoost;
+      skillFloors.social += 10 + Math.round(tierBoost * 0.6);
+      skillFloors.financialDiscipline += 8 + Math.round(tierBoost * 0.55);
+    } else if (occupationHint === "engineer") {
+      skillFloors.technical += 16 + tierBoost;
+      skillFloors.creativity += 7 + Math.round(tierBoost * 0.4);
+    } else if (occupationHint === "accountant") {
+      skillFloors.financialDiscipline += 16 + tierBoost;
+      skillFloors.management += 4 + Math.round(tierBoost * 0.35);
+    } else if (occupationHint === "sales") {
+      skillFloors.social += 16 + tierBoost;
+      skillFloors.management += 5 + Math.round(tierBoost * 0.35);
+    } else {
+      skillFloors.technical += 5 + Math.round(tierBoost * 0.35);
+      skillFloors.social += 3 + Math.round(tierBoost * 0.25);
+    }
+
+    SKILL_KEYS.forEach(function(key){
+      var current = Number(person.skills && person.skills[key]) || 0;
+      var floor = App.utils.clamp(skillFloors[key] + ((Number(person.educationIndex) || 0) * 0.08), 0, 100);
+      person.skills[key] = App.utils.clamp(Math.max(current, floor), 0, 100);
+    });
   }
 
   function applySkillFormationYearly(person){
@@ -1693,45 +2152,876 @@
     var employed = App.utils.clamp(floorInt(profile.employed), 0, laborForce);
     var unemployed = Math.max(0, laborForce - employed);
     var medianWage = App.utils.clamp(Number(profile.medianWageGU) || 0, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+    var consumerSpendMultiplier = App.utils.clamp(Number(profile.consumerSpendMultiplier) || 1, 0.55, 1.25);
+    var consumerCostOfLivingPressure = App.utils.clamp(Number(profile.consumerCostOfLivingPressure) || 1, 0.65, 1.85);
+    var consumerStressIndex = App.utils.clamp(Number(profile.consumerStressIndex) || 0, 0, 1);
+    var housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+    var housingRentBurden = App.utils.clamp(Number(profile.housingRentBurden) || 0.34, 0.08, 0.9);
+    var housingHomeownershipRate = App.utils.clamp(Number(profile.housingHomeownershipRate) || 0.52, 0.05, 0.95);
+    var housingPriceGrowth = App.utils.clamp(Number(profile.housingPriceGrowth) || 0.02, -0.18, 0.26);
+    var housingMarketStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+    var medianHouseholdWealthGU = Math.max(0, Number(profile.medianHouseholdWealthGU) || (medianWage * 2.1));
+    var topOneWealthShare = App.utils.clamp(Number(profile.topOneWealthShare) || 0.3, 0.12, 0.95);
+    var intergenerationalMobilityIndex = App.utils.clamp(Number(profile.intergenerationalMobilityIndex) || 0.5, 0, 1);
+    var socialUnrestIndex = App.utils.clamp(Number(profile.socialUnrestIndex) || 0.28, 0, 1.8);
+    var strikeRiskIndex = App.utils.clamp(Number(profile.strikeRiskIndex) || 0.22, 0, 1.4);
+    var populismIndex = App.utils.clamp(Number(profile.populismIndex) || 0.24, 0, 1.6);
+    var crimeProxyIndex = App.utils.clamp(Number(profile.crimeProxyIndex) || 0.22, 0, 1.6);
+    var emigrationPressureIndex = App.utils.clamp(Number(profile.emigrationPressureIndex) || 0.24, 0, 1.6);
+    var institutionalInstabilityIndex = App.utils.clamp(Number(profile.institutionalInstabilityIndex) || 0.2, 0, 1.6);
+    var philanthropicCapitalAnnualGU = Math.max(0, Number(profile.philanthropicCapitalAnnualGU) || 0);
+    var philanthropyImpactIndex = App.utils.clamp(Number(profile.philanthropyImpactIndex) || 0, 0, 1.6);
+    var legacyProjectsIndex = App.utils.clamp(Number(profile.legacyProjectsIndex) || 0, 0, 1.4);
+    var developmentEducationQuality;
+    var developmentCorruptionIndex;
+    var developmentInfrastructureIndex;
+    var developmentLaborCostIndex;
+    var developmentSocialMobilityIndex;
+    var developmentFertilityNormIndex;
+    var developmentBusinessFriendlinessIndex;
+    var demographicAgingIndex;
+    var demographicYouthBulgeIndex;
+    var demographicLaborForcePressureIndex;
+    var demographicFertilityDeclineIndex;
+    var naturalResourceEndowmentIndex;
+    var resourceRentSeekingRiskIndex;
+    var resourceSeed;
+    var birthRatePer1000;
+    var deathRatePer1000;
     var employmentRate = laborForce > 0 ? employed / laborForce : 0;
-    var demandPerCapita = profile.population > 0 ? ((employed * medianWage * 0.72) / Math.max(1, profile.population)) : 0;
-    var demandScore = App.utils.clamp(demandPerCapita / 28000, 0, 1);
+    var baseConsumerDemand = employed * medianWage * 0.72;
     var institutionScore = App.utils.clamp(Number(profile.institutionScore) || 0, 0, 1);
+    var spendingCostDrag = App.utils.clamp((consumerCostOfLivingPressure - 1) * 0.28, 0, 0.32);
+    var spendingStressDrag = App.utils.clamp(consumerStressIndex * 0.18, 0, 0.2);
+    var housingSpendingDrag = App.utils.clamp((housingCostPressure - 1) * 0.1 + (housingMarketStress * 0.06), 0, 0.16);
+    var homeownershipRelief = App.utils.clamp((housingHomeownershipRate - 0.45) * 0.06, -0.03, 0.04);
+    var institutionRelief = App.utils.clamp((institutionScore - 0.55) * 0.08, -0.05, 0.05);
+    var spendingMultiplier = App.utils.clamp(consumerSpendMultiplier - spendingCostDrag - spendingStressDrag - housingSpendingDrag + homeownershipRelief + institutionRelief, 0.56, 1.22);
+    var demandPerCapita = profile.population > 0 ? ((baseConsumerDemand * spendingMultiplier) / Math.max(1, profile.population)) : 0;
+    var demandScore = App.utils.clamp(demandPerCapita / 28000, 0, 1);
     var scarcity = laborForce > 0 ? 1 - ((laborForce - employed) / laborForce) : 0;
+    var industryDemandWeights = normalizeConsumerIndustryDemandWeights(profile.consumerIndustryDemandWeights);
+    var derivedConsumerDemand = Math.round(baseConsumerDemand * spendingMultiplier);
+    var existingConsumerDemand = Math.max(0, Number(profile.consumerDemandGU) || 0);
+
+    developmentEducationQuality = App.utils.clamp((Number(profile.educationIndex) || 0.55) * 0.72 + (philanthropyImpactIndex * 0.12) + ((1 - institutionalInstabilityIndex / 1.6) * 0.16), 0, 1);
+    developmentCorruptionIndex = App.utils.clamp((1 - institutionScore) * 0.68 + (institutionalInstabilityIndex / 1.6) * 0.2 + (socialUnrestIndex / 1.8) * 0.12, 0, 1);
+    developmentInfrastructureIndex = App.utils.clamp((institutionScore * 0.62) + (Math.max(0, demandScore - 0.25) * 0.22) + (philanthropyImpactIndex * 0.08) + ((1 - developmentCorruptionIndex) * 0.08), 0, 1);
+    developmentLaborCostIndex = App.utils.clamp(medianWage / 42000, 0, 1.6);
+    developmentSocialMobilityIndex = App.utils.clamp((intergenerationalMobilityIndex * 0.75) + ((1 - topOneWealthShare) * 0.2) + ((1 - socialUnrestIndex / 1.8) * 0.05), 0, 1);
+    developmentFertilityNormIndex = App.utils.clamp((App.utils.clamp(Number(profile.birthRatePer1000) || 12, 4, 45) - 8) / 20, 0, 1);
+    developmentBusinessFriendlinessIndex = App.utils.clamp((institutionScore * 0.44) + (developmentInfrastructureIndex * 0.28) + ((1 - developmentCorruptionIndex) * 0.18) + ((1 - App.utils.clamp(unemployed / Math.max(1, laborForce), 0, 1)) * 0.1), 0, 1);
+    birthRatePer1000 = App.utils.clamp(Number(profile.birthRatePer1000) || 12, 4, 45);
+    deathRatePer1000 = App.utils.clamp(Number(profile.deathRatePer1000) || 8, 2, 28);
+    demographicAgingIndex = App.utils.clamp(((1 - developmentFertilityNormIndex) * 0.42) + (developmentEducationQuality * 0.2) + (institutionScore * 0.18) + (App.utils.clamp((18 - deathRatePer1000) / 16, 0, 1) * 0.2), 0, 1);
+    demographicYouthBulgeIndex = App.utils.clamp((developmentFertilityNormIndex * 0.56) + ((1 - developmentEducationQuality) * 0.16) + (Math.max(0, 0.56 - institutionScore) * 0.16) + (Math.max(0, profile.populationPressure - 0.5) * 0.12), 0, 1);
+    demographicLaborForcePressureIndex = App.utils.clamp((App.utils.clamp(unemployed / Math.max(1, laborForce), 0, 1) * 0.36) + (App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1) * 0.2) + (demographicYouthBulgeIndex * 0.22) + (demographicAgingIndex * 0.18) + (Math.max(0, housingCostPressure - 1) * 0.08), 0, 1.8);
+    demographicFertilityDeclineIndex = App.utils.clamp(((1 - developmentFertilityNormIndex) * 0.52) + (developmentEducationQuality * 0.16) + (App.utils.clamp(developmentLaborCostIndex / 1.6, 0, 1) * 0.14) + (Math.max(0, housingCostPressure - 1) * 0.1) + (demographicAgingIndex * 0.08), 0, 1);
+    resourceSeed = (hashString(String(profile.iso || "XX")) % 1000) / 1000;
+    naturalResourceEndowmentIndex = App.utils.clamp(((Number(profile.naturalResourceEndowmentIndex) || 0.35) * 0.7) + ((0.18 + (resourceSeed * 0.64)) * 0.3), 0, 1);
+    resourceRentSeekingRiskIndex = App.utils.clamp((naturalResourceEndowmentIndex * 0.56) + (developmentCorruptionIndex * 0.28) + ((institutionalInstabilityIndex / 1.6) * 0.16), 0, 1.6);
 
     profile.laborForce = laborForce;
     profile.employed = employed;
     profile.unemployed = unemployed;
     profile.medianWageGU = medianWage;
-    profile.consumerDemandGU = App.utils.clamp(Math.round(employed * medianWage * 0.72), 0, MAX_COUNTRY_DEMAND_GU);
+    profile.consumerSpendMultiplier = consumerSpendMultiplier;
+    profile.consumerCostOfLivingPressure = consumerCostOfLivingPressure;
+    profile.consumerStressIndex = consumerStressIndex;
+    profile.housingCostPressure = housingCostPressure;
+    profile.housingRentBurden = housingRentBurden;
+    profile.housingHomeownershipRate = housingHomeownershipRate;
+    profile.housingPriceGrowth = housingPriceGrowth;
+    profile.housingMarketStress = housingMarketStress;
+    profile.medianHouseholdWealthGU = medianHouseholdWealthGU;
+    profile.topOneWealthShare = topOneWealthShare;
+    profile.intergenerationalMobilityIndex = intergenerationalMobilityIndex;
+    profile.socialUnrestIndex = socialUnrestIndex;
+    profile.strikeRiskIndex = strikeRiskIndex;
+    profile.populismIndex = populismIndex;
+    profile.crimeProxyIndex = crimeProxyIndex;
+    profile.emigrationPressureIndex = emigrationPressureIndex;
+    profile.institutionalInstabilityIndex = institutionalInstabilityIndex;
+    profile.philanthropicCapitalAnnualGU = philanthropicCapitalAnnualGU;
+    profile.philanthropyImpactIndex = philanthropyImpactIndex;
+    profile.legacyProjectsIndex = legacyProjectsIndex;
+    profile.developmentEducationQuality = developmentEducationQuality;
+    profile.developmentCorruptionIndex = developmentCorruptionIndex;
+    profile.developmentInfrastructureIndex = developmentInfrastructureIndex;
+    profile.developmentLaborCostIndex = developmentLaborCostIndex;
+    profile.developmentSocialMobilityIndex = developmentSocialMobilityIndex;
+    profile.developmentFertilityNormIndex = developmentFertilityNormIndex;
+    profile.developmentBusinessFriendlinessIndex = developmentBusinessFriendlinessIndex;
+    profile.demographicAgingIndex = demographicAgingIndex;
+    profile.demographicYouthBulgeIndex = demographicYouthBulgeIndex;
+    profile.demographicLaborForcePressureIndex = demographicLaborForcePressureIndex;
+    profile.demographicFertilityDeclineIndex = demographicFertilityDeclineIndex;
+    profile.naturalResourceEndowmentIndex = naturalResourceEndowmentIndex;
+    profile.resourceRentSeekingRiskIndex = resourceRentSeekingRiskIndex;
+    profile.consumerIndustryDemandWeights = industryDemandWeights;
+    profile.consumerDemandGU = App.utils.clamp(Math.round(existingConsumerDemand > 0 ? ((existingConsumerDemand * 0.62) + (derivedConsumerDemand * 0.38)) : derivedConsumerDemand), 0, MAX_COUNTRY_DEMAND_GU);
     profile.populationPressure = App.utils.clamp((employmentRate * 0.5) + (demandScore * 0.25) + (institutionScore * 0.25), 0, 1);
     profile.laborScarcity = App.utils.clamp(Number(profile.laborScarcity) || scarcity, 0, 1);
     profile.wagePressure = App.utils.clamp(Number(profile.wagePressure) || 0, -0.45, 0.45);
     profile.longUnemploymentShare = App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
     profile.talentShortageIndex = App.utils.clamp(Number(profile.talentShortageIndex) || 0, 0, 1);
+    profile.tradeShockIndex = App.utils.clamp(Number(profile.tradeShockIndex) || 0, 0, 1.8);
+    profile.tradeRerouteRelief = App.utils.clamp(Number(profile.tradeRerouteRelief) || 0, 0, 1.2);
+    profile.avgSupplyStress = App.utils.clamp(Number(profile.avgSupplyStress) || 0, 0, 1.8);
+    profile.socialPressureIndex = App.utils.clamp(Number(profile.socialPressureIndex) || 0, 0, 1.5);
     profile.mobilityInflowAnnual = Math.max(0, floorInt(profile.mobilityInflowAnnual));
     profile.mobilityOutflowAnnual = Math.max(0, floorInt(profile.mobilityOutflowAnnual));
+    profile.talentDriftBalance = App.utils.clamp(Number(profile.talentDriftBalance) || 0, -1.5, 1.5);
     profile.prevConsumerDemandGU = Math.max(0, Number(profile.prevConsumerDemandGU) || profile.consumerDemandGU || 0);
+    profile.policyStance = normalizePolicyStance(profile.policyStance);
+    profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+    profile.policyEvidence.consumerSpendMultiplier = Number(consumerSpendMultiplier.toFixed(4));
+    profile.policyEvidence.consumerCostOfLivingPressure = Number(consumerCostOfLivingPressure.toFixed(4));
+    profile.policyEvidence.consumerStressIndex = Number(consumerStressIndex.toFixed(4));
+    profile.policyEvidence.housingCostPressure = Number(housingCostPressure.toFixed(4));
+    profile.policyEvidence.housingRentBurden = Number(housingRentBurden.toFixed(4));
+    profile.policyEvidence.housingHomeownershipRate = Number(housingHomeownershipRate.toFixed(4));
+    profile.policyEvidence.housingPriceGrowth = Number(housingPriceGrowth.toFixed(4));
+    profile.policyEvidence.housingMarketStress = Number(housingMarketStress.toFixed(4));
+    profile.policyEvidence.medianHouseholdWealthGU = Number(medianHouseholdWealthGU.toFixed(2));
+    profile.policyEvidence.topOneWealthShare = Number(topOneWealthShare.toFixed(4));
+    profile.policyEvidence.intergenerationalMobilityIndex = Number(intergenerationalMobilityIndex.toFixed(4));
+    profile.policyEvidence.socialUnrestIndex = Number(socialUnrestIndex.toFixed(4));
+    profile.policyEvidence.strikeRiskIndex = Number(strikeRiskIndex.toFixed(4));
+    profile.policyEvidence.populismIndex = Number(populismIndex.toFixed(4));
+    profile.policyEvidence.crimeProxyIndex = Number(crimeProxyIndex.toFixed(4));
+    profile.policyEvidence.emigrationPressureIndex = Number(emigrationPressureIndex.toFixed(4));
+    profile.policyEvidence.institutionalInstabilityIndex = Number(institutionalInstabilityIndex.toFixed(4));
+    profile.policyEvidence.philanthropicCapitalAnnualGU = Number(philanthropicCapitalAnnualGU.toFixed(2));
+    profile.policyEvidence.philanthropyImpactIndex = Number(philanthropyImpactIndex.toFixed(4));
+    profile.policyEvidence.legacyProjectsIndex = Number(legacyProjectsIndex.toFixed(4));
+    profile.policyEvidence.developmentEducationQuality = Number(developmentEducationQuality.toFixed(4));
+    profile.policyEvidence.developmentCorruptionIndex = Number(developmentCorruptionIndex.toFixed(4));
+    profile.policyEvidence.developmentInfrastructureIndex = Number(developmentInfrastructureIndex.toFixed(4));
+    profile.policyEvidence.developmentLaborCostIndex = Number(developmentLaborCostIndex.toFixed(4));
+    profile.policyEvidence.developmentSocialMobilityIndex = Number(developmentSocialMobilityIndex.toFixed(4));
+    profile.policyEvidence.developmentFertilityNormIndex = Number(developmentFertilityNormIndex.toFixed(4));
+    profile.policyEvidence.developmentBusinessFriendlinessIndex = Number(developmentBusinessFriendlinessIndex.toFixed(4));
+    profile.policyEvidence.demographicAgingIndex = Number(demographicAgingIndex.toFixed(4));
+    profile.policyEvidence.demographicYouthBulgeIndex = Number(demographicYouthBulgeIndex.toFixed(4));
+    profile.policyEvidence.demographicLaborForcePressureIndex = Number(demographicLaborForcePressureIndex.toFixed(4));
+    profile.policyEvidence.demographicFertilityDeclineIndex = Number(demographicFertilityDeclineIndex.toFixed(4));
+    profile.policyEvidence.naturalResourceEndowmentIndex = Number(naturalResourceEndowmentIndex.toFixed(4));
+    profile.policyEvidence.resourceRentSeekingRiskIndex = Number(resourceRentSeekingRiskIndex.toFixed(4));
 
     return profile;
   }
 
+  function getAllTrackedIndustries(){
+    return Object.keys(INDUSTRY_CONSUMER_SPENDING_BASE || {});
+  }
+
+  function normalizeIndustryMetricMap(source, fallback, minValue, maxValue){
+    var result = {};
+    getAllTrackedIndustries().forEach(function(industry){
+      var raw = source && source[industry];
+      var defaultValue = fallback != null ? fallback : 1;
+      result[industry] = App.utils.clamp(Number.isFinite(raw) ? raw : defaultValue, minValue, maxValue);
+    });
+    return result;
+  }
+
+  function ensureCountryIndustryMarketState(profile){
+    if (!profile) return null;
+
+    profile.industryPriceIndices = normalizeIndustryMetricMap(profile.industryPriceIndices, 1, 0.72, 1.45);
+    profile.industryDemandAllocation = normalizeIndustryMetricMap(profile.industryDemandAllocation, 1, 0.58, 1.52);
+    profile.industryDemandPressure = normalizeIndustryMetricMap(profile.industryDemandPressure, 1, 0.58, 1.82);
+    profile.industryDemandShare = normalizeConsumerIndustryDemandWeights(profile.industryDemandShare);
+    profile.industryProductionCapacityGU = normalizeIndustryMetricMap(profile.industryProductionCapacityGU, 0, 0, MAX_COUNTRY_DEMAND_GU * 2);
+    return profile;
+  }
+
+  function getCountryIndustryPriceMultiplier(profile, industry){
+    ensureCountryIndustryMarketState(profile);
+    return App.utils.clamp(Number(profile && profile.industryPriceIndices && profile.industryPriceIndices[industry]) || 1, 0.72, 1.45);
+  }
+
+  function getCountryIndustryAllocationRatio(profile, industry){
+    ensureCountryIndustryMarketState(profile);
+    return App.utils.clamp(Number(profile && profile.industryDemandAllocation && profile.industryDemandAllocation[industry]) || 1, 0.58, 1.52);
+  }
+
+  function getBusinessMarketAllocationSignal(business){
+    var profile = ensureCountryProfile(business && business.countryISO, business && business.blocId);
+    var priceIndex = getCountryIndustryPriceMultiplier(profile, business && business.industry);
+    var allocationRatio = getCountryIndustryAllocationRatio(profile, business && business.industry);
+
+    return {
+      priceIndex:priceIndex,
+      allocationRatio:allocationRatio,
+      revenueMultiplier:App.utils.clamp((priceIndex * 0.62) + (allocationRatio * 0.38), 0.72, 1.42)
+    };
+  }
+
+  function getBusinessProductionCapacityGU(business){
+    var countryProfile;
+    var medianWage;
+    var productivity;
+    var stageFactor;
+    var reputationFactor;
+    var managementFactor;
+    var innovationFactor;
+    var infrastructureFactor;
+    var supplyFactor;
+
+    if (!business) return 0;
+
+    countryProfile = ensureCountryProfile(business.countryISO, business.blocId);
+    medianWage = getCountryMedianWage(business.countryISO);
+    productivity = getIndustryValue(INDUSTRY_PRODUCTIVITY_MULTIPLIERS, business.industry, 2.6);
+    stageFactor = getBusinessStageFactor(business.stage);
+    reputationFactor = 0.74 + ((Number(business.reputation) || 50) / 100) * 0.78;
+    managementFactor = App.utils.clamp(0.78 + ((Number(business.managementQuality) || 50) / 100) * 0.34, 0.72, 1.18);
+    innovationFactor = App.utils.clamp(0.86 + ((Number(business.innovationIndex) || 40) / 100) * 0.22, 0.82, 1.16);
+    infrastructureFactor = App.utils.clamp(0.84 + (App.utils.clamp(Number(countryProfile && countryProfile.developmentInfrastructureIndex) || 0.52, 0.1, 1) * 0.24), 0.78, 1.12);
+    supplyFactor = App.utils.clamp(1 - (App.utils.clamp(Number(business.supplyStress) || 0, 0, 1.8) * 0.08), 0.68, 1);
+
+    return Math.max(1, Math.round(Math.max(1, Number(business.employees) || 1) * medianWage * productivity * stageFactor * reputationFactor * managementFactor * innovationFactor * infrastructureFactor * supplyFactor));
+  }
+
+  function normalizeConsumerIndustryDemandWeights(weights){
+    var industries = App.data && Array.isArray(App.data.INDUSTRIES) ? App.data.INDUSTRIES : Object.keys(INDUSTRY_CONSUMER_SPENDING_BASE);
+    var normalized = {};
+    var total = 0;
+
+    industries.forEach(function(industry){
+      var fallback = Math.max(0.001, Number(INDUSTRY_CONSUMER_SPENDING_BASE[industry]) || 0.01);
+      var value = Math.max(0.001, Number(weights && weights[industry]) || fallback);
+      normalized[industry] = value;
+      total += value;
+    });
+
+    if (total <= 0) {
+      return Object.assign({}, INDUSTRY_CONSUMER_SPENDING_BASE);
+    }
+
+    industries.forEach(function(industry){
+      normalized[industry] = normalized[industry] / total;
+    });
+
+    return normalized;
+  }
+
+  function getHouseholdConsumerSpendingSignals(household){
+    var classTier = household && household.classTier ? household.classTier : "working";
+    var classPropensity = App.utils.clamp(Number(HOUSEHOLD_CONSUMPTION_PROPENSITY[classTier]) || HOUSEHOLD_CONSUMPTION_PROPENSITY.working, 0.55, 1.02);
+    var monthlyIncome = Math.max(0, Number(household && household.monthlyIncomeGU) || 0);
+    var monthlyExpenses = Math.max(1, Number(household && household.monthlyExpensesGU) || 1);
+    var stress = App.utils.clamp((Number(household && household.financialStress) || 0) / 100, 0, 1);
+    var costPressure = App.utils.clamp(monthlyExpenses / Math.max(1, monthlyIncome || (monthlyExpenses * 0.85)), 0.6, 2.4);
+    var cashCoverageMonths = App.utils.clamp((Number(household && household.cashOnHandGU) || 0) / monthlyExpenses, 0, 8);
+    var classRank = householdClassRank(classTier);
+    var demandWeight = Math.max(320, monthlyIncome + (monthlyExpenses * 0.3));
+    var spendMultiplier = classPropensity - (Math.max(0, costPressure - 1) * 0.24) - (stress * 0.16) + (cashCoverageMonths * 0.012);
+    var industryWeights = Object.assign({}, INDUSTRY_CONSUMER_SPENDING_BASE);
+
+    if (costPressure > 1.08 || stress > 0.58) {
+      industryWeights.Retail *= 1.12;
+      industryWeights["F&B"] *= 1.16;
+      industryWeights.Healthcare *= 1.1;
+      industryWeights.Energy *= 1.08;
+      industryWeights.Logistics *= 1.07;
+      industryWeights.Technology *= 0.87;
+      industryWeights.Media *= 0.84;
+      industryWeights["Real Estate"] *= 0.8;
+      industryWeights.Finance *= 0.9;
+    }
+
+    if (classRank >= 3) {
+      industryWeights["Real Estate"] *= 1.24;
+      industryWeights.Finance *= 1.16;
+      industryWeights.Technology *= 1.1;
+      industryWeights.Media *= 1.08;
+      industryWeights.Retail *= 0.93;
+      industryWeights["F&B"] *= 0.9;
+    } else if (classRank <= 1) {
+      industryWeights.Retail *= 1.08;
+      industryWeights["F&B"] *= 1.1;
+      industryWeights.Healthcare *= 1.06;
+      industryWeights["Real Estate"] *= 0.86;
+      industryWeights.Finance *= 0.88;
+      industryWeights.Media *= 0.9;
+    }
+
+    return {
+      demandWeight:demandWeight,
+      spendMultiplier:App.utils.clamp(spendMultiplier, 0.55, 1.18),
+      costPressure:costPressure,
+      stress:stress,
+      industryWeights:normalizeConsumerIndustryDemandWeights(industryWeights)
+    };
+  }
+
+  function buildCountryConsumerSpendingSignals(){
+    var stats = {};
+
+    (App.store.households || []).forEach(function(household){
+      var iso;
+      var entry;
+      var signals;
+
+      if (!household || !household.countryISO) return;
+      refreshHouseholdSnapshot(household);
+      signals = getHouseholdConsumerSpendingSignals(household);
+      iso = household.countryISO;
+      if (!stats[iso]) {
+        stats[iso] = {
+          households:0,
+          weightSum:0,
+          spendWeightedSum:0,
+          costWeightedSum:0,
+          stressWeightedSum:0,
+          industryWeightedSums:{}
+        };
+      }
+      entry = stats[iso];
+      entry.households += 1;
+      entry.weightSum += signals.demandWeight;
+      entry.spendWeightedSum += signals.spendMultiplier * signals.demandWeight;
+      entry.costWeightedSum += signals.costPressure * signals.demandWeight;
+      entry.stressWeightedSum += signals.stress * signals.demandWeight;
+      Object.keys(signals.industryWeights || {}).forEach(function(industry){
+        entry.industryWeightedSums[industry] = (entry.industryWeightedSums[industry] || 0) + ((signals.industryWeights[industry] || 0) * signals.demandWeight);
+      });
+    });
+
+    return stats;
+  }
+
+  function buildCountryHousingMarketSignals(){
+    var stats = {};
+
+    (App.store.households || []).forEach(function(household){
+      var iso;
+      var entry;
+      var monthlyIncome;
+      var monthlyExpenses;
+      var burden;
+      var savingsPressure;
+      var ownership;
+      var affordability;
+      var weight;
+
+      if (!household || !household.countryISO) return;
+
+      refreshHouseholdSnapshot(household);
+      iso = household.countryISO;
+      if (!stats[iso]) {
+        stats[iso] = {
+          households:0,
+          weightSum:0,
+          burdenWeightedSum:0,
+          savingsWeightedSum:0,
+          ownershipWeightedSum:0,
+          affordabilityWeightedSum:0
+        };
+      }
+
+      monthlyIncome = Math.max(0, Number(household.monthlyIncomeGU) || 0);
+      monthlyExpenses = Math.max(1, Number(household.monthlyExpensesGU) || 1);
+      burden = App.utils.clamp(Number(household.housingBurdenRatio) || ((Number(household.housingCostGU) || 0) / Math.max(1, monthlyIncome || (monthlyExpenses * 0.85))), 0.08, 1.9);
+      savingsPressure = App.utils.clamp(Number(household.housingSavingsPressure) || ((Number(household.housingCostGU) || 0) / monthlyExpenses), 0.08, 2.2);
+      ownership = App.utils.clamp(Number(household.housingOwnershipScore) || 0, 0, 1);
+      affordability = App.utils.clamp(Number(household.housingAffordabilityScore) || 0.5, 0.05, 1);
+      weight = Math.max(280, monthlyIncome + (monthlyExpenses * 0.45));
+
+      entry = stats[iso];
+      entry.households += 1;
+      entry.weightSum += weight;
+      entry.burdenWeightedSum += burden * weight;
+      entry.savingsWeightedSum += savingsPressure * weight;
+      entry.ownershipWeightedSum += ownership * weight;
+      entry.affordabilityWeightedSum += affordability * weight;
+    });
+
+    return stats;
+  }
+
+  function getCountryIndustryDemandMultiplier(profile, industry){
+    var normalizedWeights;
+    var baseShare;
+    var activeShare;
+
+    if (!profile) return 1;
+
+    normalizedWeights = normalizeConsumerIndustryDemandWeights(profile.consumerIndustryDemandWeights);
+    baseShare = Math.max(0.001, Number(INDUSTRY_CONSUMER_SPENDING_BASE[industry]) || 0.01);
+    activeShare = Math.max(0.001, Number(normalizedWeights[industry]) || baseShare);
+
+    return App.utils.clamp(activeShare / baseShare, 0.62, 1.62);
+  }
+
+  function getBlocIndustryDemandMultiplier(blocId, industry){
+    var profiles = App.store.getBlocProfiles ? App.store.getBlocProfiles(blocId) : [];
+    var weightedSum = 0;
+    var weightTotal = 0;
+
+    (profiles || []).forEach(function(profile){
+      var weight = Math.max(1, Number(profile && profile.consumerDemandGU) || 0);
+      weightedSum += getCountryIndustryDemandMultiplier(profile, industry) * weight;
+      weightTotal += weight;
+    });
+
+    if (weightTotal <= 0) return 1;
+    return App.utils.clamp(weightedSum / weightTotal, 0.62, 1.62);
+  }
+
+  function normalizePolicyStance(stance){
+    return POLICY_STANCE_KEYS.indexOf(stance) >= 0 ? stance : "neutral";
+  }
+
+  function deriveCountryPolicyStance(signals){
+    var unemploymentRate = App.utils.clamp(Number(signals && signals.unemploymentRate) || 0, 0, 1);
+    var laborScarcity = App.utils.clamp(Number(signals && signals.laborScarcity) || 0, 0, 1);
+    var wagePressure = App.utils.clamp(Number(signals && signals.wagePressure) || 0, -0.45, 0.45);
+    var longUnemploymentShare = App.utils.clamp(Number(signals && signals.longUnemploymentShare) || 0, 0, 1);
+    var demandGrowth = App.utils.clamp(Number(signals && signals.demandGrowth) || 0, -0.35, 0.35);
+    var stance = "neutral";
+
+    if (unemploymentRate >= 0.16 || demandGrowth <= -0.04 || longUnemploymentShare >= 0.14) {
+      stance = "supportive";
+    } else if (laborScarcity >= 0.79 && wagePressure >= 0.13 && unemploymentRate <= 0.08) {
+      stance = "tightening";
+    }
+
+    return {
+      stance:stance,
+      evidence:{
+        unemploymentRate:unemploymentRate,
+        laborScarcity:laborScarcity,
+        wagePressure:wagePressure,
+        longUnemploymentShare:longUnemploymentShare,
+        demandGrowth:demandGrowth
+      }
+    };
+  }
+
+  function refreshCountryPolicyStance(profile, signals){
+    var derived;
+
+    if (!profile) return "neutral";
+
+    derived = deriveCountryPolicyStance(signals || {});
+    profile.policyStance = normalizePolicyStance(derived.stance);
+    profile.policyEvidence = derived.evidence;
+    return profile.policyStance;
+  }
+
+  function getBlocPolicySnapshot(bloc){
+    var profiles;
+
+    if (!bloc) return null;
+
+    profiles = (App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : []).filter(Boolean);
+    if (!profiles.length) return null;
+
+    return profiles.reduce(function(acc, profile){
+      var laborForce = Math.max(0, Number(profile.laborForce) || 0);
+      var employed = App.utils.clamp(Math.max(0, Number(profile.employed) || 0), 0, laborForce);
+
+      acc.laborForce += laborForce;
+      acc.employed += employed;
+      acc.wagePressure += App.utils.clamp(Number(profile.wagePressure) || 0, -0.45, 0.45);
+      acc.laborScarcity += App.utils.clamp(Number(profile.laborScarcity) || 0, 0, 1);
+      acc.longUnemploymentShare += App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
+      acc.demandGrowth += App.utils.clamp(Number(profile.policyEvidence && profile.policyEvidence.demandGrowth) || 0, -0.35, 0.35);
+      acc.giniCoefficient += App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
+      acc.topOneWealthShare += App.utils.clamp(Number(profile.topOneWealthShare) || 0.3, 0.12, 0.95);
+      acc.intergenerationalMobilityIndex += App.utils.clamp(Number(profile.intergenerationalMobilityIndex) || 0.5, 0, 1);
+      acc.medianHouseholdWealthGU += Math.max(0, Number(profile.medianHouseholdWealthGU) || 0);
+      acc.count += 1;
+      return acc;
+    }, {
+      laborForce:0,
+      employed:0,
+      wagePressure:0,
+      laborScarcity:0,
+      longUnemploymentShare:0,
+      demandGrowth:0,
+      giniCoefficient:0,
+      topOneWealthShare:0,
+      intergenerationalMobilityIndex:0,
+      medianHouseholdWealthGU:0,
+      count:0
+    });
+  }
+
+  function deriveBlocPolicyStance(snapshot){
+    var unemploymentRate;
+    var avgWagePressure;
+    var avgScarcity;
+    var avgLongUnemploymentShare;
+    var avgDemandGrowth;
+    var avgGini;
+    var avgTopOneWealthShare;
+    var avgIntergenerationalMobilityIndex;
+    var avgMedianHouseholdWealthGU;
+    var stance = "neutral";
+
+    if (!snapshot || !snapshot.count) {
+      return {
+        stance:stance,
+        evidence:{}
+      };
+    }
+
+    unemploymentRate = snapshot.laborForce > 0 ? App.utils.clamp((snapshot.laborForce - snapshot.employed) / snapshot.laborForce, 0, 1) : 0;
+    avgWagePressure = App.utils.clamp(snapshot.wagePressure / snapshot.count, -0.45, 0.45);
+    avgScarcity = App.utils.clamp(snapshot.laborScarcity / snapshot.count, 0, 1);
+    avgLongUnemploymentShare = App.utils.clamp(snapshot.longUnemploymentShare / snapshot.count, 0, 1);
+    avgDemandGrowth = App.utils.clamp(snapshot.demandGrowth / snapshot.count, -0.35, 0.35);
+    avgGini = App.utils.clamp(snapshot.giniCoefficient / snapshot.count, 0.2, 0.8);
+    avgTopOneWealthShare = App.utils.clamp(snapshot.topOneWealthShare / snapshot.count, 0.12, 0.95);
+    avgIntergenerationalMobilityIndex = App.utils.clamp(snapshot.intergenerationalMobilityIndex / snapshot.count, 0, 1);
+    avgMedianHouseholdWealthGU = Math.max(0, snapshot.medianHouseholdWealthGU / snapshot.count);
+
+    if (unemploymentRate >= 0.14 || avgDemandGrowth <= -0.025 || avgLongUnemploymentShare >= 0.12) {
+      stance = "supportive";
+    } else if (avgScarcity >= 0.76 && avgWagePressure >= 0.11 && unemploymentRate <= 0.075) {
+      stance = "tightening";
+    }
+
+    return {
+      stance:stance,
+      evidence:{
+        unemploymentRate:unemploymentRate,
+        laborScarcity:avgScarcity,
+        wagePressure:avgWagePressure,
+        longUnemploymentShare:avgLongUnemploymentShare,
+        demandGrowth:avgDemandGrowth,
+        giniCoefficient:avgGini,
+        topOneWealthShare:avgTopOneWealthShare,
+        intergenerationalMobilityIndex:avgIntergenerationalMobilityIndex,
+        medianHouseholdWealthGU:avgMedianHouseholdWealthGU
+      }
+    };
+  }
+
+  function refreshBlocPolicyStance(bloc){
+    var snapshot;
+    var derived;
+
+    if (!bloc) return "neutral";
+
+    snapshot = getBlocPolicySnapshot(bloc);
+    derived = deriveBlocPolicyStance(snapshot);
+    bloc.policyStance = normalizePolicyStance(derived.stance);
+    bloc.policyEvidence = derived.evidence;
+    bloc.giniCoefficient = App.utils.clamp(Number(derived.evidence && derived.evidence.giniCoefficient) || 0.4, 0.2, 0.8);
+    bloc.topOneWealthShare = App.utils.clamp(Number(derived.evidence && derived.evidence.topOneWealthShare) || 0.3, 0.12, 0.95);
+    bloc.intergenerationalMobilityIndex = App.utils.clamp(Number(derived.evidence && derived.evidence.intergenerationalMobilityIndex) || 0.5, 0, 1);
+    bloc.medianHouseholdWealthGU = Math.max(0, Number(derived.evidence && derived.evidence.medianHouseholdWealthGU) || 0);
+    return bloc.policyStance;
+  }
+
+  function computeMedianNumber(values){
+    var sample = (values || []).filter(function(value){
+      return Number.isFinite(value);
+    }).sort(function(first, second){
+      return first - second;
+    });
+    var middle;
+
+    if (!sample.length) return 0;
+
+    middle = Math.floor(sample.length / 2);
+    if (sample.length % 2 === 0) {
+      return (sample[middle - 1] + sample[middle]) / 2;
+    }
+
+    return sample[middle];
+  }
+
+  function updateInequalityMetricsYearly(){
+    var householdsByCountry = {};
+
+    (App.store.households || []).forEach(function(household){
+      var iso;
+
+      if (!household || !household.countryISO) return;
+      refreshHouseholdSnapshot(household);
+      iso = household.countryISO;
+      if (!householdsByCountry[iso]) householdsByCountry[iso] = [];
+      householdsByCountry[iso].push(household);
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var households = householdsByCountry[iso] || [];
+      var wealthValues;
+      var sortedWealth;
+      var positiveTotalWealth;
+      var topCount;
+      var topWealth;
+      var mobilityScores;
+      var upwardShare;
+      var downwardShare;
+      var intergenerationalMobilityIndex;
+      var medianHouseholdWealth;
+      var topOneWealthShare;
+
+      if (!profile) return;
+
+      wealthValues = households.map(function(household){
+        var netWorth = Number(household.assetNetWorthGU);
+        if (!Number.isFinite(netWorth)) {
+          netWorth = (Number(household.assetCashGU) || Number(household.cashOnHandGU) || 0) +
+            (Number(household.assetEquityGU) || 0) +
+            (Number(household.assetBusinessOwnershipGU) || 0) +
+            (Number(household.assetPropertyGU) || 0) +
+            (Number(household.assetTrustGU) || 0) -
+            (Number(household.assetDebtObligationsGU) || Number(household.debtGU) || 0);
+        }
+        return Number.isFinite(netWorth) ? netWorth : 0;
+      });
+
+      medianHouseholdWealth = Math.max(0, computeMedianNumber(wealthValues));
+      sortedWealth = wealthValues.slice().sort(function(first, second){
+        return second - first;
+      });
+      positiveTotalWealth = Math.max(1, wealthValues.reduce(function(sum, value){
+        return sum + Math.max(0, value);
+      }, 0));
+      topCount = Math.max(1, Math.ceil(sortedWealth.length * 0.01));
+      topWealth = sortedWealth.slice(0, topCount).reduce(function(sum, value){
+        return sum + Math.max(0, value);
+      }, 0);
+      topOneWealthShare = App.utils.clamp(topWealth / positiveTotalWealth, 0.12, 0.95);
+
+      mobilityScores = households.map(function(household){
+        return Number(household.mobilityScore) || 0;
+      });
+      upwardShare = households.length ? households.filter(function(household){
+        return householdClassRank(household.classTier) > householdClassRank(household.originClassTier || household.classTier);
+      }).length / households.length : 0;
+      downwardShare = households.length ? households.filter(function(household){
+        return householdClassRank(household.classTier) < householdClassRank(household.originClassTier || household.classTier);
+      }).length / households.length : 0;
+      intergenerationalMobilityIndex = App.utils.clamp(0.5 + ((upwardShare - downwardShare) * 0.35) + (computeMedianNumber(mobilityScores) / 160), 0, 1);
+
+      profile.medianHouseholdWealthGU = medianHouseholdWealth;
+      profile.topOneWealthShare = topOneWealthShare;
+      profile.intergenerationalMobilityIndex = intergenerationalMobilityIndex;
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.medianHouseholdWealthGU = Number(medianHouseholdWealth.toFixed(2));
+      profile.policyEvidence.topOneWealthShare = Number(topOneWealthShare.toFixed(4));
+      profile.policyEvidence.intergenerationalMobilityIndex = Number(intergenerationalMobilityIndex.toFixed(4));
+
+      refreshCountryProfileDerived(profile);
+    });
+
+    (App.store.blocs || []).forEach(function(bloc){
+      var members = (App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : []).filter(Boolean);
+      var weightedPopulation = members.reduce(function(sum, profile){
+        return sum + Math.max(1, Number(profile.population) || 1);
+      }, 0);
+      var weightedGini = members.reduce(function(sum, profile){
+        var weight = Math.max(1, Number(profile.population) || 1);
+        return sum + (App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8) * weight);
+      }, 0);
+      var weightedTopOne = members.reduce(function(sum, profile){
+        var weight = Math.max(1, Number(profile.population) || 1);
+        return sum + (App.utils.clamp(Number(profile.topOneWealthShare) || 0.3, 0.12, 0.95) * weight);
+      }, 0);
+      var weightedMobility = members.reduce(function(sum, profile){
+        var weight = Math.max(1, Number(profile.population) || 1);
+        return sum + (App.utils.clamp(Number(profile.intergenerationalMobilityIndex) || 0.5, 0, 1) * weight);
+      }, 0);
+      var medianWealthValues = members.map(function(profile){
+        return Math.max(0, Number(profile.medianHouseholdWealthGU) || 0);
+      });
+      var policyStance;
+
+      if (!members.length) return;
+
+      bloc.giniCoefficient = App.utils.clamp(weightedGini / Math.max(1, weightedPopulation), 0.2, 0.8);
+      bloc.topOneWealthShare = App.utils.clamp(weightedTopOne / Math.max(1, weightedPopulation), 0.12, 0.95);
+      bloc.intergenerationalMobilityIndex = App.utils.clamp(weightedMobility / Math.max(1, weightedPopulation), 0, 1);
+      bloc.medianHouseholdWealthGU = Math.max(0, computeMedianNumber(medianWealthValues));
+      policyStance = refreshBlocPolicyStance(bloc);
+      bloc.policyStance = normalizePolicyStance(policyStance);
+      bloc.policyEvidence = bloc.policyEvidence && typeof bloc.policyEvidence === "object" ? bloc.policyEvidence : {};
+      bloc.policyEvidence.giniCoefficient = Number(bloc.giniCoefficient.toFixed(4));
+      bloc.policyEvidence.topOneWealthShare = Number(bloc.topOneWealthShare.toFixed(4));
+      bloc.policyEvidence.intergenerationalMobilityIndex = Number(bloc.intergenerationalMobilityIndex.toFixed(4));
+      bloc.policyEvidence.medianHouseholdWealthGU = Number(bloc.medianHouseholdWealthGU.toFixed(2));
+    });
+  }
+
+  function phase6SocialUnrestFromInequality(){
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var laborForce;
+      var unemploymentRate;
+      var longUnemploymentShare;
+      var gini;
+      var topOneShare;
+      var mobilityIndex;
+      var socialPressure;
+      var housingStress;
+      var housingCostPressure;
+      var prevStrikeRisk;
+      var prevPopulism;
+      var prevCrime;
+      var prevEmigration;
+      var prevInstability;
+      var strikeRiskTarget;
+      var populismTarget;
+      var crimeTarget;
+      var emigrationTarget;
+      var instabilityTarget;
+      var socialUnrest;
+      var instabilityDrag;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+      laborForce = Math.max(1, Number(profile.laborForce) || 1);
+      unemploymentRate = App.utils.clamp(Math.max(0, Number(profile.unemployed) || 0) / laborForce, 0, 1);
+      longUnemploymentShare = App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
+      gini = App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
+      topOneShare = App.utils.clamp(Number(profile.topOneWealthShare) || 0.3, 0.12, 0.95);
+      mobilityIndex = App.utils.clamp(Number(profile.intergenerationalMobilityIndex) || 0.5, 0, 1);
+      socialPressure = App.utils.clamp(Number(profile.socialPressureIndex) || 0, 0, 1.5);
+      housingStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+      housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+
+      prevStrikeRisk = App.utils.clamp(Number(profile.strikeRiskIndex) || 0.22, 0, 1.4);
+      prevPopulism = App.utils.clamp(Number(profile.populismIndex) || 0.24, 0, 1.6);
+      prevCrime = App.utils.clamp(Number(profile.crimeProxyIndex) || 0.22, 0, 1.6);
+      prevEmigration = App.utils.clamp(Number(profile.emigrationPressureIndex) || 0.24, 0, 1.6);
+      prevInstability = App.utils.clamp(Number(profile.institutionalInstabilityIndex) || 0.2, 0, 1.6);
+
+      strikeRiskTarget =
+        (Math.max(0, gini - 0.36) * 1.2) +
+        (Math.max(0, topOneShare - 0.28) * 0.95) +
+        (unemploymentRate * 0.55) +
+        (socialPressure * 0.22) +
+        (Math.max(0, 0.52 - mobilityIndex) * 0.45);
+      strikeRiskTarget = App.utils.clamp(strikeRiskTarget, 0, 1.4);
+
+      populismTarget =
+        (Math.max(0, gini - 0.35) * 1.15) +
+        (Math.max(0, topOneShare - 0.29) * 1.1) +
+        (Math.max(0, 0.54 - mobilityIndex) * 0.9) +
+        (socialPressure * 0.35) +
+        (housingStress * 0.22);
+      populismTarget = App.utils.clamp(populismTarget, 0, 1.6);
+
+      crimeTarget =
+        (unemploymentRate * 0.62) +
+        (longUnemploymentShare * 0.34) +
+        (Math.max(0, gini - 0.35) * 0.86) +
+        (Math.max(0, housingCostPressure - 1) * 0.4) +
+        (socialPressure * 0.24);
+      crimeTarget = App.utils.clamp(crimeTarget, 0, 1.6);
+
+      emigrationTarget =
+        (Math.max(0, housingCostPressure - 1) * 0.72) +
+        (housingStress * 0.22) +
+        (unemploymentRate * 0.5) +
+        (Math.max(0, gini - 0.36) * 0.72) +
+        (Math.max(0, 0.52 - mobilityIndex) * 0.55);
+      emigrationTarget = App.utils.clamp(emigrationTarget, 0, 1.6);
+
+      instabilityTarget =
+        (populismTarget * 0.42) +
+        (crimeTarget * 0.22) +
+        (Math.max(0, gini - 0.38) * 0.7) +
+        (Math.max(0, topOneShare - 0.31) * 0.78) +
+        (Math.max(0, 0.5 - mobilityIndex) * 0.46);
+      instabilityTarget = App.utils.clamp(instabilityTarget, 0, 1.6);
+
+      profile.strikeRiskIndex = App.utils.clamp((prevStrikeRisk * 0.64) + (strikeRiskTarget * 0.36), 0, 1.4);
+      profile.populismIndex = App.utils.clamp((prevPopulism * 0.66) + (populismTarget * 0.34), 0, 1.6);
+      profile.crimeProxyIndex = App.utils.clamp((prevCrime * 0.68) + (crimeTarget * 0.32), 0, 1.6);
+      profile.emigrationPressureIndex = App.utils.clamp((prevEmigration * 0.62) + (emigrationTarget * 0.38), 0, 1.6);
+      profile.institutionalInstabilityIndex = App.utils.clamp((prevInstability * 0.67) + (instabilityTarget * 0.33), 0, 1.6);
+      socialUnrest =
+        (profile.strikeRiskIndex * 0.24) +
+        (profile.populismIndex * 0.24) +
+        (profile.crimeProxyIndex * 0.2) +
+        (profile.emigrationPressureIndex * 0.16) +
+        (profile.institutionalInstabilityIndex * 0.16);
+      profile.socialUnrestIndex = App.utils.clamp(socialUnrest, 0, 1.8);
+
+      instabilityDrag = App.utils.clamp((profile.institutionalInstabilityIndex - 0.45) * 0.016, 0, 0.026);
+      profile.institutionScore = App.utils.clamp((Number(profile.institutionScore) || 0.55) - instabilityDrag, 0.1, 1);
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.socialUnrestIndex = Number(profile.socialUnrestIndex.toFixed(4));
+      profile.policyEvidence.strikeRiskIndex = Number(profile.strikeRiskIndex.toFixed(4));
+      profile.policyEvidence.populismIndex = Number(profile.populismIndex.toFixed(4));
+      profile.policyEvidence.crimeProxyIndex = Number(profile.crimeProxyIndex.toFixed(4));
+      profile.policyEvidence.emigrationPressureIndex = Number(profile.emigrationPressureIndex.toFixed(4));
+      profile.policyEvidence.institutionalInstabilityIndex = Number(profile.institutionalInstabilityIndex.toFixed(4));
+      profile.policyEvidence.institutionInstabilityDrag = Number(instabilityDrag.toFixed(5));
+
+      refreshCountryProfileDerived(profile);
+    });
+
+    (App.store.blocs || []).forEach(function(bloc){
+      var profiles = App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : [];
+      var weightTotal = profiles.reduce(function(sum, profile){
+        return sum + Math.max(1, Number(profile && profile.population) || 1);
+      }, 0);
+      var weightedUnrest = profiles.reduce(function(sum, profile){
+        var weight = Math.max(1, Number(profile && profile.population) || 1);
+        return sum + (App.utils.clamp(Number(profile && profile.socialUnrestIndex) || 0, 0, 1.8) * weight);
+      }, 0);
+
+      if (!profiles.length) return;
+      bloc.socialUnrestIndex = App.utils.clamp(weightedUnrest / Math.max(1, weightTotal), 0, 1.8);
+      bloc.policyEvidence = bloc.policyEvidence && typeof bloc.policyEvidence === "object" ? bloc.policyEvidence : {};
+      bloc.policyEvidence.socialUnrestIndex = Number(bloc.socialUnrestIndex.toFixed(4));
+    });
+  }
+
   function getCountryLaborScarcity(iso){
     var profile = ensureCountryProfile(iso);
+    var laborSnapshot;
     var laborForce;
     var available;
 
     if (!profile) return 0;
 
     refreshCountryProfileDerived(profile);
-    laborForce = Math.max(1, Number(profile.laborForce) || 0);
-    available = Math.max(0, laborForce - (Number(profile.employed) || 0));
+    laborSnapshot = getSimCountryLaborSnapshot(iso);
+    laborForce = Math.max(1, laborSnapshot.laborForce || Number(profile.laborForce) || 0);
+    available = Math.max(0, laborSnapshot.available);
     return App.utils.clamp(1 - (available / laborForce), 0, 1);
+  }
+
+  function getSimCountryLaborSnapshot(iso){
+    var laborForce = 0;
+    var employed = 0;
+
+    App.store.getLivingPeople().forEach(function(person){
+      if (!person || person.countryISO !== iso) return;
+      if ((Number(person.age) || 0) < 18 || person.retired) return;
+      laborForce += 1;
+      if (person.businessId || person.employerBusinessId) {
+        employed += 1;
+      }
+    });
+
+    return {
+      laborForce:laborForce,
+      employed:employed,
+      available:Math.max(0, laborForce - employed)
+    };
   }
 
   function getCountryLongUnemploymentShare(iso){
     var profile = ensureCountryProfile(iso);
     var longUnemployed;
+    var laborSnapshot;
 
     if (!profile) return 0;
 
@@ -1744,7 +3034,8 @@
         (Number(person.unemploymentStreakDays) || 0) >= LONG_UNEMPLOYMENT_DAYS;
     }).length;
 
-    return App.utils.clamp(longUnemployed / Math.max(1, Number(profile.laborForce) || 1), 0, 1);
+      laborSnapshot = getSimCountryLaborSnapshot(iso);
+      return App.utils.clamp(longUnemployed / Math.max(1, laborSnapshot.laborForce || Number(profile.laborForce) || 1), 0, 1);
   }
 
   function getCountryWagePressure(iso){
@@ -1771,32 +3062,62 @@
     return App.utils.clamp((industryEmployees / laborForce) * 3.2 + Math.max(0, 0.25 - unemploymentRate) * 1.6, 0, 1.6);
   }
 
-  function pullMobileLaborIntoCountry(iso, amount){
+  function pullMobileLaborIntoCountry(iso, amount, migrationSignals){
     var request = Math.max(0, floorInt(amount));
     var targetProfile = ensureCountryProfile(iso);
     var bloc = App.store.getBlocByCountry ? App.store.getBlocByCountry(iso) : null;
+    var signals = migrationSignals && typeof migrationSignals === "object" ? migrationSignals : {};
+    var educationPull = App.utils.clamp(Number(signals.educationPull) || 0, 0, 1.2);
+    var safetyPull = App.utils.clamp(Number(signals.safetyPull) || 0, 0, 1.2);
+    var marriageStatusPull = App.utils.clamp(Number(signals.marriageStatusPull) || 0, 0, 1.2);
+    var jobsPull = App.utils.clamp(Number(signals.jobsPull) || 0, 0, 1.5);
     var moved = 0;
 
     if (!targetProfile || !bloc || request <= 0) return 0;
 
-    (bloc.members || []).filter(function(memberIso){
+    Object.keys(App.store.countryProfiles || {}).filter(function(memberIso){
       return memberIso && memberIso !== iso;
     }).map(function(memberIso){
       var source = ensureCountryProfile(memberIso);
       var available = source ? Math.max(0, (Number(source.laborForce) || 0) - (Number(source.employed) || 0)) : 0;
+      var sourceBloc = source ? (source.blocId || (App.store.isoToBloc ? App.store.isoToBloc[memberIso] : null)) : null;
+      var sameBloc = !!(sourceBloc && bloc && sourceBloc === bloc.id);
+      var sourceUnemployment = source ? App.utils.clamp((Number(source.unemployed) || 0) / Math.max(1, Number(source.laborForce) || 1), 0, 1) : 0;
+      var sourcePressure = source ? App.utils.clamp(Number(source.emigrationPressureIndex) || 0, 0, 1.6) : 0;
+      var sourceEducation = source ? App.utils.clamp(Number(source.educationIndex) || 0.6, 0.1, 1) : 0.6;
+      var targetEducation = App.utils.clamp(Number(targetProfile.educationIndex) || 0.6, 0.1, 1);
+      var targetSafety = App.utils.clamp(1 - (Number(targetProfile.socialUnrestIndex) || 0.3), 0, 1.2);
+      var sourceSafety = source ? App.utils.clamp(1 - (Number(source.socialUnrestIndex) || 0.3), 0, 1.2) : 0.7;
+      var crossBorderFactor = sameBloc ? 1 : 0.68;
+      var migrationAttraction =
+        (Math.max(0, sourceUnemployment - 0.08) * 0.9) +
+        (sourcePressure * 0.7) +
+        (Math.max(0, targetEducation - sourceEducation) * (0.5 + educationPull * 0.6)) +
+        (Math.max(0, targetSafety - sourceSafety) * (0.45 + safetyPull * 0.55)) +
+        ((jobsPull + marriageStatusPull) * 0.14);
+
       return {
         iso:memberIso,
         profile:source,
-        available:available
+        available:available,
+        sameBloc:sameBloc,
+        migrationAttraction:migrationAttraction * crossBorderFactor
       };
     }).filter(function(entry){
       return entry.profile && entry.available > 0;
     }).sort(function(first, second){
+      if (second.migrationAttraction !== first.migrationAttraction) return second.migrationAttraction - first.migrationAttraction;
       return second.available - first.available;
     }).forEach(function(entry){
       var source = entry.profile;
       var sourcePopulation;
       var targetPopulation;
+      var sourceLaborForce;
+      var targetLaborForce;
+      var sourceTalentScore;
+      var targetTalentScore;
+      var sourceEducationDelta;
+      var targetEducationDelta;
       var room;
       var cap;
       var flow;
@@ -1813,6 +3134,19 @@
       source.population = Math.max(1, sourcePopulation - flow);
       source.netMigrationRatePer1000 = App.utils.clamp((Number(source.netMigrationRatePer1000) || 0) - ((flow / sourcePopulation) * 1000), -50, 50);
       source.mobilityOutflowAnnual = Math.max(0, Number(source.mobilityOutflowAnnual) || 0) + flow;
+      relocateMobileWorkers(entry.iso, iso, flow);
+
+      sourceLaborForce = Math.max(1, Number(source.laborForce) || 1);
+      targetLaborForce = Math.max(1, Number(targetProfile.laborForce) || 1);
+      sourceTalentScore = App.utils.clamp(((Number(source.educationIndex) || 0.6) * 0.72) + ((Number(source.institutionScore) || 0.55) * 0.28), 0.1, 1);
+      targetTalentScore = App.utils.clamp(((Number(targetProfile.educationIndex) || 0.6) * 0.72) + ((Number(targetProfile.institutionScore) || 0.55) * 0.28), 0.1, 1);
+      sourceEducationDelta = (flow / sourceLaborForce) * 4.2 * (0.55 + sourceTalentScore) * (0.85 + educationPull * 1.1);
+      targetEducationDelta = (flow / targetLaborForce) * 4.8 * (0.45 + sourceTalentScore) * (0.85 + educationPull * 1.25);
+
+      source.educationIndex = App.utils.clamp((Number(source.educationIndex) || 0.6) - sourceEducationDelta, 0.1, 1);
+      targetProfile.educationIndex = App.utils.clamp((Number(targetProfile.educationIndex) || 0.6) + targetEducationDelta, 0.1, 1);
+      source.talentDriftBalance = App.utils.clamp((Number(source.talentDriftBalance) || 0) - (sourceEducationDelta * (0.8 + targetTalentScore)), -1.5, 1.5);
+      targetProfile.talentDriftBalance = App.utils.clamp((Number(targetProfile.talentDriftBalance) || 0) + (targetEducationDelta * (0.8 + sourceTalentScore)), -1.5, 1.5);
       refreshCountryProfileDerived(source);
 
       targetProfile.laborForce = Math.max(0, (Number(targetProfile.laborForce) || 0) + flow);
@@ -1827,17 +3161,98 @@
     return moved;
   }
 
+  function applyInternalMigrationUrbanFlows(iso, driverSignals){
+    var profile = ensureCountryProfile(iso);
+    var details;
+    var signals = driverSignals && typeof driverSignals === "object" ? driverSignals : {};
+    var jobsPull = App.utils.clamp(Number(signals.jobsPull) || 0, 0, 1.5);
+    var educationPull = App.utils.clamp(Number(signals.educationPull) || 0, 0, 1.5);
+    var marriageStatusPull = App.utils.clamp(Number(signals.marriageStatusPull) || 0, 0, 1.5);
+    var pressure = App.utils.clamp(Number(signals.migrationPressure) || 0, -0.45, 0.55);
+    var population = Math.max(1, Number(profile && profile.population) || 1);
+    var request;
+    var candidates;
+    var moved = 0;
+    var talentMoved = 0;
+
+    if (!profile || !App.data || typeof App.data.getWorldCityDetailsByCountry !== "function") {
+      return { moved:0, talentMoved:0 };
+    }
+
+    details = App.data.getWorldCityDetailsByCountry(iso, 40);
+    if (!details || details.length < 2) return { moved:0, talentMoved:0 };
+
+    request = Math.round(
+      Math.min(
+        20,
+        Math.max(0, (jobsPull * 5.2) + (educationPull * 3.8) + (marriageStatusPull * 2.6) + (Math.max(0, pressure) * 6.5))
+      )
+    );
+    request += Math.max(0, Math.min(8, Math.floor((population / 15000000) * (jobsPull + educationPull) * 0.5)));
+    if (request <= 0) return { moved:0, talentMoved:0 };
+
+    candidates = App.store.getLivingPeople().filter(function(person){
+      if (!person || person.countryISO !== iso || !person.alive || person.retired) return false;
+      if (person.businessId) return false;
+      if ((Number(person.age) || 0) < 18) return false;
+      return true;
+    }).sort(function(first, second){
+      var firstNeed = 0;
+      var secondNeed = 0;
+
+      firstNeed += !first.employerBusinessId ? 14 : 0;
+      firstNeed += Math.min(10, (Number(first.unemploymentStreakDays) || 0) / 28);
+      firstNeed += Math.max(0, ((Number(first.educationIndex) || 0) - 60) / 8);
+      firstNeed += App.utils.clamp(getTraitChannelScore(first, "mobility"), -6, 8);
+      firstNeed += !first.spouseId ? 2 : 0;
+
+      secondNeed += !second.employerBusinessId ? 14 : 0;
+      secondNeed += Math.min(10, (Number(second.unemploymentStreakDays) || 0) / 28);
+      secondNeed += Math.max(0, ((Number(second.educationIndex) || 0) - 60) / 8);
+      secondNeed += App.utils.clamp(getTraitChannelScore(second, "mobility"), -6, 8);
+      secondNeed += !second.spouseId ? 2 : 0;
+
+      return secondNeed - firstNeed;
+    });
+
+    candidates.slice(0, request).forEach(function(person){
+      var targetCity;
+      var targetSubdivision;
+      var currentCity = normalizeText(person.city);
+
+      targetCity = pickCountryCity(iso, [person.id, iso, App.store.simDay, "internal-mobility", currentCity || ""].join("|"), null);
+      if (!targetCity || normalizeText(targetCity) === currentCity) return;
+
+      targetSubdivision = resolveSubdivisionForCity(iso, targetCity, person.subdivision || person.state);
+      if (!relocatePersonToCountry(person, iso, { city:targetCity, subdivision:targetSubdivision })) return;
+
+      moved += 1;
+      if ((Number(person.educationIndex) || 0) >= 68 || person.jobTier === "executive" || person.jobTier === "leadership") {
+        talentMoved += 1;
+      }
+      syncPerson(person);
+    });
+
+    return { moved:moved, talentMoved:talentMoved };
+  }
+
   function applyLaborMarketYearlyAdjustments(){
     Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
       var profile = ensureCountryProfile(iso);
+      var bloc = App.store.getBloc(profile && profile.blocId) || App.store.getBlocByCountry(iso);
       var laborForce;
       var unemploymentRate;
       var laborScarcity;
       var longUnemploymentShare;
       var demandGrowth;
+      var adjustedDemandGrowth;
       var wagePressure;
       var talentShortageIndex;
       var previousDemand;
+      var countryStance;
+      var blocStance;
+      var countryPolicyEffects;
+      var blocPolicyEffects;
 
       if (!profile) return;
 
@@ -1848,15 +3263,40 @@
       longUnemploymentShare = getCountryLongUnemploymentShare(iso);
       previousDemand = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
       demandGrowth = ((Number(profile.consumerDemandGU) || 0) - previousDemand) / previousDemand;
+      countryStance = refreshCountryPolicyStance(profile, {
+        unemploymentRate:unemploymentRate,
+        laborScarcity:laborScarcity,
+        wagePressure:Number(profile.wagePressure) || 0,
+        longUnemploymentShare:longUnemploymentShare,
+        demandGrowth:demandGrowth
+      });
+      blocStance = refreshBlocPolicyStance(bloc);
+      countryPolicyEffects = COUNTRY_POLICY_STANCE_EFFECTS[countryStance] || COUNTRY_POLICY_STANCE_EFFECTS.neutral;
+      blocPolicyEffects = BLOC_POLICY_STANCE_EFFECTS[blocStance] || BLOC_POLICY_STANCE_EFFECTS.neutral;
+      adjustedDemandGrowth = App.utils.clamp(
+        demandGrowth +
+        (countryPolicyEffects.demandGrowthBias || 0) +
+        (blocPolicyEffects.demandGrowthBias || 0),
+        -0.25,
+        0.25
+      );
 
       wagePressure =
         (laborScarcity * 0.75) +
-        (App.utils.clamp(demandGrowth, -0.25, 0.25) * 0.55) -
+        (adjustedDemandGrowth * 0.55) -
         (unemploymentRate * 0.65) -
         (longUnemploymentShare * 0.45);
+      wagePressure += (countryPolicyEffects.wagePressureBias || 0) + (blocPolicyEffects.wagePressureBias || 0);
       wagePressure = App.utils.clamp(wagePressure, -0.32, 0.34);
 
       talentShortageIndex = App.utils.clamp((laborScarcity * 0.58) + (Math.max(0, 0.24 - unemploymentRate) * 1.5) + (longUnemploymentShare * 0.22), 0, 1);
+      talentShortageIndex = App.utils.clamp(
+        talentShortageIndex +
+        (countryPolicyEffects.talentShortageBias || 0) +
+        (blocPolicyEffects.talentShortageBias || 0),
+        0,
+        1
+      );
 
       profile.wagePressure = wagePressure;
       profile.longUnemploymentShare = longUnemploymentShare;
@@ -1893,6 +3333,21 @@
       household.annualIncomeGU = App.utils.clamp(Number(household.annualIncomeGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU);
       household.monthlyIncomeGU = App.utils.clamp(Number(household.monthlyIncomeGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU / 12);
       household.monthlyExpensesGU = App.utils.clamp(Number(household.monthlyExpensesGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU / 12);
+      household.housingBurdenRatio = App.utils.clamp(Number(household.housingBurdenRatio) || 0, 0.08, 1.9);
+      household.housingSavingsPressure = App.utils.clamp(Number(household.housingSavingsPressure) || 0, 0.08, 2.2);
+      household.housingOwnershipScore = App.utils.clamp(Number(household.housingOwnershipScore) || 0, 0, 1);
+      household.housingAffordabilityScore = App.utils.clamp(Number(household.housingAffordabilityScore) || 0, 0.05, 1);
+      household.assetCashGU = App.utils.clamp(Number(household.assetCashGU) || Number(household.cashOnHandGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU);
+      household.assetEquityGU = App.utils.clamp(Number(household.assetEquityGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 2);
+      household.assetBusinessOwnershipGU = App.utils.clamp(Number(household.assetBusinessOwnershipGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 2);
+      household.assetPropertyGU = App.utils.clamp(Number(household.assetPropertyGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 2);
+      household.assetTrustGU = App.utils.clamp(Number(household.assetTrustGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 2);
+      household.assetDebtObligationsGU = App.utils.clamp(Number(household.assetDebtObligationsGU) || Number(household.debtGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 2);
+      household.assetTotalGU = App.utils.clamp(Number(household.assetTotalGU) || 0, 0, MAX_HOUSEHOLD_BALANCE_GU * 8);
+      household.assetNetWorthGU = App.utils.clamp(Number(household.assetNetWorthGU) || 0, -MAX_HOUSEHOLD_BALANCE_GU * 2, MAX_HOUSEHOLD_BALANCE_GU * 8);
+      household.assetYieldAnnualGU = App.utils.clamp(Number(household.assetYieldAnnualGU) || 0, -MAX_HOUSEHOLD_BALANCE_GU, MAX_HOUSEHOLD_BALANCE_GU);
+      household.assetReturnRateAnnual = App.utils.clamp(Number(household.assetReturnRateAnnual) || 0, -0.8, 1.5);
+      normalizeHouseholdAssetClasses(household);
     });
 
     Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
@@ -1900,6 +3355,24 @@
       if (!profile) return;
       profile.medianWageGU = App.utils.clamp(Number(profile.medianWageGU) || 0, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
       profile.consumerDemandGU = App.utils.clamp(Number(profile.consumerDemandGU) || 0, 0, MAX_COUNTRY_DEMAND_GU);
+      profile.housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+      profile.housingRentBurden = App.utils.clamp(Number(profile.housingRentBurden) || 0.34, 0.08, 0.9);
+      profile.housingHomeownershipRate = App.utils.clamp(Number(profile.housingHomeownershipRate) || 0.52, 0.05, 0.95);
+      profile.housingAffordabilityIndex = App.utils.clamp(Number(profile.housingAffordabilityIndex) || 0.52, 0.05, 1);
+      profile.housingPriceGrowth = App.utils.clamp(Number(profile.housingPriceGrowth) || 0.02, -0.18, 0.26);
+      profile.housingMarketStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+      profile.medianHouseholdWealthGU = Math.max(0, Number(profile.medianHouseholdWealthGU) || 0);
+      profile.topOneWealthShare = App.utils.clamp(Number(profile.topOneWealthShare) || 0.3, 0.12, 0.95);
+      profile.intergenerationalMobilityIndex = App.utils.clamp(Number(profile.intergenerationalMobilityIndex) || 0.5, 0, 1);
+      profile.socialUnrestIndex = App.utils.clamp(Number(profile.socialUnrestIndex) || 0.28, 0, 1.8);
+      profile.strikeRiskIndex = App.utils.clamp(Number(profile.strikeRiskIndex) || 0.22, 0, 1.4);
+      profile.populismIndex = App.utils.clamp(Number(profile.populismIndex) || 0.24, 0, 1.6);
+      profile.crimeProxyIndex = App.utils.clamp(Number(profile.crimeProxyIndex) || 0.22, 0, 1.6);
+      profile.emigrationPressureIndex = App.utils.clamp(Number(profile.emigrationPressureIndex) || 0.24, 0, 1.6);
+      profile.institutionalInstabilityIndex = App.utils.clamp(Number(profile.institutionalInstabilityIndex) || 0.2, 0, 1.6);
+      profile.philanthropicCapitalAnnualGU = Math.max(0, Number(profile.philanthropicCapitalAnnualGU) || 0);
+      profile.philanthropyImpactIndex = App.utils.clamp(Number(profile.philanthropyImpactIndex) || 0, 0, 1.6);
+      profile.legacyProjectsIndex = App.utils.clamp(Number(profile.legacyProjectsIndex) || 0, 0, 1.4);
       refreshCountryProfileDerived(profile);
     });
   }
@@ -1923,38 +3396,744 @@
     });
   }
 
-  function phase1UpdateLaborAndDemand(){
+  function updateCountryLaborSupplyBaseline(){
     Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
       var profile = App.store.countryProfiles[iso];
       var participation = App.utils.clamp(Number(profile.laborForceParticipation) || 0.55, 0.25, 0.9);
       var derivedLaborForce = Math.max(0, Math.round((Number(profile.population) || 0) * participation));
 
+      if (!profile) return;
+
       profile.laborForceParticipation = participation;
       profile.laborForce = derivedLaborForce;
       profile.employed = Math.min(Math.max(0, floorInt(profile.employed)), derivedLaborForce);
+      profile.unemployed = Math.max(0, derivedLaborForce - profile.employed);
+      ensureCountryIndustryMarketState(profile);
+    });
+  }
+
+  function updateCountryConsumptionAndHousingSignals(){
+    var consumerSignalsByCountry = buildCountryConsumerSpendingSignals();
+    var housingSignalsByCountry = buildCountryHousingMarketSignals();
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = App.store.countryProfiles[iso];
+      var consumerSignals = consumerSignalsByCountry[iso];
+      var housingSignals = housingSignalsByCountry[iso];
+      var industryWeighted;
+      var housingCostPressure;
+      var housingRentBurden;
+      var housingHomeownershipRate;
+      var housingAffordability;
+      var housingMarketStress;
+      var housingPriceGrowth;
+      var housingPriceTarget;
+      var institution;
+      var gini;
+      var populationPressure;
+
+      if (!profile) return;
+
+      if (consumerSignals && consumerSignals.weightSum > 0) {
+        industryWeighted = {};
+        Object.keys(consumerSignals.industryWeightedSums || {}).forEach(function(industry){
+          industryWeighted[industry] = consumerSignals.industryWeightedSums[industry] / consumerSignals.weightSum;
+        });
+
+        profile.consumerSpendMultiplier = App.utils.clamp(consumerSignals.spendWeightedSum / consumerSignals.weightSum, 0.55, 1.22);
+        profile.consumerCostOfLivingPressure = App.utils.clamp(consumerSignals.costWeightedSum / consumerSignals.weightSum, 0.65, 1.85);
+        profile.consumerStressIndex = App.utils.clamp(consumerSignals.stressWeightedSum / consumerSignals.weightSum, 0, 1);
+        profile.consumerIndustryDemandWeights = normalizeConsumerIndustryDemandWeights(industryWeighted);
+      } else {
+        profile.consumerSpendMultiplier = App.utils.clamp(Number(profile.consumerSpendMultiplier) || 0.94, 0.55, 1.22);
+        profile.consumerCostOfLivingPressure = App.utils.clamp(Number(profile.consumerCostOfLivingPressure) || 1.02, 0.65, 1.85);
+        profile.consumerStressIndex = App.utils.clamp(Number(profile.consumerStressIndex) || 0.4, 0, 1);
+        profile.consumerIndustryDemandWeights = normalizeConsumerIndustryDemandWeights(profile.consumerIndustryDemandWeights);
+      }
+
+      institution = App.utils.clamp(Number(profile.institutionScore) || 0.55, 0.1, 1);
+      gini = App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
+      populationPressure = App.utils.clamp(Number(profile.populationPressure) || 0.5, 0, 1);
+
+      if (housingSignals && housingSignals.weightSum > 0) {
+        housingRentBurden = App.utils.clamp(housingSignals.burdenWeightedSum / housingSignals.weightSum, 0.08, 0.9);
+        housingHomeownershipRate = App.utils.clamp(housingSignals.ownershipWeightedSum / housingSignals.weightSum, 0.05, 0.95);
+        housingAffordability = App.utils.clamp(housingSignals.affordabilityWeightedSum / housingSignals.weightSum, 0.05, 1);
+        housingCostPressure = App.utils.clamp((housingRentBurden * 1.16) + ((1 - housingAffordability) * 0.4) + ((gini - 0.35) * 0.22), 0.65, 2.2);
+        housingMarketStress = App.utils.clamp((housingSignals.savingsWeightedSum / housingSignals.weightSum) * 0.56 + Math.max(0, housingCostPressure - 1) * 0.55 + Math.max(0, 0.4 - housingHomeownershipRate) * 0.55, 0, 1.5);
+      } else {
+        housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+        housingRentBurden = App.utils.clamp(Number(profile.housingRentBurden) || 0.34, 0.08, 0.9);
+        housingHomeownershipRate = App.utils.clamp(Number(profile.housingHomeownershipRate) || 0.52, 0.05, 0.95);
+        housingAffordability = App.utils.clamp(Number(profile.housingAffordabilityIndex) || 0.52, 0.05, 1);
+        housingMarketStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+      }
+
+      housingPriceTarget =
+        ((housingCostPressure - 1) * 0.08) +
+        ((populationPressure - 0.5) * 0.05) +
+        ((housingMarketStress - 0.5) * 0.03) -
+        ((institution - 0.55) * 0.03) -
+        ((housingHomeownershipRate - 0.52) * 0.03);
+      if (housingMarketStress >= 0.72 && housingHomeownershipRate < 0.48) {
+        housingPriceTarget += 0.018;
+      }
+      if (housingCostPressure < 0.95 && housingHomeownershipRate > 0.62) {
+        housingPriceTarget -= 0.014;
+      }
+
+      housingPriceGrowth = App.utils.clamp(Number(profile.housingPriceGrowth) || 0.02, -0.18, 0.26);
+      profile.housingCostPressure = housingCostPressure;
+      profile.housingRentBurden = housingRentBurden;
+      profile.housingHomeownershipRate = housingHomeownershipRate;
+      profile.housingAffordabilityIndex = housingAffordability;
+      profile.housingMarketStress = housingMarketStress;
+      profile.housingPriceGrowth = App.utils.clamp((housingPriceGrowth * 0.64) + (housingPriceTarget * 0.36), -0.18, 0.26);
+
       refreshCountryProfileDerived(profile);
     });
   }
 
+  function phase1UpdateLaborAndDemand(){
+    updateCountryLaborSupplyBaseline();
+    updateCountryConsumptionAndHousingSignals();
+  }
+
+  function annualEconomicStageProductionAndPayroll(){
+    (App.store.businesses || []).forEach(function(business){
+      var decision;
+      var leadershipFloor;
+
+      if (!business) return;
+
+      ensureBusinessDecisionState(business);
+      decision = business.currentDecision || evaluateBusinessDecision(business);
+      leadershipFloor = Math.max((business.leadership || []).length, 1);
+      if ((Number(business.employees) || 0) < leadershipFloor) {
+        business.employees = leadershipFloor;
+      }
+
+      refreshBusinessFirmStructure(business, decision);
+      business.currentDecision = decision;
+      business.productionCapacityGU = getBusinessProductionCapacityGU(business);
+      business.marketPriceIndex = App.utils.clamp(Number(business.marketPriceIndex) || 1, 0.72, 1.45);
+      business.marketAllocationRatio = App.utils.clamp(Number(business.marketAllocationRatio) || 1, 0.58, 1.52);
+      business.allocatedDemandGU = Math.max(0, Number(business.allocatedDemandGU) || 0);
+    });
+  }
+
+  function getModeledAnnualIncomeForPerson(person){
+    var business;
+    var businessDecision;
+    var household;
+    var profile;
+    var medianWage;
+    var baseIncome;
+
+    if (!person || !person.alive || person.age < 18) return 0;
+
+    business = App.store.getBusiness(person.businessId);
+    if (business) {
+      businessDecision = business.currentDecision || evaluateBusinessDecision(business);
+      return Math.max(0, (business.profitGU || 0) * (businessDecision.cashPolicy === "preserve" ? 0.28 : (businessDecision.cashPolicy === "balanced" ? 0.42 : 0.58)));
+    }
+
+    if (person.salaryGU > 0) {
+      return Math.max(0, person.salaryGU);
+    }
+
+    profile = ensureCountryProfile(person.countryISO);
+    medianWage = Math.max(1500, Number(profile && profile.medianWageGU) || 12000);
+    baseIncome = medianWage * (person.retired ? 0.34 : (0.38 + (Number(profile && profile.institutionScore) || 0.55) * 0.26));
+    household = getHouseholdForPerson(person);
+    if (household && household.financialStress > 70) {
+      baseIncome *= 0.92;
+    }
+    baseIncome *= App.utils.clamp(0.8 + ((Number(person.educationIndex) || 0) * 0.005), 0.8, 1.3);
+    baseIncome *= App.utils.clamp(0.86 + (getPersonSkillAverage(person) * 0.0032), 0.86, 1.18);
+    return Math.max(0, baseIncome);
+  }
+
+  function annualEconomicStageHouseholdIncome(){
+    (App.store.people || []).forEach(function(person){
+      if (!person) return;
+      person.modeledAnnualIncomeGU = Math.max(0, getModeledAnnualIncomeForPerson(person));
+      person.modeledMonthlyIncomeGU = Math.max(0, person.modeledAnnualIncomeGU / 12);
+    });
+  }
+
+  function annualEconomicStageConsumption(){
+    syncHouseholds();
+    (App.store.households || []).forEach(function(household){
+      refreshHouseholdSnapshot(household);
+    });
+    updateCountryConsumptionAndHousingSignals();
+  }
+
+  function annualEconomicStageDemand(){
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+
+      if (!profile) return;
+      profile.prevConsumerDemandGU = Math.max(0, Number(profile.consumerDemandGU) || 0);
+      refreshCountryProfileDerived(profile);
+      ensureCountryIndustryMarketState(profile);
+    });
+  }
+
+  function annualEconomicStagePriceAllocation(){
+    var businessesByCountryIndustry = {};
+
+    (App.store.businesses || []).forEach(function(business){
+      var iso;
+      var industry;
+      var bucket;
+
+      if (!business || !business.countryISO || !business.industry) return;
+
+      iso = business.countryISO;
+      industry = business.industry;
+      businessesByCountryIndustry[iso] = businessesByCountryIndustry[iso] || {};
+      bucket = businessesByCountryIndustry[iso][industry] || {
+        capacity:0,
+        supplyStress:0,
+        count:0,
+        businesses:[]
+      };
+
+      bucket.capacity += Math.max(0, Number(business.productionCapacityGU) || getBusinessProductionCapacityGU(business));
+      bucket.supplyStress += App.utils.clamp(Number(business.supplyStress) || 0, 0, 1.8);
+      bucket.count += 1;
+      bucket.businesses.push(business);
+      businessesByCountryIndustry[iso][industry] = bucket;
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var demandWeights;
+
+      if (!profile) return;
+
+      ensureCountryIndustryMarketState(profile);
+      demandWeights = normalizeConsumerIndustryDemandWeights(profile.consumerIndustryDemandWeights);
+      profile.industryDemandShare = demandWeights;
+
+      getAllTrackedIndustries().forEach(function(industry){
+        var bucket = businessesByCountryIndustry[iso] && businessesByCountryIndustry[iso][industry];
+        var demandGU = Math.max(0, Number(profile.consumerDemandGU) || 0) * Math.max(0.001, Number(demandWeights[industry]) || 0.01);
+        var productionGU = Math.max(0, Number(bucket && bucket.capacity) || 0);
+        var avgSupplyStress = bucket && bucket.count ? (bucket.supplyStress / bucket.count) : 0;
+        var demandPressure = productionGU > 0 ? (demandGU / productionGU) : (demandGU > 0 ? 1.4 : 1);
+        var shortage = Math.max(0, demandPressure - 1);
+        var surplus = Math.max(0, 1 - demandPressure);
+        var previousPrice = getCountryIndustryPriceMultiplier(profile, industry);
+        var priceIndexTarget = App.utils.clamp(
+          1 +
+          (shortage * 0.24) -
+          (surplus * 0.12) +
+          (App.utils.clamp(Number(profile.wagePressure) || 0, -0.45, 0.45) * 0.18) +
+          (avgSupplyStress * 0.08) +
+          (App.utils.clamp(Number(profile.tradeShockIndex) || 0, 0, 1.8) * 0.04),
+          0.72,
+          1.45
+        );
+        var priceIndex = App.utils.clamp((previousPrice * 0.58) + (priceIndexTarget * 0.42), 0.72, 1.45);
+        var allocationRatio = App.utils.clamp(demandPressure, 0.58, 1.52);
+
+        profile.industryPriceIndices[industry] = priceIndex;
+        profile.industryDemandAllocation[industry] = allocationRatio;
+        profile.industryDemandPressure[industry] = App.utils.clamp(demandPressure, 0.58, 1.82);
+        profile.industryProductionCapacityGU[industry] = Math.max(0, Math.round(productionGU));
+
+        (bucket && bucket.businesses ? bucket.businesses : []).forEach(function(business){
+          var share = productionGU > 0 ? ((Number(business.productionCapacityGU) || 0) / productionGU) : 0;
+          business.marketPriceIndex = priceIndex;
+          business.marketAllocationRatio = allocationRatio;
+          business.allocatedDemandGU = Math.max(0, demandGU * share);
+        });
+      });
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.industryPriceIndices = Object.assign({}, profile.industryPriceIndices);
+      profile.policyEvidence.industryDemandAllocation = Object.assign({}, profile.industryDemandAllocation);
+    });
+  }
+
+  function annualEconomicStageFirmDecisions(){
+    (App.store.businesses || []).forEach(function(business){
+      var owner = App.store.getPerson(business && business.ownerId);
+      var decision;
+      var ownerBusinessTrait = owner ? getTraitChannelScore(owner, "business") : 0;
+      var ownerMobilityTrait = owner ? getTraitChannelScore(owner, "mobility") : 0;
+
+      if (!business) return;
+
+      decision = evaluateBusinessDecision(business);
+      business.currentDecision = decision;
+      refreshBusinessFirmStructure(business, decision);
+      business.annualRevenueTargetGU = computeBusinessAnnualRevenueTarget(business, decision, ownerBusinessTrait, ownerMobilityTrait);
+      business.annualRevenueGapRatio = App.utils.clamp((Math.max(1, Number(business.annualRevenueTargetGU) || 1) / Math.max(1, Number(business.revenueGU) || 1)) - 1, -0.5, 0.8);
+    });
+  }
+
+  function annualEconomicStageEmploymentClosure(){
+    (App.store.businesses || []).forEach(function(business){
+      var decision;
+      var leadershipFloor;
+      var currentHeadcount;
+      var targetHeadcount;
+      var requestedDelta;
+      var workforceDelta;
+      var headroom;
+
+      if (!business) return;
+
+      decision = business.currentDecision || evaluateBusinessDecision(business);
+      leadershipFloor = Math.max((business.leadership || []).length, 1);
+      currentHeadcount = Math.max(leadershipFloor, Number(business.employees) || leadershipFloor);
+      targetHeadcount = Math.round(currentHeadcount * App.utils.clamp(1 + (Number(business.annualRevenueGapRatio) || 0), 0.82, 1.18));
+      targetHeadcount += Math.round((App.utils.clamp(Number(business.marketAllocationRatio) || 1, 0.58, 1.52) - 1) * currentHeadcount * 0.16);
+
+      if (decision.staffingAction === "hire") {
+        targetHeadcount += Math.max(1, Math.ceil(Math.max(0, Number(business.hiringNeed) || 0) * 0.45));
+      } else if (decision.staffingAction === "layoff") {
+        targetHeadcount -= Math.max(1, Math.ceil(Math.max(0, Math.abs(Number(business.hiringNeed) || 0)) * 0.35));
+      }
+
+      targetHeadcount = App.utils.clamp(targetHeadcount, leadershipFloor, 2000);
+      requestedDelta = targetHeadcount - currentHeadcount;
+      workforceDelta = 0;
+
+      if (requestedDelta > 0) {
+        headroom = Math.max(0, 2000 - currentHeadcount);
+        requestedDelta = Math.min(requestedDelta, headroom);
+        workforceDelta = reserveLabor(business.countryISO, requestedDelta);
+      } else if (requestedDelta < 0) {
+        workforceDelta = -releaseLabor(business.countryISO, Math.abs(requestedDelta));
+      }
+
+      business.employees = Math.max(leadershipFloor, Math.min(2000, currentHeadcount + workforceDelta));
+      refreshBusinessFirmStructure(business, decision);
+      syncBusinessStaffAssignments(business);
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      if (!profile) return;
+      refreshCountryProfileDerived(profile);
+      ensureCountryIndustryMarketState(profile);
+    });
+    applyLaborMarketYearlyAdjustments();
+  }
+
+  function runYearlyEconomicPass(){
+    updateCountryLaborSupplyBaseline();
+    annualEconomicStageProductionAndPayroll();
+    annualEconomicStageHouseholdIncome();
+    annualEconomicStageConsumption();
+    annualEconomicStageDemand();
+    annualEconomicStagePriceAllocation();
+    annualEconomicStageFirmDecisions();
+    annualEconomicStageEmploymentClosure();
+  }
+
   function phase2BirthDeathPressure(){
-    return;
+    var householdStressByCountry = {};
+    var householdCountsByCountry = {};
+    var profiles = Object.keys(App.store.countryProfiles || {});
+
+    (App.store.households || []).forEach(function(household){
+      var iso = household && household.countryISO;
+      if (!iso) return;
+      householdStressByCountry[iso] = (householdStressByCountry[iso] || 0) + App.utils.clamp((Number(household.financialStress) || 0) / 100, 0, 1);
+      householdCountsByCountry[iso] = (householdCountsByCountry[iso] || 0) + 1;
+    });
+
+    profiles.forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var laborForce;
+      var unemploymentRate;
+      var institutionScore;
+      var educationScore;
+      var gini;
+      var countryStance;
+      var policyBias;
+      var householdStress;
+      var previousBirthRate;
+      var previousDeathRate;
+      var birthTarget;
+      var deathTarget;
+      var nextBirthRate;
+      var nextDeathRate;
+      var naturalRatePer1000;
+      var priorPopulation;
+      var naturalDelta;
+      var maxNaturalSwing;
+      var participation;
+      var participationTarget;
+      var populationPressure;
+      var housingCostPressure;
+      var housingMarketStress;
+      var housingHomeownershipRate;
+      var demographicAgingIndex;
+      var demographicYouthBulgeIndex;
+      var demographicLaborForcePressureIndex;
+      var demographicFertilityDeclineIndex;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+
+      laborForce = Math.max(1, Number(profile.laborForce) || 1);
+      unemploymentRate = App.utils.clamp(Math.max(0, Number(profile.unemployed) || 0) / laborForce, 0, 1);
+      institutionScore = App.utils.clamp(Number(profile.institutionScore) || 0.55, 0.1, 1);
+      educationScore = App.utils.clamp(Number(profile.educationIndex) || 0.6, 0.1, 1);
+      gini = App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
+      countryStance = normalizePolicyStance(profile.policyStance);
+      policyBias = countryStance === "supportive" ? 1 : (countryStance === "tightening" ? -0.8 : 0);
+      householdStress = householdCountsByCountry[iso] > 0 ? (householdStressByCountry[iso] / householdCountsByCountry[iso]) : 0.46;
+      populationPressure = App.utils.clamp(Number(profile.populationPressure) || 0.5, 0, 1);
+      housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+      housingMarketStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+      housingHomeownershipRate = App.utils.clamp(Number(profile.housingHomeownershipRate) || 0.52, 0.05, 0.95);
+      demographicAgingIndex = App.utils.clamp(Number(profile.demographicAgingIndex) || 0.4, 0, 1);
+      demographicYouthBulgeIndex = App.utils.clamp(Number(profile.demographicYouthBulgeIndex) || 0.35, 0, 1);
+      demographicLaborForcePressureIndex = App.utils.clamp(Number(profile.demographicLaborForcePressureIndex) || 0.5, 0, 1.8);
+      demographicFertilityDeclineIndex = App.utils.clamp(Number(profile.demographicFertilityDeclineIndex) || 0.45, 0, 1);
+
+      previousBirthRate = App.utils.clamp(Number(profile.birthRatePer1000) || 12, 4, 45);
+      previousDeathRate = App.utils.clamp(Number(profile.deathRatePer1000) || 8, 2, 28);
+
+      birthTarget = previousBirthRate;
+      birthTarget += (0.58 - unemploymentRate) * 3.8;
+      birthTarget += (0.5 - householdStress) * 3.6;
+      birthTarget += (0.5 - educationScore) * 2.4;
+      birthTarget += (0.46 - gini) * 1.6;
+      birthTarget += (populationPressure - 0.5) * 2.8;
+      birthTarget += policyBias * 0.45;
+      birthTarget -= Math.max(0, housingCostPressure - 1) * 2.4;
+      birthTarget -= housingMarketStress * 0.7;
+      birthTarget += (housingHomeownershipRate - 0.5) * 1.2;
+      birthTarget += demographicYouthBulgeIndex * 1.2;
+      birthTarget -= demographicAgingIndex * 1.4;
+      birthTarget -= demographicFertilityDeclineIndex * 1.9;
+
+      deathTarget = previousDeathRate;
+      deathTarget += unemploymentRate * 2.6;
+      deathTarget += householdStress * 3.2;
+      deathTarget += gini * 1.8;
+      deathTarget -= (populationPressure - 0.5) * 1.2;
+      deathTarget -= institutionScore * 2.4;
+      deathTarget -= educationScore * 1.6;
+      deathTarget -= policyBias * 0.24;
+      deathTarget += Math.max(0, housingCostPressure - 1) * 0.8;
+      deathTarget += housingMarketStress * 0.46;
+      deathTarget += demographicAgingIndex * 1.35;
+      deathTarget -= demographicYouthBulgeIndex * 0.3;
+
+      nextBirthRate = App.utils.clamp((previousBirthRate * 0.76) + (birthTarget * 0.24), 4, 45);
+      nextDeathRate = App.utils.clamp((previousDeathRate * 0.78) + (deathTarget * 0.22), 2, 28);
+      naturalRatePer1000 = App.utils.clamp(nextBirthRate - nextDeathRate, -24, 36);
+
+      priorPopulation = Math.max(1, Number(profile.population) || 1);
+      naturalDelta = Math.round((priorPopulation * naturalRatePer1000) / 1000);
+      maxNaturalSwing = Math.max(50, Math.round(priorPopulation * 0.035));
+      naturalDelta = App.utils.clamp(naturalDelta, -maxNaturalSwing, maxNaturalSwing);
+
+      profile.birthRatePer1000 = Number(nextBirthRate.toFixed(4));
+      profile.deathRatePer1000 = Number(nextDeathRate.toFixed(4));
+      profile.population = Math.max(1, priorPopulation + naturalDelta);
+
+      participation = App.utils.clamp(Number(profile.laborForceParticipation) || 0.55, 0.25, 0.9);
+      participationTarget = 0.5 + (institutionScore * 0.18) + (educationScore * 0.12) - (unemploymentRate * 0.14) - (householdStress * 0.1) - (Math.max(0, housingCostPressure - 1) * 0.05) + (demographicYouthBulgeIndex * 0.05) - (demographicAgingIndex * 0.1) - (demographicLaborForcePressureIndex * 0.08);
+      profile.laborForceParticipation = App.utils.clamp((participation * 0.75) + (participationTarget * 0.25), 0.25, 0.9);
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.householdStressIndex = Number(householdStress.toFixed(4));
+      profile.policyEvidence.birthRatePer1000 = Number(profile.birthRatePer1000.toFixed(4));
+      profile.policyEvidence.deathRatePer1000 = Number(profile.deathRatePer1000.toFixed(4));
+      profile.policyEvidence.netNaturalRatePer1000 = Number(naturalRatePer1000.toFixed(4));
+      profile.policyEvidence.naturalPopulationDelta = naturalDelta;
+      profile.policyEvidence.housingCostPressure = Number(housingCostPressure.toFixed(4));
+      profile.policyEvidence.housingMarketStress = Number(housingMarketStress.toFixed(4));
+      profile.policyEvidence.housingHomeownershipRate = Number(housingHomeownershipRate.toFixed(4));
+      profile.policyEvidence.populationPressure = Number(populationPressure.toFixed(4));
+      profile.policyEvidence.demographicAgingIndex = Number(demographicAgingIndex.toFixed(4));
+      profile.policyEvidence.demographicYouthBulgeIndex = Number(demographicYouthBulgeIndex.toFixed(4));
+      profile.policyEvidence.demographicLaborForcePressureIndex = Number(demographicLaborForcePressureIndex.toFixed(4));
+      profile.policyEvidence.demographicFertilityDeclineIndex = Number(demographicFertilityDeclineIndex.toFixed(4));
+
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function phase3MigrationPressure(){
-    return;
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      if (!profile) return;
+      profile.mobilityInflowAnnual = 0;
+      profile.mobilityOutflowAnnual = 0;
+      profile.internalMobilityAnnual = 0;
+      profile.internalTalentMobilityAnnual = 0;
+      profile.talentDriftBalance = App.utils.clamp((Number(profile.talentDriftBalance) || 0) * 0.42, -1.5, 1.5);
+      refreshCountryProfileDerived(profile);
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var bloc = App.store.getBloc(profile && profile.blocId) || App.store.getBlocByCountry(iso);
+      var laborForce;
+      var unemploymentRate;
+      var scarcity;
+      var longUnemploymentShare;
+      var countryStance;
+      var blocStance;
+      var countryPolicyEffects;
+      var blocPolicyEffects;
+      var policyMigrationBias;
+      var pullScore;
+      var pushScore;
+      var migrationPressure;
+      var jobsPull;
+      var safetyPull;
+      var educationPull;
+      var marriageStatusPull;
+      var nextNetMigrationPer1000;
+      var netMobilityFlow;
+      var internalMobilityResult;
+      var request;
+      var moved;
+      var populationPressure;
+      var housingCostPressure;
+      var housingMarketStress;
+      var housingHomeownershipRate;
+      var housingAffordabilityIndex;
+      var emigrationPressureIndex;
+      var developmentCorruptionIndex;
+      var developmentInfrastructureIndex;
+      var developmentBusinessFriendlinessIndex;
+      var demographicAgingIndex;
+      var demographicYouthBulgeIndex;
+      var demographicLaborForcePressureIndex;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+      laborForce = Math.max(1, Number(profile.laborForce) || 1);
+      unemploymentRate = App.utils.clamp(Math.max(0, Number(profile.unemployed) || 0) / laborForce, 0, 1);
+      scarcity = App.utils.clamp(Number(profile.laborScarcity) || 0, 0, 1);
+      populationPressure = App.utils.clamp(Number(profile.populationPressure) || 0.5, 0, 1);
+      longUnemploymentShare = App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
+      housingCostPressure = App.utils.clamp(Number(profile.housingCostPressure) || 1.02, 0.65, 2.2);
+      housingMarketStress = App.utils.clamp(Number(profile.housingMarketStress) || 0.35, 0, 1.5);
+      housingHomeownershipRate = App.utils.clamp(Number(profile.housingHomeownershipRate) || 0.52, 0.05, 0.95);
+      housingAffordabilityIndex = App.utils.clamp(Number(profile.housingAffordabilityIndex) || 0.52, 0.05, 1);
+      emigrationPressureIndex = App.utils.clamp(Number(profile.emigrationPressureIndex) || 0, 0, 1.6);
+      developmentCorruptionIndex = App.utils.clamp(Number(profile.developmentCorruptionIndex) || 0.42, 0, 1);
+      developmentInfrastructureIndex = App.utils.clamp(Number(profile.developmentInfrastructureIndex) || 0.52, 0, 1);
+      developmentBusinessFriendlinessIndex = App.utils.clamp(Number(profile.developmentBusinessFriendlinessIndex) || 0.52, 0, 1);
+      demographicAgingIndex = App.utils.clamp(Number(profile.demographicAgingIndex) || 0.4, 0, 1);
+      demographicYouthBulgeIndex = App.utils.clamp(Number(profile.demographicYouthBulgeIndex) || 0.35, 0, 1);
+      demographicLaborForcePressureIndex = App.utils.clamp(Number(profile.demographicLaborForcePressureIndex) || 0.5, 0, 1.8);
+
+      countryStance = refreshCountryPolicyStance(profile, {
+        unemploymentRate:unemploymentRate,
+        laborScarcity:scarcity,
+        wagePressure:Number(profile.wagePressure) || 0,
+        longUnemploymentShare:longUnemploymentShare,
+        demandGrowth:Number(profile.policyEvidence && profile.policyEvidence.demandGrowth) || 0
+      });
+      blocStance = refreshBlocPolicyStance(bloc);
+      countryPolicyEffects = COUNTRY_POLICY_STANCE_EFFECTS[countryStance] || COUNTRY_POLICY_STANCE_EFFECTS.neutral;
+      blocPolicyEffects = BLOC_POLICY_STANCE_EFFECTS[blocStance] || BLOC_POLICY_STANCE_EFFECTS.neutral;
+      policyMigrationBias = (countryPolicyEffects.migrationPressureBias || 0) + (blocPolicyEffects.migrationPressureBias || 0);
+      jobsPull =
+        (scarcity * 0.7) +
+        (Math.max(0, 0.11 - unemploymentRate) * 1.55) +
+        ((populationPressure - 0.5) * 0.46) +
+        (developmentBusinessFriendlinessIndex * 0.22) +
+        (Math.max(0, demographicAgingIndex - 0.45) * 0.18) +
+        (Math.max(0, 0.75 - demographicLaborForcePressureIndex) * 0.16);
+      safetyPull =
+        (developmentInfrastructureIndex * 0.4) +
+        ((1 - developmentCorruptionIndex) * 0.35) +
+        (App.utils.clamp(1 - (Number(profile.socialUnrestIndex) || 0.3), 0, 1.4) * 0.35);
+      educationPull =
+        (App.utils.clamp(Number(profile.educationIndex) || 0.6, 0.1, 1) * 0.62) +
+        (App.utils.clamp(Number(profile.developmentEducationQuality) || 0.55, 0, 1) * 0.38);
+      marriageStatusPull =
+        (App.utils.clamp(Number(profile.developmentSocialMobilityIndex) || 0.5, 0, 1) * 0.42) +
+        (App.utils.clamp(Number(profile.developmentBusinessFriendlinessIndex) || 0.52, 0, 1) * 0.34) +
+        (Math.max(0, 0.52 - unemploymentRate) * 0.32) +
+        ((housingHomeownershipRate - 0.5) * 0.18);
+
+      pullScore =
+        (jobsPull * 0.46) +
+        (safetyPull * 0.2) +
+        (educationPull * 0.2) +
+        (marriageStatusPull * 0.14) +
+        ((housingAffordabilityIndex - 0.5) * 0.28);
+      pushScore =
+        (unemploymentRate * 1.05) +
+        (longUnemploymentShare * 0.65) +
+        (Math.max(0, 0.52 - populationPressure) * 0.42) +
+        (developmentCorruptionIndex * 0.32) +
+        (Math.max(0, 0.48 - developmentInfrastructureIndex) * 0.25) +
+        (demographicYouthBulgeIndex * 0.2) +
+        (demographicLaborForcePressureIndex * 0.26) +
+        (Math.max(0, housingCostPressure - 1) * 0.7) +
+        (housingMarketStress * 0.24) +
+        (Math.max(0, 0.4 - housingHomeownershipRate) * 0.18) +
+        (emigrationPressureIndex * 0.28);
+      migrationPressure = App.utils.clamp((pullScore - pushScore) + policyMigrationBias, -0.45, 0.55);
+      nextNetMigrationPer1000 = App.utils.clamp(((Number(profile.netMigrationRatePer1000) || 0) * 0.76) + (migrationPressure * 2.6), -50, 50);
+      profile.netMigrationRatePer1000 = nextNetMigrationPer1000;
+
+      if (migrationPressure > 0.12 && scarcity > 0.64) {
+        request = Math.max(0, Math.min(24, Math.round((laborForce * migrationPressure * (0.0028 + (populationPressure * 0.0018))))));
+        if (request > 0) {
+          moved = pullMobileLaborIntoCountry(iso, request, {
+            jobsPull:jobsPull,
+            safetyPull:safetyPull,
+            educationPull:educationPull,
+            marriageStatusPull:marriageStatusPull
+          });
+          if (moved > 0) {
+            profile.netMigrationRatePer1000 = App.utils.clamp((Number(profile.netMigrationRatePer1000) || 0) + ((moved / Math.max(1, Number(profile.population) || 1)) * 1000), -50, 50);
+          }
+        }
+      }
+
+      internalMobilityResult = applyInternalMigrationUrbanFlows(iso, {
+        jobsPull:jobsPull,
+        educationPull:educationPull,
+        marriageStatusPull:marriageStatusPull,
+        migrationPressure:migrationPressure
+      });
+      profile.internalMobilityAnnual = Math.max(0, Number(profile.internalMobilityAnnual) || 0) + (internalMobilityResult.moved || 0);
+      profile.internalTalentMobilityAnnual = Math.max(0, Number(profile.internalTalentMobilityAnnual) || 0) + (internalMobilityResult.talentMoved || 0);
+
+      netMobilityFlow = (Number(profile.mobilityInflowAnnual) || 0) - (Number(profile.mobilityOutflowAnnual) || 0);
+      profile.talentShortageIndex = App.utils.clamp((Number(profile.talentShortageIndex) || 0) - (App.utils.clamp(Number(profile.talentDriftBalance) || 0, -1.5, 1.5) * 0.18), 0, 1);
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.countryPolicyStance = countryStance;
+      profile.policyEvidence.blocPolicyStance = blocStance;
+      profile.policyEvidence.migrationPressure = Number(migrationPressure.toFixed(4));
+      profile.policyEvidence.jobsPullIndex = Number(jobsPull.toFixed(4));
+      profile.policyEvidence.safetyPullIndex = Number(safetyPull.toFixed(4));
+      profile.policyEvidence.educationPullIndex = Number(educationPull.toFixed(4));
+      profile.policyEvidence.marriageStatusPullIndex = Number(marriageStatusPull.toFixed(4));
+      profile.policyEvidence.netMigrationRatePer1000 = Number((Number(profile.netMigrationRatePer1000) || 0).toFixed(4));
+      profile.policyEvidence.mobilityInflowAnnual = Math.max(0, floorInt(profile.mobilityInflowAnnual));
+      profile.policyEvidence.mobilityOutflowAnnual = Math.max(0, floorInt(profile.mobilityOutflowAnnual));
+      profile.policyEvidence.internalMobilityAnnual = Math.max(0, floorInt(profile.internalMobilityAnnual));
+      profile.policyEvidence.internalTalentMobilityAnnual = Math.max(0, floorInt(profile.internalTalentMobilityAnnual));
+      profile.policyEvidence.netMobilityFlowAnnual = floorInt(netMobilityFlow);
+      profile.policyEvidence.talentDriftBalance = Number((Number(profile.talentDriftBalance) || 0).toFixed(4));
+      profile.policyEvidence.educationIndex = Number((Number(profile.educationIndex) || 0).toFixed(4));
+      profile.policyEvidence.housingCostPressure = Number(housingCostPressure.toFixed(4));
+      profile.policyEvidence.housingMarketStress = Number(housingMarketStress.toFixed(4));
+      profile.policyEvidence.housingHomeownershipRate = Number(housingHomeownershipRate.toFixed(4));
+      profile.policyEvidence.housingAffordabilityIndex = Number(housingAffordabilityIndex.toFixed(4));
+      profile.policyEvidence.emigrationPressureIndex = Number(emigrationPressureIndex.toFixed(4));
+      profile.policyEvidence.populationPressure = Number(populationPressure.toFixed(4));
+      profile.policyEvidence.demographicAgingIndex = Number(demographicAgingIndex.toFixed(4));
+      profile.policyEvidence.demographicYouthBulgeIndex = Number(demographicYouthBulgeIndex.toFixed(4));
+      profile.policyEvidence.demographicLaborForcePressureIndex = Number(demographicLaborForcePressureIndex.toFixed(4));
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function phase4InequalityInstitutionFeedback(){
-    return;
+    var householdStressByCountry = {};
+    var householdCountsByCountry = {};
+
+    (App.store.households || []).forEach(function(household){
+      var iso = household && household.countryISO;
+      if (!iso) return;
+      householdStressByCountry[iso] = (householdStressByCountry[iso] || 0) + App.utils.clamp((Number(household.financialStress) || 0) / 100, 0, 1);
+      householdCountsByCountry[iso] = (householdCountsByCountry[iso] || 0) + 1;
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var laborForce;
+      var unemploymentRate;
+      var longUnemploymentShare;
+      var householdStress;
+      var migrationTension;
+      var previousGini;
+      var previousInstitution;
+      var previousSocialPressure;
+      var inequalityPressure;
+      var nextSocialPressure;
+      var institutionDrift;
+      var giniTarget;
+      var nextGini;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+
+      laborForce = Math.max(1, Number(profile.laborForce) || 1);
+      unemploymentRate = App.utils.clamp(Math.max(0, Number(profile.unemployed) || 0) / laborForce, 0, 1);
+      longUnemploymentShare = App.utils.clamp(Number(profile.longUnemploymentShare) || 0, 0, 1);
+      householdStress = householdCountsByCountry[iso] > 0 ? (householdStressByCountry[iso] / householdCountsByCountry[iso]) : 0.46;
+      migrationTension = App.utils.clamp(Math.abs((Number(profile.mobilityInflowAnnual) || 0) - (Number(profile.mobilityOutflowAnnual) || 0)) / laborForce, 0, 0.5);
+
+      previousGini = App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
+      previousInstitution = App.utils.clamp(Number(profile.institutionScore) || 0.55, 0.1, 1);
+      previousSocialPressure = App.utils.clamp(Number(profile.socialPressureIndex) || 0, 0, 1.5);
+
+      inequalityPressure =
+        (previousGini * 0.44) +
+        (unemploymentRate * 0.24) +
+        (longUnemploymentShare * 0.14) +
+        (householdStress * 0.12) +
+        (migrationTension * 0.06);
+      inequalityPressure = App.utils.clamp(inequalityPressure, 0, 1.25);
+
+      nextSocialPressure = App.utils.clamp((previousSocialPressure * 0.62) + (inequalityPressure * 0.38) - (previousInstitution * 0.12), 0, 1.5);
+
+      institutionDrift =
+        ((Number(profile.educationIndex) || 0.6) - 0.5) * 0.018 +
+        ((1 - unemploymentRate) - 0.78) * 0.016 -
+        ((nextSocialPressure - 0.45) * 0.022) -
+        ((previousGini - 0.4) * 0.014);
+      institutionDrift = App.utils.clamp(institutionDrift, -0.04, 0.035);
+
+      giniTarget = previousGini;
+      giniTarget += (unemploymentRate - 0.11) * 0.08;
+      giniTarget += (householdStress - 0.48) * 0.06;
+      giniTarget += (migrationTension - 0.06) * 0.04;
+      giniTarget -= (previousInstitution - 0.55) * 0.09;
+      giniTarget = App.utils.clamp(giniTarget, 0.2, 0.8);
+      nextGini = App.utils.clamp((previousGini * 0.74) + (giniTarget * 0.26), 0.2, 0.8);
+
+      profile.socialPressureIndex = nextSocialPressure;
+      profile.institutionScore = App.utils.clamp(previousInstitution + institutionDrift, 0.1, 1);
+      profile.giniCoefficient = nextGini;
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.inequalityPressureIndex = Number(inequalityPressure.toFixed(4));
+      profile.policyEvidence.socialPressureIndex = Number(nextSocialPressure.toFixed(4));
+      profile.policyEvidence.institutionDrift = Number(institutionDrift.toFixed(5));
+      profile.policyEvidence.giniCoefficient = Number(nextGini.toFixed(4));
+      profile.policyEvidence.institutionScore = Number((Number(profile.institutionScore) || 0).toFixed(4));
+
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function updatePopulationProfilesYearly(){
     if (!App.store.countryProfiles) return;
-    phase1UpdateLaborAndDemand();
-    applyLaborMarketYearlyAdjustments();
+    runYearlyEconomicPass();
     phase2BirthDeathPressure();
     phase3MigrationPressure();
     phase4InequalityInstitutionFeedback();
+    updateInequalityMetricsYearly();
+    phase6SocialUnrestFromInequality();
     validateCountryProfiles();
   }
 
@@ -1984,6 +4163,7 @@
   function reserveLabor(iso, amount){
     var request = Math.max(0, floorInt(amount));
     var profile = ensureCountryProfile(iso);
+    var laborSnapshot;
     var available;
     var reserved;
     var moved;
@@ -1991,11 +4171,19 @@
     if (!profile || request <= 0) return 0;
 
     refreshCountryProfileDerived(profile);
-    available = Math.max(0, profile.laborForce - profile.employed);
+    laborSnapshot = getSimCountryLaborSnapshot(iso);
+    available = Math.min(
+      Math.max(0, profile.laborForce - profile.employed),
+      Math.max(0, laborSnapshot.available)
+    );
     reserved = Math.min(request, available);
     if (reserved < request) {
       moved = pullMobileLaborIntoCountry(iso, request - reserved);
-      available = Math.max(0, profile.laborForce - profile.employed);
+      laborSnapshot = getSimCountryLaborSnapshot(iso);
+      available = Math.min(
+        Math.max(0, profile.laborForce - profile.employed),
+        Math.max(0, laborSnapshot.available)
+      );
       reserved += Math.min(Math.max(0, moved), Math.max(0, available));
     }
     profile.employed += reserved;
@@ -2033,11 +4221,15 @@
     var scope = getIndustryMarketScope(business.industry);
     var countryDemand = getCountryDemandCapacityGU(business.countryISO);
     var blocDemand = getBlocDemandCapacityGU(business.blocId);
+    var countryProfile = ensureCountryProfile(business.countryISO, business.blocId);
+    var countryIndustryDemandMultiplier = getCountryIndustryDemandMultiplier(countryProfile, business.industry);
+    var blocIndustryDemandMultiplier = getBlocIndustryDemandMultiplier(business.blocId, business.industry);
+    var mixedIndustryDemandMultiplier = App.utils.clamp((countryIndustryDemandMultiplier * 0.52) + (blocIndustryDemandMultiplier * 0.48), 0.62, 1.62);
     var blended = (countryDemand * 0.5) + (blocDemand * 0.5);
 
-    if (scope === "local") return countryDemand * DEMAND_SCOPE_SHARE.local;
-    if (scope === "global") return blocDemand * DEMAND_SCOPE_SHARE.global;
-    return blended * DEMAND_SCOPE_SHARE.mixed;
+    if (scope === "local") return countryDemand * DEMAND_SCOPE_SHARE.local * countryIndustryDemandMultiplier;
+    if (scope === "global") return blocDemand * DEMAND_SCOPE_SHARE.global * blocIndustryDemandMultiplier;
+    return blended * DEMAND_SCOPE_SHARE.mixed * mixedIndustryDemandMultiplier;
   }
 
   function getDemandCapPenalty(business){
@@ -2060,12 +4252,40 @@
     return 0.07;
   }
 
+  function normalizeIso(value){
+    return String(value || "").trim().toUpperCase();
+  }
+
+  function isNonResidentialIso(iso){
+    return ["AQ", "BV", "HM", "TF", "UM"].indexOf(normalizeIso(iso)) !== -1;
+  }
+
+  function isResidencyEligibleCountry(iso){
+    var normalized = normalizeIso(iso);
+    var country;
+    var population;
+
+    if (!normalized) return false;
+    if (isNonResidentialIso(normalized)) return false;
+
+    country = App.store.countryData ? App.store.countryData[normalized] : null;
+    if (!country || typeof country !== "object") return true;
+
+    population = Number(country.population);
+    if (Number.isFinite(population) && population <= 0) return false;
+    return true;
+  }
+
   function pickCountryByPopulationPressure(blocId){
     var profiles = (App.store.getBlocProfiles ? App.store.getBlocProfiles(blocId) : []).slice();
     var weighted = [];
     var total = 0;
     var roll = 0;
     var running = 0;
+
+    profiles = profiles.filter(function(profile){
+      return isResidencyEligibleCountry(profile && profile.iso);
+    });
 
     if (!profiles.length) return null;
 
@@ -2347,6 +4567,7 @@
       }).reduce(function(sum, business){
         return sum + business.revenueGU;
       }, 0);
+      refreshBlocPolicyStance(bloc);
     });
   }
 
@@ -2971,8 +5192,16 @@
 
   function getFallbackSpawnPos(iso, preferredState){
     if (iso === "US") {
-      var stateCode = preferredState || App.utils.pick(App.data.US_STATE_CODES);
+      var stateCode = normalizeUSStateCode(preferredState) || App.utils.pick(App.data.US_STATE_CODES);
       var centroid = App.data.US_STATE_CENTROIDS[stateCode];
+
+      if (!centroid) {
+        stateCode = App.utils.pick(App.data.US_STATE_CODES.filter(function(code){
+          return !!App.data.US_STATE_CENTROIDS[code];
+        })) || "CA";
+        centroid = App.data.US_STATE_CENTROIDS[stateCode] || [37.2, -119.4];
+      }
+
       return {
         pos: App.utils.latLngToSVG(centroid[0], centroid[1]),
         iso:"US",
@@ -3034,23 +5263,140 @@
       state:preferredState || anchorPerson.state || null
     };
   }
+  function relocatePersonToCountry(person, destinationIso, options){
+    var iso;
+    var state;
+    var subdivision;
+    var spawn;
+    var resolvedState;
+    var resolvedSubdivision;
+    var nextCity;
+    var employer;
+
+    if (!person) return false;
+
+    iso = String(destinationIso || "").trim().toUpperCase();
+    if (!iso) return false;
+    if (!isResidencyEligibleCountry(iso)) return false;
+
+    subdivision = normalizeText((options && (options.subdivision || options.state)) || person.subdivision || person.state || null);
+    state = iso === "US" ? subdivision : null;
+    spawn = getSpawnPos(iso, state);
+    resolvedState = iso === "US" ? (spawn && spawn.state ? spawn.state : state) : null;
+    resolvedSubdivision = iso === "US" ? resolvedState : subdivision;
+    nextCity = normalizeText(options && options.city) || pickCountryCity(iso, [person.id, iso, App.store.simDay, "relocate"].join("|"), resolvedSubdivision);
+    resolvedSubdivision = resolveSubdivisionForCity(iso, nextCity, resolvedSubdivision);
+
+    person.countryISO = iso;
+    if (App.store.isoToBloc && App.store.isoToBloc[iso]) {
+      person.blocId = App.store.isoToBloc[iso];
+    }
+    setPersonSubdivisionFields(person, iso, resolvedSubdivision);
+    person.city = nextCity || null;
+
+    if (!person.birthCity && person.city) {
+      person.birthCity = person.city;
+    }
+
+    if (spawn && spawn.pos) {
+      person.svgX = spawn.pos.x;
+      person.svgY = spawn.pos.y;
+    }
+
+    if (person.employerBusinessId) {
+      employer = App.store.getBusiness(person.employerBusinessId);
+      if (!employer || employer.countryISO !== person.countryISO) {
+        clearEmployment(person, person.employerBusinessId);
+      }
+    }
+
+    return true;
+  }
+
+  function relocateMobileWorkers(sourceIso, targetIso, count){
+    var request = Math.max(0, floorInt(count));
+    var eligible;
+    var moved = 0;
+
+    if (!sourceIso || !targetIso || request <= 0) return 0;
+
+    eligible = App.store.getLivingPeople().filter(function(person){
+      return person &&
+        person.countryISO === sourceIso &&
+        person.alive &&
+        person.age >= 18 &&
+        !person.retired &&
+        !person.businessId &&
+        !person.employerBusinessId;
+    }).sort(function(first, second){
+      var firstStreak = Number(first.unemploymentStreakDays) || 0;
+      var secondStreak = Number(second.unemploymentStreakDays) || 0;
+      if (secondStreak !== firstStreak) return secondStreak - firstStreak;
+      return (first.id || "").localeCompare(second.id || "");
+    });
+
+    eligible.slice(0, request).forEach(function(person){
+      if (!relocatePersonToCountry(person, targetIso)) return;
+      syncPerson(person);
+      moved += 1;
+    });
+
+    return moved;
+  }
 
   function pickCountryFromBloc(blocId){
     var bloc = App.store.getBloc(blocId);
-    var weights = {
-      US:8,CN:8,IN:8,BR:6,RU:5,AU:4,CA:4,DE:3,FR:3,GB:3,
-      NG:3,ZA:3,MX:3,AR:3,EG:3,JP:4,KR:2,ID:3,SA:2
-    };
-    var pool = [];
+    var weighted = [];
+    var members;
+    var total = 0;
+    var roll;
+    var running = 0;
 
-    bloc.members.forEach(function(iso){
-      var count = weights[iso] || 1;
-      for (var i = 0; i < count; i += 1) {
-        pool.push(iso);
-      }
+    function getCountryWeight(iso){
+      var profile = App.store.countryProfiles ? App.store.countryProfiles[iso] : null;
+      var country = App.store.countryData ? App.store.countryData[iso] : null;
+      var population = Math.max(0, Number(profile && profile.population != null ? profile.population : (country && country.population)) || 0);
+      var institution = Number(profile && profile.institutionScore != null ? profile.institutionScore : (country && country.institutionScore));
+      var education = Number(profile && profile.educationIndex != null ? profile.educationIndex : (country && country.educationIndex));
+      var populationSignal = population > 0 ? (Math.log10(population + 1) / 7) : 0;
+      var institutionSignal = Number.isFinite(institution) ? App.utils.clamp(institution, 0, 1) : 0.55;
+      var educationSignal = Number.isFinite(education) ? App.utils.clamp(education, 0, 1) : 0.55;
+      return App.utils.clamp(0.2 + (populationSignal * 1.7) + (institutionSignal * 0.9) + (educationSignal * 0.7), 0.1, 6);
+    }
+
+    if (!bloc || !Array.isArray(bloc.members) || !bloc.members.length) {
+      return App.utils.pick(App.data.COUNTRY_CODES || ["US"]);
+    }
+
+    members = bloc.members.filter(function(iso){
+      return isResidencyEligibleCountry(iso);
     });
 
-    return App.utils.pick(pool);
+    if (!members.length) {
+      members = (App.data.COUNTRY_CODES || []).filter(function(iso){
+        return isResidencyEligibleCountry(iso);
+      });
+    }
+
+    if (!members.length) return "US";
+
+    members.forEach(function(iso){
+      var weight = getCountryWeight(iso);
+      weighted.push({ iso:iso, weight:weight });
+      total += weight;
+    });
+
+    if (total <= 0) return App.utils.pick(members);
+
+    roll = Math.random() * total;
+    for (var i = 0; i < weighted.length; i += 1) {
+      running += weighted[i].weight;
+      if (running >= roll) {
+        return weighted[i].iso;
+      }
+    }
+
+    return weighted[weighted.length - 1].iso;
   }
 
   function pickWeightedName(entries){
@@ -3353,6 +5699,7 @@
     var technical;
     var social;
     var finance;
+    var discipline;
     var employability;
     var threshold;
     var modifier;
@@ -3368,8 +5715,10 @@
     technical = Number(person.skills && person.skills.technical) || 0;
     social = Number(person.skills && person.skills.social) || 0;
     finance = Number(person.skills && person.skills.financialDiscipline) || 0;
+    ensureDecisionData(person);
+    discipline = Number(person.decisionProfile && person.decisionProfile.discipline) || 0;
     unemploymentDurationPenalty = Math.min(18, Math.max(0, Number(person.unemploymentStreakDays) || 0) / 22);
-    employability = (education * 0.48) + (technical * 0.24) + (social * 0.18) + (finance * 0.1) - unemploymentDurationPenalty;
+    employability = (education * 0.42) + (technical * 0.23) + (social * 0.16) + (finance * 0.09) + (discipline * 0.1) - unemploymentDurationPenalty;
     modifier = (hashString(String(person.id || "") + "|employment-signal") % 1000) / 1000;
     threshold = App.utils.clamp((unemploymentRate * 100) + (modifier * 16) + 22, 16, 74);
 
@@ -3473,7 +5822,11 @@
     if (first.countryISO === second.countryISO) cultureScore += 8;
     if (first.blocId === second.blocId) cultureScore += 5;
     if (first.nameOrder === second.nameOrder) cultureScore += 2;
-    if (first.countryISO === "US" && first.state && second.state && first.state === second.state) cultureScore += 2;
+    if (first.countryISO === second.countryISO) {
+      var firstSubdivision = normalizeText(first.subdivision || first.state);
+      var secondSubdivision = normalizeText(second.subdivision || second.state);
+      if (firstSubdivision && secondSubdivision && firstSubdivision === secondSubdivision) cultureScore += 2;
+    }
 
     score = 34 +
       (sharedTraits * 7) +
@@ -3597,10 +5950,14 @@
     ensureRelationshipIdentity(person);
     ensureFamilyDynamics(person);
     ensureSocialNetworkData(person);
+    ensurePersonCityData(person);
     person.name = App.utils.formatPersonName(person.firstName, person.lastName, person.countryISO, person.nameOrder);
     person.age = ageForPerson(person);
     person.lifeStage = lifeStageForAge(person.age, person.alive);
     ensureSkillData(person);
+    person.lifetimeInheritedGU = Math.max(0, Number(person.lifetimeInheritedGU) || 0);
+    person.inheritanceTransferCount = Math.max(0, Math.floor(Number(person.inheritanceTransferCount) || 0));
+    person.lastInheritanceDay = person.lastInheritanceDay == null ? null : Math.max(0, Math.floor(Number(person.lastInheritanceDay) || 0));
 
     if (person.businessId || person.employerBusinessId) {
       person.unemploymentStreakDays = 0;
@@ -3691,7 +6048,11 @@
     var bloc = App.store.getBloc(options.blocId) || App.utils.pick(App.store.blocs);
     var iso = options.countryISO || pickCountryFromBloc(bloc.id);
     var sex = options.sex || (Math.random() < 0.5 ? "male" : "female");
-    var state = iso === "US" ? (options.state || null) : null;
+    if (!isResidencyEligibleCountry(iso)) {
+      iso = pickCountryFromBloc(bloc.id);
+    }
+    var requestedSubdivision = normalizeText(options.subdivision || options.state || null);
+    var state = iso === "US" ? requestedSubdivision : null;
     var spawn = options.anchorPerson ? getNearbySpawn(options.anchorPerson, iso, state) : getSpawnPos(iso, state);
     var spawnAttempts = 0;
         if (App.map && typeof App.map.isPointInCountry === "function") {
@@ -3717,6 +6078,12 @@
     var pool = App.data.NAME_POOLS[iso];
     var lastName = options.lastName || pickLastName(iso, bloc.id);
     var personId = randomId();
+    var resolvedState = iso === "US" ? ((spawn && spawn.state) || state || null) : null;
+    var resolvedSubdivision = iso === "US" ? resolvedState : requestedSubdivision;
+    var anchorCity = options.anchorPerson && options.anchorPerson.countryISO === iso ? options.anchorPerson.city : null;
+    var city = normalizeText(options.city) || normalizeText(options.birthCity) || normalizeText(anchorCity) || pickCountryCity(iso, [personId, iso, "city"].join("|"), resolvedSubdivision);
+    var birthCity = normalizeText(options.birthCity) || city || pickCountryCity(iso, [personId, iso, "birth"].join("|"), resolvedSubdivision);
+    resolvedSubdivision = resolveSubdivisionForCity(iso, city, resolvedSubdivision);
     var person = {
       id:personId,
       firstName:options.firstName || pickFirstName(iso, bloc.id, sex),
@@ -3726,7 +6093,10 @@
       sexualOrientation:options.sexualOrientation || pickDeterministicOrientation({ id:personId, sex:sex, countryISO:iso }),
       blocId:bloc.id,
       countryISO:iso,
-      state:spawn.state,
+      state:iso === "US" ? resolvedSubdivision : null,
+      subdivision:resolvedSubdivision,
+      city:city,
+      birthCity:birthCity,
       birthDay:options.birthDay != null ? options.birthDay : (App.store.simDay - ((options.age != null ? options.age : App.utils.randInt(22, 55)) * YEAR_DAYS)),
       age:0,
       alive:options.alive !== false,
@@ -3774,6 +6144,9 @@
       birthUnionType:options.birthUnionType === "non_marital" ? "non_marital" : "marital",
       groomedForBusinessById:options.groomedForBusinessById || null,
       inheritanceDilution:Math.max(1, Number(options.inheritanceDilution) || 1),
+      lifetimeInheritedGU:Math.max(0, Number(options.lifetimeInheritedGU) || 0),
+      inheritanceTransferCount:Math.max(0, Math.floor(Number(options.inheritanceTransferCount) || 0)),
+      lastInheritanceDay:options.lastInheritanceDay == null ? null : Math.max(0, Math.floor(Number(options.lastInheritanceDay) || 0)),
       siblingRivalry:App.utils.clamp(Number(options.siblingRivalry) || 0, 0, 100),
       sharedPrivilege:App.utils.clamp(Number(options.sharedPrivilege) || 0, 0, 100),
       mentorId:options.mentorId || null,
@@ -3817,6 +6190,7 @@
       founderId:owner.id,
       blocId:owner.blocId,
       countryISO:owner.countryISO,
+      hqCity:normalizeText(owner && owner.city) || pickCountryCity(owner.countryISO, [owner.id, industry, "hq"].join("|"), normalizeText(owner && (owner.subdivision || owner.state))),
       lineageId:owner.lineageId,
       revenueGU:Math.max(12000, revenueSeed),
       profitGU:0,
@@ -3833,7 +6207,32 @@
       age:0,
       successionCount:0,
       inheritedAtDay:null,
-      revenueHistory:[]
+      revenueHistory:[],
+      departments:null,
+      managementQuality:App.utils.rand(42, 68),
+      wageBillAnnual:0,
+      operatingCostAnnual:0,
+      hiringNeed:0,
+      supplyStress:0,
+      customerTrust:App.utils.rand(42, 64),
+      productQuality:App.utils.rand(45, 68),
+      pricePower:App.utils.rand(0.9, 1.08),
+      innovationIndex:App.utils.rand(28, 56),
+      technologyEdge:App.utils.rand(20, 52),
+      copiedTechDebt:0,
+      debtGU:0,
+      debtInterestRate:0.08,
+      debtMaturityDay:App.store.simDay + App.utils.randInt(200, 520),
+      rolloverRisk:0,
+      founderGuaranteeShare:App.utils.rand(0.28, 0.72),
+      bankruptcyStage:"stable",
+      distressScore:0,
+      restructuringUntilDay:0,
+      governance:null,
+      unionizationRate:App.utils.rand(0.05, 0.18),
+      laborUnrestScore:0,
+      layoffPressure:0,
+      strikeUntilDay:0
     };
     var reservedEmployees = reserveLabor(owner.countryISO, business.employees);
 
@@ -3987,13 +6386,21 @@
     return Math.max(0, (Number(listing && listing.sharePriceGU) || 0) * Math.max(1, Number(listing && listing.totalShares) || 1));
   }
 
-  function recordTradeTapeEntry(businessId, price, volume, movePct){
+  function recordTradeTapeEntry(businessId, openPrice, closePrice, highPrice, lowPrice, volume, movePct){
     var stockMarket = ensureStockMarketState();
+    var open = Math.max(0.01, Number(openPrice) || 0.01);
+    var close = Math.max(0.01, Number(closePrice) || open);
+    var high = Math.max(open, close, Number(highPrice) || 0);
+    var low = Math.min(open, close, Math.max(0.01, Number(lowPrice) || Math.min(open, close)));
 
     stockMarket.tradeTape.push({
       day:App.store.simDay,
       businessId:businessId,
-      priceGU:Math.max(0, Number(price) || 0),
+      priceGU:close,
+      openPriceGU:open,
+      closePriceGU:close,
+      highPriceGU:high,
+      lowPriceGU:Math.max(0.01, low),
       volumeShares:Math.max(0, Math.floor(Number(volume) || 0)),
       movePct:Number(movePct) || 0
     });
@@ -4343,6 +6750,9 @@
       var tradedShares = 0;
       var beforePrice;
       var afterPrice;
+      var intradayVolatility;
+      var highPrice;
+      var lowPrice;
       var movePct;
 
       if (!listing || !business) return;
@@ -4384,8 +6794,11 @@
       if (tradedShares > 0) {
         afterPrice = Math.max(0.05, beforePrice * App.utils.clamp(1 + (netDemandShares / Math.max(1, listing.totalShares || 1)) * 2.4 + App.utils.rand(-0.012, 0.012), 0.92, 1.12));
         listing.sharePriceGU = afterPrice;
+        intradayVolatility = App.utils.clamp(Math.abs(netDemandShares) / Math.max(1, listing.totalShares || 1) * 8 + App.utils.rand(0.002, 0.018), 0.002, 0.08);
+        highPrice = Math.max(beforePrice, afterPrice) * (1 + intradayVolatility * App.utils.rand(0.35, 1.1));
+        lowPrice = Math.max(0.05, Math.min(beforePrice, afterPrice) * (1 - intradayVolatility * App.utils.rand(0.35, 1.1)));
         movePct = ((afterPrice - beforePrice) / beforePrice) * 100;
-        recordTradeTapeEntry(business.id, afterPrice, tradedShares, movePct);
+        recordTradeTapeEntry(business.id, beforePrice, afterPrice, highPrice, lowPrice, tradedShares, movePct);
 
         if (Math.abs(movePct) >= 8 && tradedShares >= 1500) {
           emitNews("market", "<strong>" + business.name + "</strong> saw heavy trading in " + listing.symbol + " (" + (movePct > 0 ? "+" : "") + movePct.toFixed(1) + "%).", {
@@ -4515,31 +6928,84 @@
     var unemploymentPenalty;
     var roleHint;
     var skillPremium;
+    var disciplinePremium;
+    var educationPremium;
+    var relevantSkill;
 
     if (!person || !business || !role) return;
 
+    ensureSkillData(person);
+    alignEmploymentSkills(person, role);
     baseSalary = getRoleSalary(business, role);
     unemploymentPenalty = App.utils.clamp((Math.max(0, Number(person.unemploymentStreakDays) || 0) - LONG_UNEMPLOYMENT_DAYS) / 900, 0, 0.12);
     roleHint = getRoleOccupationHint(role);
     if (roleHint === "executive") {
-      skillPremium = ((Number(person.skills && person.skills.management) || 0) - 50) * 0.0042;
+      relevantSkill = Number(person.skills && person.skills.management) || 0;
+      skillPremium = (relevantSkill - 50) * 0.0062;
     } else if (roleHint === "engineer") {
-      skillPremium = ((Number(person.skills && person.skills.technical) || 0) - 50) * 0.004;
+      relevantSkill = Number(person.skills && person.skills.technical) || 0;
+      skillPremium = (relevantSkill - 50) * 0.0058;
     } else if (roleHint === "accountant") {
-      skillPremium = ((Number(person.skills && person.skills.financialDiscipline) || 0) - 50) * 0.004;
+      relevantSkill = Number(person.skills && person.skills.financialDiscipline) || 0;
+      skillPremium = (relevantSkill - 50) * 0.0058;
     } else if (roleHint === "sales") {
-      skillPremium = ((Number(person.skills && person.skills.social) || 0) - 50) * 0.004;
+      relevantSkill = Number(person.skills && person.skills.social) || 0;
+      skillPremium = (relevantSkill - 50) * 0.0058;
     } else {
-      skillPremium = ((getPersonSkillAverage(person) || 0) - 50) * 0.0028;
+      relevantSkill = getPersonSkillAverage(person) || 0;
+      skillPremium = (relevantSkill - 50) * 0.0044;
     }
+    ensureDecisionData(person);
+    disciplinePremium = ((Number(person.decisionProfile && person.decisionProfile.discipline) || 0) - 50) * 0.0018;
+    educationPremium = ((Number(person.educationIndex) || 0) - 50) * 0.0016;
 
     person.employerBusinessId = business.id;
     person.jobTitle = role.title;
     person.jobTier = role.tier;
     person.jobDepartment = role.department;
-    person.salaryGU = Math.max(900, Math.round(baseSalary * App.utils.clamp(1 + skillPremium - unemploymentPenalty, 0.86, 1.18)));
+    person.salaryGU = Math.max(900, Math.round(baseSalary * App.utils.clamp(1 + skillPremium + educationPremium + disciplinePremium - unemploymentPenalty, 0.82, 1.42)));
     person.lastEmployedDay = App.store.simDay;
     person.unemploymentStreakDays = 0;
+  }
+
+  function getJobTierRank(tier){
+    var key = String(tier || "entry").toLowerCase();
+    var index = JOB_TIER_ORDER.indexOf(key);
+
+    if (index !== -1) return index;
+    if (key === "manager") return JOB_TIER_ORDER.indexOf("senior");
+    if (key === "owner") return JOB_TIER_ORDER.indexOf("executive");
+    return JOB_TIER_ORDER.indexOf("entry");
+  }
+
+  function upgradeJobTier(person, role){
+    var currentRank;
+    var targetRank;
+    var nextRank;
+    var updated;
+
+    if (!person) return false;
+
+    currentRank = getJobTierRank(person.jobTier);
+    targetRank = role && role.tier ? getJobTierRank(role.tier) : JOB_TIER_ORDER.length - 1;
+    nextRank = Math.min(targetRank, currentRank + 1);
+    if (nextRank <= currentRank) return false;
+
+    person.jobTier = JOB_TIER_ORDER[nextRank] || person.jobTier;
+    person.salaryGU = Math.max(900, Math.round((Number(person.salaryGU) || 0) * App.utils.rand(1.05, 1.2)));
+    adjustPersonalReputation(person, {
+      trust:App.utils.rand(0.2, 1),
+      prestige:App.utils.rand(1.2, 3.4),
+      notoriety:App.utils.rand(0.2, 1)
+    });
+    adjustTemporaryStates(person, {
+      confidence:App.utils.rand(5, 11),
+      stress:App.utils.rand(-3, 1),
+      ambitionSpike:App.utils.rand(3, 7)
+    });
+    updated = true;
+    syncPerson(person);
+    return updated;
   }
 
   function clearEmployment(person, businessId){
@@ -4560,6 +7026,291 @@
       person.lastEmployedDay = App.store.simDay;
       person.unemploymentStreakDays = 0;
     }
+  }
+
+  function getLeadershipPerformanceScore(person){
+    var skillAverage;
+
+    if (!person) return 0;
+    ensureDecisionData(person);
+    skillAverage = getPersonSkillAverage(person);
+    return (
+      (Number(person.educationIndex) || 0) * 0.2 +
+      skillAverage * 0.55 +
+      (Number(person.personalReputation && person.personalReputation.prestige) || 35) * 0.2 +
+      (person.decisionProfile.discipline - 50) * 0.45 +
+      (person.decisionProfile.adaptability - 50) * 0.35 -
+      (Number(person.temporaryStates && person.temporaryStates.burnout) || 0) * 0.15
+    );
+  }
+
+  function findBestPoachCandidate(sourceBusiness, targetBusiness){
+    var sourceLeadership;
+
+    if (!sourceBusiness || !targetBusiness) return null;
+
+    sourceLeadership = App.store.getBusinessLeadership(sourceBusiness).filter(function(entry){
+      return !!(entry.person && entry.person.alive && !entry.person.retired && entry.roleKey !== "ceo");
+    });
+
+    sourceLeadership.sort(function(first, second){
+      return getLeadershipPerformanceScore(second.person) - getLeadershipPerformanceScore(first.person);
+    });
+
+    return sourceLeadership.length ? sourceLeadership[0].person : null;
+  }
+
+  function applyLaborUnrestPressure(business, decision, employeeDelta){
+    var profile;
+    var countryMedianWage;
+    var staffWage;
+    var wageLag;
+    var inequality;
+    var socialPressure;
+    var countryStrikeRisk;
+    var layoffShock;
+    var unrestBuild;
+    var unionization;
+    var strikeRisk;
+    var strikeLength;
+
+    if (!business) return;
+
+    profile = ensureCountryProfile(business.countryISO);
+    countryMedianWage = getCountryMedianWage(business.countryISO);
+    staffWage = Math.max(1, getStaffMedianSalary(business));
+    wageLag = App.utils.clamp((countryMedianWage - staffWage) / countryMedianWage, 0, 0.8);
+    inequality = App.utils.clamp(Number(profile && profile.giniCoefficient) || 0.4, 0.2, 0.8);
+    socialPressure = App.utils.clamp(Number(profile && profile.socialPressureIndex) || 0, 0, 1.5);
+    countryStrikeRisk = App.utils.clamp(Number(profile && profile.strikeRiskIndex) || 0, 0, 1.4);
+    layoffShock = employeeDelta < 0 ? App.utils.clamp(Math.abs(employeeDelta) / Math.max(1, business.employees || 1), 0, 0.3) : 0;
+
+    business.layoffPressure = App.utils.clamp((Number(business.layoffPressure) || 0) * 0.86 + layoffShock, 0, 1.2);
+    unrestBuild =
+      (wageLag * 0.68) +
+      (Math.max(0, inequality - 0.36) * 0.8) +
+      (socialPressure * 0.24) +
+      (business.layoffPressure * 0.95) +
+      ((decision && decision.stance === "retrenching") ? 0.06 : 0);
+    business.laborUnrestScore = App.utils.clamp((Number(business.laborUnrestScore) || 0) * 0.78 + unrestBuild, 0, 1.6);
+
+    unionization = Number(business.unionizationRate);
+    if (!Number.isFinite(unionization)) {
+      unionization = App.utils.rand(0.05, 0.18);
+    }
+    unionization += (wageLag * 0.04) + (layoffShock * 0.05) + (Math.max(0, inequality - 0.4) * 0.03) + (countryStrikeRisk * 0.035) - 0.01;
+    business.unionizationRate = App.utils.clamp(unionization, 0.02, 0.82);
+
+    strikeRisk = App.utils.clamp((business.unionizationRate * 0.4) + (business.laborUnrestScore * 0.42) + (countryStrikeRisk * 0.11) - 0.16, 0, 0.72);
+
+    if ((Number(business.strikeUntilDay) || 0) > App.store.simDay) {
+      business.revenueGU *= App.utils.rand(0.94, 0.985);
+      business.reputation = clampScore((business.reputation || 50) - App.utils.rand(0.3, 1));
+      if (Math.random() < 0.35) {
+        applyLeadershipStateChange(business, {
+          stress:App.utils.rand(2, 6),
+          confidence:App.utils.rand(-4, -1),
+          burnout:App.utils.rand(0.4, 1.4)
+        });
+      }
+      return;
+    }
+
+    if (strikeRisk > 0.22 && Math.random() < chanceForDays(strikeRisk * 0.22, YEAR_DAYS / 2)) {
+      strikeLength = App.utils.randInt(10, 38);
+      business.strikeUntilDay = App.store.simDay + strikeLength;
+      emitNews("market", "Labor unrest escalated at <strong>" + business.name + "</strong>; a strike has begun.", {
+        entities:{
+          businessIds:[business.id],
+          countryIsos:[business.countryISO],
+          blocIds:[business.blocId]
+        },
+        causes:[
+          "Wage lag and inequality elevated union pressure.",
+          "Recent layoffs compounded labor unrest risk."
+        ]
+      });
+    }
+  }
+
+  function processYearlyPromotionsAndPoaching(){
+    var movedPeople = {};
+
+    App.store.businesses.slice().sort(function(first, second){
+      return (second.reputation || 50) - (first.reputation || 50);
+    }).forEach(function(business){
+      var leadership;
+      var sourceCandidates;
+      var sourceBusiness;
+      var poachCandidate;
+      var poachRole;
+      var replaced;
+
+      if (!business) return;
+
+      leadership = App.store.getBusinessLeadership(business).filter(function(entry){
+        return !!entry.person;
+      });
+
+      leadership.forEach(function(entry){
+        var person = entry.person;
+        var score;
+
+        if (!person || !person.alive || movedPeople[person.id]) return;
+        score = getLeadershipPerformanceScore(person);
+        if (score >= 56 && Math.random() < 0.24) {
+          if (upgradeJobTier(person, entry)) {
+            movedPeople[person.id] = true;
+            emitNews("hire", "<strong>" + person.name + "</strong> earned an internal promotion at <strong>" + business.name + "</strong>.", {
+              entities:{
+                personIds:[person.id],
+                businessIds:[business.id],
+                countryIsos:[business.countryISO],
+                blocIds:[business.blocId]
+              },
+              causes:[
+                "Strong insider performance lifted promotion odds.",
+                "Firm leadership favored internal advancement over external hiring."
+              ]
+            });
+          }
+        }
+      });
+
+      if ((business.reputation || 50) < 62 || Math.random() > 0.35) return;
+
+      sourceCandidates = App.store.businesses.filter(function(candidate){
+        return candidate &&
+          candidate.id !== business.id &&
+          candidate.industry === business.industry &&
+          (candidate.reputation || 50) + 6 < (business.reputation || 50);
+      }).sort(function(first, second){
+        return (first.reputation || 50) - (second.reputation || 50);
+      });
+
+      sourceBusiness = sourceCandidates[0] || null;
+      if (!sourceBusiness) return;
+
+      poachCandidate = findBestPoachCandidate(sourceBusiness, business);
+      if (!poachCandidate || movedPeople[poachCandidate.id]) return;
+      if (Math.random() > App.utils.clamp(0.22 + (((business.reputation || 50) - (sourceBusiness.reputation || 50)) * 0.008), 0.16, 0.58)) return;
+
+      poachRole = (business.leadership || []).filter(function(entry){
+        return entry.roleKey !== "ceo";
+      }).sort(function(first, second){
+        var firstPerson = App.store.getPerson(first.personId);
+        var secondPerson = App.store.getPerson(second.personId);
+        var firstScore = firstPerson && firstPerson.alive ? leadershipCandidateScore(firstPerson, business, first) : -9999;
+        var secondScore = secondPerson && secondPerson.alive ? leadershipCandidateScore(secondPerson, business, second) : -9999;
+        return firstScore - secondScore;
+      })[0] || null;
+
+      if (!poachRole) return;
+
+      replaced = App.store.getPerson(poachRole.personId);
+      if (replaced && replaced.alive) {
+        clearEmployment(replaced, business.id);
+        syncPerson(replaced);
+      }
+
+      clearEmployment(poachCandidate, sourceBusiness.id);
+      assignEmployment(poachCandidate, business, poachRole);
+      relocatePersonToCountry(poachCandidate, business.countryISO, {
+        city:normalizeText(business.hqCity)
+      });
+      poachRole.personId = poachCandidate.id;
+      movedPeople[poachCandidate.id] = true;
+
+      sourceBusiness.reputation = clampScore((sourceBusiness.reputation || 50) - App.utils.rand(0.6, 2.2));
+      business.reputation = clampScore((business.reputation || 50) + App.utils.rand(0.4, 1.8));
+
+      syncBusinessLeadership(sourceBusiness);
+      syncBusinessLeadership(business);
+      syncPerson(poachCandidate);
+
+      emitNews("hire", "<strong>" + business.name + "</strong> poached <strong>" + poachCandidate.name + "</strong> from <strong>" + sourceBusiness.name + "</strong>.", {
+        entities:{
+          personIds:[poachCandidate.id],
+          businessIds:[business.id, sourceBusiness.id],
+          countryIsos:[business.countryISO, sourceBusiness.countryISO],
+          blocIds:[business.blocId, sourceBusiness.blocId]
+        },
+        causes:[
+          "High-reputation firms attracted stronger external talent.",
+          "Rival industry competition intensified leadership poaching pressure."
+        ]
+      });
+    });
+  }
+
+  function processYearlyEliteReproduction(){
+    var living = App.store.getLivingPeople();
+
+    living.forEach(function(person){
+      var household;
+      var classTier;
+      var classRank;
+      var skillAvg;
+      var parents;
+      var sponsor;
+
+      if (!person || !person.alive) return;
+      household = getHouseholdForPerson(person);
+      classTier = household ? household.classTier : "working";
+      classRank = householdClassRank(classTier);
+      skillAvg = getPersonSkillAverage(person);
+      parents = App.store.getParents(person, false);
+
+      if (person.age <= 30 && classRank >= 3) {
+        person.sharedPrivilege = App.utils.clamp((Number(person.sharedPrivilege) || 0) + App.utils.rand(1.5, 5.5), 0, 100);
+        person.educationIndex = App.utils.clamp((Number(person.educationIndex) || 0) + App.utils.rand(0.8, 2.5), 0, 100);
+        if (parents.length) {
+          parents.forEach(function(parent){
+            if (!parent || !parent.alive) return;
+            person.nepotismTieIds = normalizeUniqueIdList((person.nepotismTieIds || []).concat([parent.id]), person.id).slice(0, 10);
+            if ((parent.eliteCircleIds || []).length) {
+              person.schoolTieIds = normalizeUniqueIdList((person.schoolTieIds || []).concat(parent.eliteCircleIds.slice(0, 2)), person.id).slice(0, 12);
+            }
+            if ((parent.netWorthGU || 0) > 70000 && Math.random() < 0.32) {
+              var transfer = Math.min((parent.netWorthGU || 0) * App.utils.rand(0.005, 0.018), Math.max(900, (person.netWorthGU || 0) * 0.2));
+              drawHouseholdAssetTransfer(parent, transfer);
+              allocateHouseholdAssetTransfer(person, transfer, "child");
+            }
+          });
+        }
+      }
+
+      if (person.age >= 18 && person.age <= 34 && classRank <= 1 && skillAvg >= 58 && (Number(person.educationIndex) || 0) >= 52) {
+        sponsor = living.filter(function(candidate){
+          return candidate.id !== person.id && candidate.alive && ((candidate.netWorthGU || 0) >= 90000 || (candidate.personalReputation && candidate.personalReputation.prestige >= 66));
+        }).sort(function(first, second){
+          return ((second.netWorthGU || 0) + ((second.personalReputation && second.personalReputation.prestige) || 0) * 1000) - ((first.netWorthGU || 0) + ((first.personalReputation && first.personalReputation.prestige) || 0) * 1000);
+        })[0] || null;
+
+        if (sponsor && Math.random() < 0.26) {
+          person.mentorId = sponsor.id;
+          person.educationIndex = App.utils.clamp((Number(person.educationIndex) || 0) + App.utils.rand(1.2, 3.6), 0, 100);
+          person.sharedPrivilege = App.utils.clamp((Number(person.sharedPrivilege) || 0) + App.utils.rand(0.6, 2.4), 0, 100);
+          adjustTemporaryStates(person, {
+            confidence:App.utils.rand(2, 7),
+            ambitionSpike:App.utils.rand(3, 8)
+          });
+          adjustPersonalReputation(person, { prestige:App.utils.rand(0.4, 1.6), trust:0.4 });
+        }
+      }
+
+      if (person.age <= 35 && classRank >= 3 && household && ((household.financialStress || 0) > 74 || (household.debtGU || 0) > ((household.cashOnHandGU || 0) * 1.35))) {
+        person.sharedPrivilege = App.utils.clamp((Number(person.sharedPrivilege) || 0) - App.utils.rand(2.5, 7.5), 0, 100);
+        person.eliteCircleIds = (person.eliteCircleIds || []).slice(0, Math.max(0, (person.eliteCircleIds || []).length - App.utils.randInt(0, 2)));
+        if (Math.random() < 0.35) {
+          adjustPersonalReputation(person, { prestige:-App.utils.rand(0.8, 2.8), trust:-App.utils.rand(0.2, 1) });
+        }
+      }
+
+      ensureEducationData(person, household || null);
+      ensureSkillData(person);
+      syncPerson(person);
+    });
   }
 
   function buildLeadershipEntry(role, person){
@@ -4683,6 +7434,7 @@
       blocId:business.blocId,
       countryISO:business.countryISO,
       state:anchorPerson && anchorPerson.countryISO === "US" ? anchorPerson.state : null,
+      subdivision:anchorPerson ? (anchorPerson.subdivision || anchorPerson.state || null) : null,
       age:App.utils.randInt(28, 58),
       netWorthGU:App.utils.rand(1800, 22000),
       anchorPerson:anchorPerson || null
@@ -4693,6 +7445,158 @@
     assignEmployment(hire, business, role);
     syncPerson(hire);
     return hire;
+  }
+
+  function getStaffEmploymentTier(person){
+    var skillAverage;
+    var education;
+    var weightedScore;
+
+    if (!person) return "entry";
+
+    skillAverage = getPersonSkillAverage(person);
+    education = Number(person.educationIndex) || 0;
+    weightedScore = (skillAverage * 0.72) + (education * 0.28);
+
+    if (weightedScore >= 74) return "senior";
+    if (weightedScore >= 62) return "mid";
+    if (weightedScore >= 52) return "junior";
+    return "entry";
+  }
+
+  function buildStaffEmploymentRole(business, person){
+    var occupation;
+    var tier;
+    var department = "operations";
+    var title = "Operations Associate";
+    var importance = 1;
+
+    occupation = getIndustryOccupationForPerson(business && business.industry, person);
+    tier = getStaffEmploymentTier(person);
+
+    if (occupation === "engineer") {
+      department = "technology";
+      title = tier === "senior" ? "Senior Engineer" : (tier === "mid" ? "Engineer" : "Junior Engineer");
+      importance = tier === "senior" ? 2 : 1;
+    } else if (occupation === "accountant") {
+      department = "finance";
+      title = tier === "senior" ? "Finance Manager" : "Accountant";
+      importance = tier === "senior" ? 2 : 1;
+    } else if (occupation === "sales") {
+      department = "sales";
+      title = tier === "senior" ? "Sales Manager" : "Sales Associate";
+      importance = tier === "senior" ? 2 : 1;
+    } else if (occupation === "factory_worker") {
+      department = "operations";
+      title = tier === "senior" ? "Production Lead" : "Production Associate";
+      importance = tier === "senior" ? 2 : 1;
+    } else {
+      department = "operations";
+      title = tier === "senior" ? "Operations Lead" : (tier === "mid" ? "Operations Specialist" : "Operations Associate");
+      importance = tier === "senior" ? 2 : 1;
+    }
+
+    return {
+      roleKey:"staff_" + department + "_" + tier,
+      title:title,
+      tier:tier,
+      department:department,
+      importance:importance
+    };
+  }
+
+  function isStaffEmploymentEligible(person, business, excludedIds){
+    if (!person || !business) return false;
+    if (!person.alive || person.retired) return false;
+    if ((Number(person.age) || 0) < 18) return false;
+    if (person.countryISO !== business.countryISO) return false;
+    if (excludedIds && excludedIds.indexOf(person.id) !== -1) return false;
+    if (person.businessId && person.businessId !== business.id) return false;
+    if (person.employerBusinessId && person.employerBusinessId !== business.id) return false;
+    return true;
+  }
+
+  function getBusinessStaffCandidates(business, excludedIds){
+    return App.store.getLivingPeople().filter(function(candidate){
+      return isStaffEmploymentEligible(candidate, business, excludedIds);
+    }).sort(function(first, second){
+      var firstAssigned = first.employerBusinessId === business.id ? 1 : 0;
+      var secondAssigned = second.employerBusinessId === business.id ? 1 : 0;
+      var firstScore;
+      var secondScore;
+
+      if (firstAssigned !== secondAssigned) return secondAssigned - firstAssigned;
+
+      firstScore = (getPersonSkillAverage(first) * 0.55) + ((Number(first.educationIndex) || 0) * 0.2) + (((Number(first.decisionProfile && first.decisionProfile.discipline) || 50) - 50) * 0.35) - (Math.min(18, Math.max(0, Number(first.unemploymentStreakDays) || 0) / 28) * 0.45);
+      secondScore = (getPersonSkillAverage(second) * 0.55) + ((Number(second.educationIndex) || 0) * 0.2) + (((Number(second.decisionProfile && second.decisionProfile.discipline) || 50) - 50) * 0.35) - (Math.min(18, Math.max(0, Number(second.unemploymentStreakDays) || 0) / 28) * 0.45);
+      return secondScore - firstScore;
+    });
+  }
+
+  function createStaffHire(business, anchorPerson){
+    var hire = createCitizen({
+      blocId:business.blocId,
+      countryISO:business.countryISO,
+      state:anchorPerson && anchorPerson.countryISO === "US" ? anchorPerson.state : null,
+      subdivision:anchorPerson ? (anchorPerson.subdivision || anchorPerson.state || null) : null,
+      age:App.utils.randInt(19, 52),
+      netWorthGU:App.utils.rand(600, 6200),
+      anchorPerson:anchorPerson || null
+    });
+
+    App.store.people.push(hire);
+    hire.pulse = 1;
+    syncPerson(hire);
+    return hire;
+  }
+
+  function syncBusinessStaffAssignments(business){
+    var leadershipIds;
+    var owner;
+    var assignedStaff;
+    var targetStaffCount;
+    var candidates;
+    var excludedIds;
+
+    if (!business) return;
+
+    leadershipIds = (business.leadership || []).map(function(entry){
+      return String(entry && entry.personId || "");
+    }).filter(Boolean);
+    owner = App.store.getPerson(business.ownerId) || App.store.getPerson(business.founderId) || null;
+    assignedStaff = App.store.getLivingPeople().filter(function(person){
+      return person && person.employerBusinessId === business.id && leadershipIds.indexOf(person.id) === -1;
+    });
+    targetStaffCount = Math.max(0, Math.max(0, Number(business.employees) || 0) - leadershipIds.length);
+
+    if (assignedStaff.length > targetStaffCount) {
+      assignedStaff.sort(function(first, second){
+        return getPersonSkillAverage(first) - getPersonSkillAverage(second);
+      }).slice(targetStaffCount).forEach(function(person){
+        clearEmployment(person, business.id);
+        syncPerson(person);
+      });
+      assignedStaff = assignedStaff.slice(0, targetStaffCount);
+    }
+
+    if (assignedStaff.length >= targetStaffCount) return;
+
+    excludedIds = leadershipIds.concat(assignedStaff.map(function(person){ return person.id; }));
+    candidates = getBusinessStaffCandidates(business, excludedIds);
+
+    while (assignedStaff.length < targetStaffCount) {
+      var person = candidates.shift();
+      var role;
+
+      if (!person) {
+        person = createStaffHire(business, owner);
+      }
+
+      role = buildStaffEmploymentRole(business, person);
+      assignEmployment(person, business, role);
+      syncPerson(person);
+      assignedStaff.push(person);
+    }
   }
 
   function syncBusinessLeadership(business){
@@ -4728,7 +7632,7 @@
     });
 
     App.store.people.forEach(function(person){
-      if (person.employerBusinessId === business.id && takenIds.indexOf(person.id) === -1) {
+      if (person.employerBusinessId === business.id && takenIds.indexOf(person.id) === -1 && (person.jobTier === "executive" || person.jobTier === "leadership")) {
         clearEmployment(person, business.id);
         syncPerson(person);
       }
@@ -4751,6 +7655,7 @@
     }
 
     business.employees = Math.max(minimumHeadcount, currentHeadcount);
+    syncBusinessStaffAssignments(business);
   }
 
   function syncCorporateLadders(){
@@ -4762,6 +7667,7 @@
 
     App.store.businesses.forEach(function(business){
       syncBusinessLeadership(business);
+      syncBusinessStaffAssignments(business);
       ensureBusinessDecisionState(business);
       business.currentDecision = evaluateBusinessDecision(business);
     });
@@ -4802,6 +7708,591 @@
     return App.utils.clamp(baseRate + stageAdjustment, 0.24, 0.68);
   }
 
+  function getIndustryBehaviorProfile(industry){
+    return INDUSTRY_BEHAVIOR_PROFILES[industry] || INDUSTRY_BEHAVIOR_PROFILES.Technology;
+  }
+
+  function getIndustrySupplyPressure(business){
+    var dependencies = INDUSTRY_SUPPLY_DEPENDENCIES[business && business.industry] || [];
+    var blocBusinesses;
+
+    if (!business || !dependencies.length) return 0;
+    blocBusinesses = App.store.businesses.filter(function(candidate){
+      return !!(candidate && candidate.blocId === business.blocId);
+    });
+    if (!blocBusinesses.length) return 0;
+
+    return dependencies.reduce(function(sum, dependency){
+      var peers = blocBusinesses.filter(function(candidate){
+        return candidate.industry === dependency;
+      });
+      var strain;
+
+      if (!peers.length) return sum + 0.18;
+      strain = peers.reduce(function(inner, peer){
+        var margin = (Number(peer.revenueGU) || 0) > 0 ? ((Number(peer.profitGU) || 0) / Math.max(1, Number(peer.revenueGU) || 1)) : -0.2;
+        var bankruptcyPenalty = peer.bankruptcyStage && peer.bankruptcyStage !== "stable" ? 0.12 : 0;
+        return inner + App.utils.clamp((0.1 - margin) * 0.85 + bankruptcyPenalty, 0, 0.65);
+      }, 0) / peers.length;
+
+      return sum + strain;
+    }, 0) / dependencies.length;
+  }
+
+  function getIndustryTradeExposure(industry){
+    return App.utils.clamp(Number(INDUSTRY_TRADE_EXPOSURE[industry]) || 0.5, 0.2, 0.9);
+  }
+
+  function getIndustryRerouteAdaptability(industry){
+    return App.utils.clamp(Number(INDUSTRY_REROUTE_ADAPTABILITY[industry]) || 0.5, 0.2, 0.85);
+  }
+
+  function getCrossBlocDependencyPressure(bloc, dependencies){
+    var otherBlocs;
+
+    if (!bloc || !dependencies || !dependencies.length) return 0;
+
+    otherBlocs = (App.store.blocs || []).filter(function(candidate){
+      return !!(candidate && candidate.id !== bloc.id);
+    });
+    if (!otherBlocs.length) return 0;
+
+    return dependencies.reduce(function(sum, dependencyIndustry){
+      var dependencyPressure = otherBlocs.reduce(function(inner, candidateBloc){
+        var sectorPresence = App.store.businesses.some(function(candidateBusiness){
+          return !!(candidateBusiness && candidateBusiness.blocId === candidateBloc.id && candidateBusiness.industry === dependencyIndustry);
+        });
+        if (!sectorPresence) return inner + 0.12;
+        return inner + App.utils.clamp((Number(candidateBloc.geoPressure) || 0) * 0.09, 0, 0.45);
+      }, 0) / otherBlocs.length;
+
+      return sum + dependencyPressure;
+    }, 0) / dependencies.length;
+  }
+
+  function computeTradeShockTransmission(business, bloc, behaviorProfile, supplyPressure){
+    var dependencies = INDUSTRY_SUPPLY_DEPENDENCIES[business && business.industry] || [];
+    var tradeExposure = getIndustryTradeExposure(business && business.industry);
+    var rerouteAdaptability = getIndustryRerouteAdaptability(business && business.industry);
+    var crossBlocDependencyPressure = getCrossBlocDependencyPressure(bloc, dependencies);
+    var baseTradeShock;
+    var rerouteCapacity;
+    var rerouteRelief;
+    var netShock;
+
+    if (!business || !bloc) {
+      return {
+        grossShock:0,
+        netShock:0,
+        rerouteRelief:0,
+        rerouteCapacity:0,
+        costMultiplier:1
+      };
+    }
+
+    baseTradeShock =
+      App.utils.clamp((Number(bloc.geoPressure) || 0) * 0.13, 0, 0.58) +
+      (App.utils.clamp(Number(supplyPressure) || 0, 0, 1.8) * 0.24) +
+      crossBlocDependencyPressure;
+    baseTradeShock *= App.utils.clamp(tradeExposure * (Number(behaviorProfile && behaviorProfile.supplySensitivity) || 1), 0.2, 1.35);
+    baseTradeShock = App.utils.clamp(baseTradeShock, 0, 1.6);
+
+    rerouteCapacity = App.utils.clamp(
+      ((Number(business.tradeRerouteCapacity) || 0) * 0.8) +
+      ((Number(business.managementQuality) || 50) / 100) * 0.14 +
+      ((Number(business.innovationIndex) || 50) / 100) * 0.08,
+      0,
+      1.15
+    );
+    rerouteCapacity = App.utils.clamp(rerouteCapacity * (0.72 + (rerouteAdaptability * 0.6)), 0, 1.2);
+    rerouteRelief = App.utils.clamp(Math.min(baseTradeShock * App.utils.clamp(0.22 + (rerouteCapacity * 0.38), 0.22, 0.62), 0.8), 0, 0.8);
+    netShock = App.utils.clamp(baseTradeShock - rerouteRelief, 0, 1.6);
+
+    business.tradeRerouteCapacity = App.utils.clamp(rerouteCapacity - (netShock * 0.09), 0, 1.2);
+    business.tradeShockExposure = tradeExposure;
+
+    return {
+      grossShock:baseTradeShock,
+      netShock:netShock,
+      rerouteRelief:rerouteRelief,
+      rerouteCapacity:rerouteCapacity,
+      costMultiplier:1 + App.utils.clamp((netShock * 0.07) - (rerouteRelief * 0.018), 0, 0.16)
+    };
+  }
+
+  function updateCountryTradeShockSignals(){
+    var countryBusinessStats = {};
+
+    (App.store.businesses || []).forEach(function(business){
+      var iso;
+      var stats;
+
+      if (!business || !business.countryISO) return;
+      iso = business.countryISO;
+      if (!countryBusinessStats[iso]) {
+        countryBusinessStats[iso] = { count:0, tradeShockSum:0, rerouteSum:0, supplyStressSum:0 };
+      }
+      stats = countryBusinessStats[iso];
+      stats.count += 1;
+      stats.tradeShockSum += App.utils.clamp(Number(business.tradeShockPressure) || 0, 0, 1.8);
+      stats.rerouteSum += App.utils.clamp(Number(business.tradeRerouteRelief) || 0, 0, 1.2);
+      stats.supplyStressSum += App.utils.clamp(Number(business.supplyStress) || 0, 0, 1.8);
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var stats = countryBusinessStats[iso];
+      var tradeShockIndex = stats && stats.count ? (stats.tradeShockSum / stats.count) : 0;
+      var rerouteRelief = stats && stats.count ? (stats.rerouteSum / stats.count) : 0;
+      var avgSupplyStress = stats && stats.count ? (stats.supplyStressSum / stats.count) : 0;
+
+      if (!profile) return;
+
+      profile.tradeShockIndex = App.utils.clamp(((Number(profile.tradeShockIndex) || 0) * 0.72) + (tradeShockIndex * 0.28), 0, 1.8);
+      profile.tradeRerouteRelief = App.utils.clamp(((Number(profile.tradeRerouteRelief) || 0) * 0.68) + (rerouteRelief * 0.32), 0, 1.2);
+      profile.avgSupplyStress = App.utils.clamp(((Number(profile.avgSupplyStress) || 0) * 0.7) + (avgSupplyStress * 0.3), 0, 1.8);
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.tradeShockIndex = Number(profile.tradeShockIndex.toFixed(4));
+      profile.policyEvidence.tradeRerouteRelief = Number(profile.tradeRerouteRelief.toFixed(4));
+      profile.policyEvidence.avgSupplyStress = Number(profile.avgSupplyStress.toFixed(4));
+    });
+  }
+
+  function refreshBusinessFirmStructure(business, decision){
+    var profile;
+    var behavior;
+    var departmentShares;
+    var managementTilt;
+    var leadershipCount;
+    var boardPressure;
+
+    if (!business) return;
+
+    profile = ensureCountryProfile(business.countryISO);
+    behavior = getIndustryBehaviorProfile(business.industry);
+    leadershipCount = Math.max(1, (business.leadership || []).length);
+    boardPressure = Number(business.governance && business.governance.boardPressure) || 0;
+
+    departmentShares = {
+      operations:App.utils.clamp(0.18 + (behavior.supplySensitivity * 0.16), 0.16, 0.42),
+      people:App.utils.clamp(0.1 + (behavior.talentSensitivity * 0.08), 0.08, 0.22),
+      finance:App.utils.clamp(0.1 + (behavior.leverageAppetite * 0.06), 0.08, 0.22),
+      sales:App.utils.clamp(0.14 + (behavior.customerElasticity * 0.08), 0.12, 0.3),
+      rnd:App.utils.clamp(0.06 + (behavior.innovationBias * 0.1), 0.04, 0.24)
+    };
+
+    managementTilt =
+      ((Number(business.reputation) || 50) - 50) * 0.02 +
+      (((Number(business.customerTrust) || 50) - 50) * 0.01) +
+      ((decision && decision.stance === "aggressive") ? -0.08 : 0) +
+      ((decision && decision.cashPolicy === "preserve") ? 0.06 : 0) -
+      (boardPressure * 0.05);
+
+    business.managementQuality = App.utils.clamp((Number(business.managementQuality) || 50) * 0.95 + (50 + managementTilt * 100) * 0.05, 10, 98);
+    business.departments.operations = Math.round(Math.max(0, (business.revenueGU || 0) * departmentShares.operations));
+    business.departments.people = Math.round(Math.max(0, (business.revenueGU || 0) * departmentShares.people));
+    business.departments.finance = Math.round(Math.max(0, (business.revenueGU || 0) * departmentShares.finance));
+    business.departments.sales = Math.round(Math.max(0, (business.revenueGU || 0) * departmentShares.sales));
+    business.departments.rnd = Math.round(Math.max(0, (business.revenueGU || 0) * departmentShares.rnd));
+
+    business.wageBillAnnual = Math.max(0, getLeadershipPayrollAnnual(business) + getAnonymousPayrollAnnual(business));
+    business.operatingCostAnnual = Math.max(0, (business.revenueGU || 0) * getOperatingCostRate(business));
+    business.hiringNeed = App.utils.clamp(
+      Math.round(((decision && decision.staffingAction === "hire") ? 1 : (decision && decision.staffingAction === "layoff" ? -1 : 0)) * Math.max(0, business.employees || 0) * 0.08 + ((Number(profile.talentShortageIndex) || 0) * -8) + (leadershipCount * 0.4)),
+      -600,
+      600
+    );
+  }
+
+  function ensureBlocCentralBankState(bloc){
+    if (!bloc) return null;
+    if (!bloc.centralBank || typeof bloc.centralBank !== "object") {
+      bloc.centralBank = {};
+    }
+    bloc.centralBank.policyRate = App.utils.clamp(Number(bloc.centralBank.policyRate) || App.utils.rand(0.012, 0.08), 0.002, 0.24);
+    bloc.centralBank.inflation = App.utils.clamp(Number(bloc.centralBank.inflation) || App.utils.rand(0.01, 0.07), -0.02, 0.22);
+    bloc.centralBank.unemployment = App.utils.clamp(Number(bloc.centralBank.unemployment) || 0.09, 0.01, 0.38);
+    bloc.centralBank.lastMoveDay = Math.max(0, Math.floor(Number(bloc.centralBank.lastMoveDay) || 0));
+    return bloc.centralBank;
+  }
+
+  function getBlocPolicyRate(blocId){
+    var bloc = typeof blocId === "string" ? App.store.getBloc(blocId) : blocId;
+    var centralBank = ensureBlocCentralBankState(bloc);
+
+    return centralBank ? App.utils.clamp(Number(centralBank.policyRate) || 0.06, 0.002, 0.24) : 0.06;
+  }
+
+  function processYearlyCentralBankPolicy(){
+    App.store.blocs.forEach(function(bloc){
+      var profiles = App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : [];
+      var centralBank = ensureBlocCentralBankState(bloc);
+      var unemploymentRate;
+      var demandGrowth;
+      var inflationPressure;
+      var policyMove;
+
+      if (!centralBank) return;
+
+      unemploymentRate = profiles.length ? profiles.reduce(function(sum, profile){
+        var laborForce = Math.max(1, Number(profile.laborForce) || 1);
+        return sum + ((Number(profile.unemployed) || 0) / laborForce);
+      }, 0) / profiles.length : 0.1;
+
+      demandGrowth = profiles.length ? profiles.reduce(function(sum, profile){
+        var previous = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+        var current = Math.max(0, Number(profile.consumerDemandGU) || 0);
+        return sum + ((current - previous) / previous);
+      }, 0) / profiles.length : 0;
+
+      inflationPressure = App.utils.clamp((demandGrowth * 0.85) + Math.max(0, 0.22 - unemploymentRate) * 0.4 + ((bloc.geoPressure || 0) * 0.25), -0.03, 0.14);
+      centralBank.inflation = App.utils.clamp(centralBank.inflation * 0.55 + inflationPressure * 0.45, -0.02, 0.22);
+      centralBank.unemployment = App.utils.clamp(unemploymentRate, 0.01, 0.38);
+
+      policyMove = (centralBank.inflation > 0.065 ? 0.007 : 0) + (centralBank.unemployment > 0.12 ? -0.006 : 0);
+      policyMove += App.utils.clamp((demandGrowth - 0.01) * 0.08, -0.008, 0.008);
+      centralBank.policyRate = App.utils.clamp(centralBank.policyRate + policyMove, 0.002, 0.24);
+      centralBank.lastMoveDay = App.store.simDay;
+
+      if (Math.abs(policyMove) >= 0.0055) {
+        emitNews("policy", bloc.flag + " central bank " + (policyMove > 0 ? "raised" : "cut") + " rates to " + (centralBank.policyRate * 100).toFixed(2) + "%.", {
+          entities:{
+            blocIds:[bloc.id]
+          },
+          causes:[
+            "Inflation estimate: " + (centralBank.inflation * 100).toFixed(2) + "%.",
+            "Bloc unemployment estimate: " + (centralBank.unemployment * 100).toFixed(1) + "%."
+          ]
+        });
+      }
+    });
+  }
+
+  function processYearlyCorporateGovernance(){
+    App.store.businesses.forEach(function(business){
+      var listing = getBusinessListing(business.id);
+      var owner = App.store.getPerson(business.ownerId);
+      var governance;
+      var ageYears;
+      var founderAlive;
+      var outsideDrift;
+      var profile;
+      var institutionScore;
+      var corruptionIndex;
+      var friendliness;
+      var volatility;
+      var concentrationBias;
+      var confidenceBias;
+
+      if (!business) return;
+      ensureBusinessDecisionState(business);
+      governance = business.governance;
+      profile = ensureCountryProfile(business.countryISO, business.blocId);
+      institutionScore = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1);
+      corruptionIndex = App.utils.clamp(Number(profile && profile.developmentCorruptionIndex) || (1 - institutionScore), 0, 1);
+      friendliness = App.utils.clamp(Number(profile && profile.developmentBusinessFriendlinessIndex) || institutionScore, 0, 1);
+      volatility = App.utils.clamp((Number(profile && profile.institutionalInstabilityIndex) || 0.2) / 1.6, 0, 1);
+      concentrationBias = App.utils.clamp((0.55 - friendliness) * 0.26 + (corruptionIndex * 0.2), -0.08, 0.22);
+      confidenceBias = App.utils.clamp((friendliness - 0.5) * 0.12 + ((1 - corruptionIndex) - 0.5) * 0.08 - (volatility * 0.08), -0.08, 0.12);
+      ageYears = getBusinessAgeYears(business);
+      founderAlive = !!(App.store.getPerson(business.founderId) && App.store.getPerson(business.founderId).alive);
+
+      outsideDrift = (listing ? App.utils.rand(0.01, 0.05) : App.utils.rand(0, 0.02)) + confidenceBias - concentrationBias;
+      governance.outsideInvestorShare = App.utils.clamp((Number(governance.outsideInvestorShare) || 0) + outsideDrift, 0, 0.95);
+      governance.familyControlShare = App.utils.clamp((Number(governance.familyControlShare) || 0.6) - outsideDrift * 0.72, 0.05, 1);
+      governance.founderControl = App.utils.clamp((Number(governance.founderControl) || 0.9) - (ageYears * 0.0045) - (listing ? 0.02 : 0) - (founderAlive ? 0 : 0.05), 0.02, 1);
+      governance.boardPressure = App.utils.clamp((Number(governance.outsideInvestorShare) || 0) * 0.8 + ((business.bankruptcyStage && business.bankruptcyStage !== "stable") ? 0.28 : 0), 0, 1.4);
+      governance.boardSeats = App.utils.clamp(Math.floor(Math.max(3, Math.min(13, 3 + Math.round((business.employees || 1) / 60) + (listing ? 1 : 0)))), 3, 13);
+      governance.lastReviewDay = App.store.simDay;
+
+      if (governance.boardPressure > 0.92 && owner && Math.random() < 0.12) {
+        adjustTemporaryStates(owner, {
+          stress:App.utils.rand(3, 8),
+          confidence:App.utils.rand(-5, -1)
+        });
+        syncPerson(owner);
+      }
+    });
+  }
+
+  function processYearlyInnovationAndCopying(){
+    App.store.businesses.forEach(function(business){
+      var behavior;
+      var rAndDIntensity;
+      var localPeers;
+      var peerFrontier;
+      var copyPressure;
+      var innovationGain;
+
+      if (!business) return;
+      ensureBusinessDecisionState(business);
+
+      behavior = getIndustryBehaviorProfile(business.industry);
+      rAndDIntensity = Math.max(0, Number(business.departments && business.departments.rnd) || 0) / Math.max(1, Number(business.revenueGU) || 1);
+      localPeers = App.store.businesses.filter(function(candidate){
+        return candidate && candidate.id !== business.id && candidate.industry === business.industry;
+      });
+      peerFrontier = localPeers.length ? localPeers.reduce(function(best, peer){
+        return Math.max(best, Number(peer.innovationIndex) || 0);
+      }, 0) : Number(business.innovationIndex) || 0;
+
+      innovationGain = (rAndDIntensity * 120 * behavior.innovationBias) + App.utils.rand(-1.4, 2.6);
+      business.innovationIndex = App.utils.clamp((Number(business.innovationIndex) || 40) * 0.86 + (Number(business.technologyEdge) || 40) * 0.08 + innovationGain, 0, 100);
+      copyPressure = Math.max(0, (peerFrontier - (Number(business.innovationIndex) || 0)) / 100);
+      business.copiedTechDebt = App.utils.clamp((Number(business.copiedTechDebt) || 0) * 0.72 + copyPressure * App.utils.rand(0.08, 0.28), 0, 1.6);
+
+      if ((Number(business.innovationIndex) || 0) > peerFrontier + 5 && Math.random() < 0.08) {
+        emitNews("market", "<strong>" + business.name + "</strong> pulled ahead with a sector-leading innovation cycle.", {
+          entities:{
+            businessIds:[business.id],
+            countryIsos:[business.countryISO],
+            blocIds:[business.blocId]
+          },
+          causes:[
+            "R&D intensity outpaced industry peers.",
+            "Innovation index rose to " + (Number(business.innovationIndex) || 0).toFixed(1) + "."
+          ]
+        });
+      }
+    });
+  }
+
+  function applyCustomerDemandAndReputationDynamics(business, decision, margin){
+    var behavior;
+    var trust;
+    var quality;
+    var pricePower;
+    var decisionSignal;
+    var reputationDelta;
+    var scope;
+    var countryProfile;
+    var countryIndustryDemand;
+    var blocIndustryDemand;
+    var marketDemandSignal;
+    var marketDemandMultiplier;
+
+    if (!business) {
+      return { revenueMultiplier:1, reputationDelta:0 };
+    }
+
+    behavior = getIndustryBehaviorProfile(business.industry);
+    trust = Number(business.customerTrust) || 50;
+    quality = Number(business.productQuality) || 50;
+    pricePower = Number(business.pricePower) || 1;
+    scope = getIndustryMarketScope(business.industry);
+    countryProfile = ensureCountryProfile(business.countryISO, business.blocId);
+    countryIndustryDemand = getCountryIndustryDemandMultiplier(countryProfile, business.industry);
+    blocIndustryDemand = getBlocIndustryDemandMultiplier(business.blocId, business.industry);
+    marketDemandSignal = scope === "local" ? countryIndustryDemand : (scope === "global" ? blocIndustryDemand : ((countryIndustryDemand * 0.52) + (blocIndustryDemand * 0.48)));
+    marketDemandMultiplier = App.utils.clamp(1 + ((marketDemandSignal - 1) * 0.22), 0.9, 1.12);
+    decisionSignal = (decision && decision.stance === "aggressive" ? 0.6 : 0) + (decision && decision.cashPolicy === "preserve" ? -0.35 : 0);
+
+    trust = App.utils.clamp(trust + ((Number(business.reputation) || 50) - 50) * 0.035 + (margin * 4.4) - (business.laborUnrestScore || 0) * 2.6 - decisionSignal, 0, 100);
+    quality = App.utils.clamp(quality + ((Number(business.innovationIndex) || 0) - 50) * 0.035 + ((Number(business.managementQuality) || 50) - 50) * 0.02 - (business.supplyStress || 0) * 3.2, 0, 100);
+    pricePower = App.utils.clamp(pricePower + ((trust - 50) * 0.0008) + ((quality - 50) * 0.0006) - (behavior.customerElasticity * 0.0024), 0.62, 1.55);
+
+    business.customerTrust = trust;
+    business.productQuality = quality;
+    business.pricePower = pricePower;
+    business.technologyEdge = App.utils.clamp((Number(business.technologyEdge) || 40) * 0.9 + (Number(business.innovationIndex) || 40) * 0.12 - (Number(business.copiedTechDebt) || 0) * 5.5, 0, 100);
+
+    reputationDelta = App.utils.clamp(((trust - 50) * 0.03) + ((quality - 50) * 0.02) - ((business.supplyStress || 0) * 0.8), -1.2, 1.4);
+    return {
+      revenueMultiplier:App.utils.clamp((1 + ((trust - 50) * 0.0018) + ((quality - 50) * 0.0016) + ((pricePower - 1) * 0.08 * (1 - behavior.customerElasticity * 0.4))) * marketDemandMultiplier, 0.84, 1.22),
+      reputationDelta:reputationDelta
+    };
+  }
+
+  function applyDebtCreditAndBankruptcyStages(business, owner, bloc, decision){
+    var behavior;
+    var policyRate;
+    var countryProfile;
+    var countryStance;
+    var blocStance;
+    var countryPolicyEffects;
+    var blocPolicyEffects;
+    var debtRateBias;
+    var rolloverChanceBias;
+    var distressBias;
+    var bailoutBias;
+    var debtCapacity;
+    var desiredBorrow;
+    var interestExpenseDaily;
+    var maturityDue;
+    var rolloverChance;
+    var stageIndex;
+    var distressBuild;
+    var bailoutChance;
+    var institutionScore;
+    var instabilityIndex;
+    var businessFriendliness;
+    var corruptionIndex;
+    var contractReliability;
+    var investmentConfidence;
+    var institutionVolatility;
+
+    if (!business || !owner || !bloc) return { liquidated:false, creditStress:0 };
+
+    behavior = getIndustryBehaviorProfile(business.industry);
+    policyRate = getBlocPolicyRate(bloc);
+    countryProfile = ensureCountryProfile(business.countryISO, business.blocId);
+    countryStance = refreshCountryPolicyStance(countryProfile, {
+      unemploymentRate:countryProfile && countryProfile.laborForce > 0 ? (Math.max(0, Number(countryProfile.unemployed) || 0) / Math.max(1, Number(countryProfile.laborForce) || 1)) : 0,
+      laborScarcity:Number(countryProfile && countryProfile.laborScarcity) || 0,
+      wagePressure:Number(countryProfile && countryProfile.wagePressure) || 0,
+      longUnemploymentShare:Number(countryProfile && countryProfile.longUnemploymentShare) || 0,
+      demandGrowth:Number(countryProfile && countryProfile.policyEvidence && countryProfile.policyEvidence.demandGrowth) || 0
+    });
+    blocStance = refreshBlocPolicyStance(bloc);
+    countryPolicyEffects = COUNTRY_POLICY_STANCE_EFFECTS[countryStance] || COUNTRY_POLICY_STANCE_EFFECTS.neutral;
+    blocPolicyEffects = BLOC_POLICY_STANCE_EFFECTS[blocStance] || BLOC_POLICY_STANCE_EFFECTS.neutral;
+    institutionScore = App.utils.clamp(Number(countryProfile && countryProfile.institutionScore) || 0.55, 0.1, 1);
+    instabilityIndex = App.utils.clamp(Number(countryProfile && countryProfile.institutionalInstabilityIndex) || 0.2, 0, 1.6);
+    businessFriendliness = App.utils.clamp(Number(countryProfile && countryProfile.developmentBusinessFriendlinessIndex) || institutionScore, 0, 1);
+    corruptionIndex = App.utils.clamp(Number(countryProfile && countryProfile.developmentCorruptionIndex) || (1 - institutionScore), 0, 1);
+    contractReliability = App.utils.clamp((institutionScore * 0.42) + (businessFriendliness * 0.36) + ((1 - corruptionIndex) * 0.22), 0.08, 1);
+    investmentConfidence = App.utils.clamp((businessFriendliness * 0.52) + (contractReliability * 0.3) + (Math.max(0, Number(countryProfile && countryProfile.demandGrowth) || 0) * 1.8) * 0.18, 0.06, 1);
+    institutionVolatility = App.utils.clamp((instabilityIndex / 1.6) * 0.65 + (corruptionIndex * 0.35), 0, 1.2);
+    debtRateBias = (countryPolicyEffects.debtRateBias || 0) + (blocPolicyEffects.debtRateBias || 0);
+    rolloverChanceBias = (countryPolicyEffects.rolloverChanceBias || 0) + (blocPolicyEffects.rolloverChanceBias || 0);
+    distressBias = (countryPolicyEffects.distressBias || 0) + (blocPolicyEffects.distressBias || 0);
+    bailoutBias = (countryPolicyEffects.bailoutBias || 0) + (blocPolicyEffects.bailoutBias || 0);
+    debtRateBias += App.utils.clamp((0.55 - contractReliability) * 0.022 + (institutionVolatility * 0.012), -0.012, 0.034);
+    rolloverChanceBias += App.utils.clamp((contractReliability - 0.5) * 0.22 + (investmentConfidence - 0.5) * 0.12 - (institutionVolatility * 0.18), -0.16, 0.18);
+    distressBias += App.utils.clamp((0.52 - investmentConfidence) * 0.22 + (institutionVolatility * 0.2), -0.12, 0.2);
+    bailoutBias += App.utils.clamp((contractReliability - 0.5) * 0.12 + (institutionScore - 0.5) * 0.08 - (corruptionIndex - 0.4) * 0.08, -0.1, 0.14);
+    debtCapacity = Math.max(0, (Number(business.valuationGU) || 0) * App.utils.clamp(0.2 + behavior.leverageAppetite * 0.32, 0.2, 0.82));
+
+    if ((decision && decision.stance === "aggressive") && (business.hiringNeed || 0) > 0 && (business.cashReservesGU || 0) < (business.wageBillAnnual || 0) * 0.18) {
+      desiredBorrow = Math.min(
+        debtCapacity - (Number(business.debtGU) || 0),
+        Math.max(0, (business.wageBillAnnual || 0) * 0.22 + (business.operatingCostAnnual || 0) * 0.08)
+      );
+      if (desiredBorrow > 1200) {
+        business.debtGU = Math.max(0, (Number(business.debtGU) || 0) + desiredBorrow);
+        business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + desiredBorrow * 0.92);
+        business.debtInterestRate = App.utils.clamp((policyRate + 0.022 + debtRateBias + (business.rolloverRisk || 0) * 0.03 + (business.bankruptcyStage !== "stable" ? 0.02 : 0)), 0.01, 0.34);
+        business.debtMaturityDay = App.store.simDay + App.utils.randInt(180, 520);
+      }
+    }
+
+    if ((decision && decision.cashPolicy === "preserve") && (Number(business.debtGU) || 0) > 0 && (business.cashReservesGU || 0) > (business.wageBillAnnual || 0) * 0.12) {
+      desiredBorrow = Math.min((Number(business.debtGU) || 0), (business.cashReservesGU || 0) * 0.08);
+      business.debtGU = Math.max(0, (Number(business.debtGU) || 0) - desiredBorrow);
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) - desiredBorrow);
+    }
+
+    interestExpenseDaily = Math.max(0, (Number(business.debtGU) || 0) * Math.max(0.001, Number(business.debtInterestRate) || 0.08) / YEAR_DAYS) * SIM_DAYS_PER_TICK;
+    if (interestExpenseDaily > 0) {
+      if ((business.cashReservesGU || 0) >= interestExpenseDaily) {
+        business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) - interestExpenseDaily);
+      } else {
+        owner.netWorthGU = Math.max(100, (owner.netWorthGU || 0) - Math.max(0, interestExpenseDaily - (business.cashReservesGU || 0)) * (business.founderGuaranteeShare || 0.5));
+        business.cashReservesGU = 0;
+      }
+      business.profitGU -= interestExpenseDaily * YEAR_DAYS;
+    }
+
+    maturityDue = (Number(business.debtGU) || 0) > 0 && (Number(business.debtMaturityDay) || 0) <= App.store.simDay;
+    if (maturityDue) {
+      rolloverChance = App.utils.clamp(0.78 + rolloverChanceBias + ((business.reputation || 50) - 50) * 0.005 - (business.rolloverRisk || 0) * 0.28 - ((policyRate - 0.03) * 1.8), 0.05, 0.94);
+      if (Math.random() < rolloverChance) {
+        business.debtInterestRate = App.utils.clamp((policyRate + 0.026 + debtRateBias + (business.rolloverRisk || 0) * 0.02), 0.01, 0.34);
+        business.debtMaturityDay = App.store.simDay + App.utils.randInt(140, 420);
+      } else {
+        business.rolloverRisk = App.utils.clamp((Number(business.rolloverRisk) || 0) + 0.28, 0, 1.6);
+        business.distressScore = App.utils.clamp((Number(business.distressScore) || 0) + 0.42, 0, 4.4);
+      }
+    }
+
+    distressBuild =
+      ((business.profitGU || 0) < -(business.revenueGU || 0) * 0.08 ? 0.28 : -0.08) +
+      ((business.cashReservesGU || 0) < (business.wageBillAnnual || 0) * 0.06 ? 0.22 : -0.06) +
+      (((business.debtGU || 0) / Math.max(1, business.valuationGU || 1)) > 0.62 ? 0.24 : -0.04) +
+      (business.rolloverRisk || 0) * 0.18 +
+      distressBias;
+    business.distressScore = App.utils.clamp((Number(business.distressScore) || 0) * 0.74 + distressBuild, 0, 4.4);
+
+    stageIndex = business.distressScore >= 3.8 ? 5 : (business.distressScore >= 3.05 ? 4 : (business.distressScore >= 2.35 ? 3 : (business.distressScore >= 1.55 ? 2 : (business.distressScore >= 0.95 ? 1 : 0))));
+    business.bankruptcyStage = BANKRUPTCY_STAGE_ORDER[stageIndex] || "stable";
+
+    if (business.bankruptcyStage === "restructuring") {
+      business.restructuringUntilDay = Math.max(Number(business.restructuringUntilDay) || 0, App.store.simDay + App.utils.randInt(40, 120));
+      business.reputation = clampScore((business.reputation || 50) - App.utils.rand(0.2, 0.7));
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + Math.max(0, (business.debtGU || 0) * 0.04));
+    } else if (business.bankruptcyStage === "fire_sale") {
+      var shed = Math.max(0, Math.floor((business.employees || 0) * App.utils.rand(0.04, 0.14)));
+      if (shed > 0) {
+        business.employees = Math.max((business.leadership || []).length || 1, (business.employees || 1) - releaseLabor(business.countryISO, shed));
+      }
+      business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + Math.max(0, (business.valuationGU || 0) * App.utils.rand(0.01, 0.04)));
+      business.reputation = clampScore((business.reputation || 50) - App.utils.rand(0.8, 2.1));
+    } else if (business.bankruptcyStage === "bailout") {
+      bailoutChance = App.utils.clamp(0.14 + bailoutBias + Math.max(0, 0.11 - (getBlocPolicyRate(bloc) * 0.8)) + ((business.reputation || 50) > 58 ? 0.08 : 0), 0.05, 0.38);
+      if (Math.random() < bailoutChance) {
+        var bailout = Math.max(0, Math.min((business.valuationGU || 0) * 0.06, (business.wageBillAnnual || 0) * 0.26));
+        business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) + bailout);
+        business.debtGU = Math.max(0, (business.debtGU || 0) - bailout * 0.2);
+        business.distressScore = App.utils.clamp((business.distressScore || 0) - 0.55, 0, 4.4);
+      }
+    } else if (business.bankruptcyStage === "liquidation") {
+      emitNews("bankruptcy", "<strong>" + owner.name + "</strong> " + bloc.flag + " - <strong>" + business.name + "</strong> entered liquidation after prolonged credit distress.", {
+        entities:{
+          personIds:[owner.id],
+          businessIds:[business.id],
+          countryIsos:[business.countryISO],
+          blocIds:[business.blocId]
+        },
+        causes:[
+          "Debt rollover failed and liquidity buffers were exhausted.",
+          "Bankruptcy stage escalated from " + (business.bankruptcyStage || "stable") + " to liquidation."
+        ]
+      });
+      liquidateBusiness(owner, business);
+      owner.netWorthGU = Math.max(600, owner.netWorthGU * 0.42);
+      adjustTemporaryStates(owner, {
+        confidence:-14,
+        stress:16,
+        burnout:5
+      });
+      adjustPersonalReputation(owner, {
+        trust:-6,
+        prestige:-9,
+        notoriety:6,
+        scandalMemory:8
+      });
+      syncPerson(owner);
+      return {
+        liquidated:true,
+        creditStress:1.2,
+        countryPolicyStance:countryStance,
+        blocPolicyStance:blocStance,
+        policyCreditBias:Number((debtRateBias + distressBias).toFixed(4))
+      };
+    }
+
+    business.policyCreditEvidence = {
+      countryPolicyStance:countryStance,
+      blocPolicyStance:blocStance,
+      debtRateBias:Number(debtRateBias.toFixed(4)),
+      rolloverChanceBias:Number(rolloverChanceBias.toFixed(4)),
+      distressBias:Number(distressBias.toFixed(4)),
+      bailoutBias:Number(bailoutBias.toFixed(4)),
+      contractReliability:Number(contractReliability.toFixed(4)),
+      investmentConfidence:Number(investmentConfidence.toFixed(4)),
+      institutionVolatility:Number(institutionVolatility.toFixed(4)),
+      corruptionIndex:Number(corruptionIndex.toFixed(4))
+    };
+
+    return {
+      liquidated:false,
+      creditStress:App.utils.clamp((business.debtGU || 0) / Math.max(1, business.valuationGU || 1) + (business.rolloverRisk || 0) * 0.4 + (business.bankruptcyStage !== "stable" ? 0.35 : 0), 0, 2),
+      countryPolicyStance:countryStance,
+      blocPolicyStance:blocStance,
+      policyCreditBias:Number((debtRateBias + distressBias).toFixed(4))
+    };
+  }
+
   function getReserveShareRate(business, decision){
     var currentDecision = decision || business.currentDecision || { cashPolicy:"balanced" };
     if (currentDecision.cashPolicy === "preserve") return 0.68;
@@ -4837,18 +8328,22 @@
     var decisionFactor = decision.stance === "aggressive" ? 1.12 : (decision.stance === "balanced" ? 1.03 : (decision.stance === "defensive" ? 0.96 : 0.86));
     var cashFactor = decision.cashPolicy === "reinvest" ? 1.05 : (decision.cashPolicy === "preserve" ? 0.96 : 1);
     var traitFactor = 1 + App.utils.clamp((ownerBusinessTrait / 72) + (ownerMobilityTrait / 115), -0.10, 0.14);
+    var marketSignal = getBusinessMarketAllocationSignal(business);
     var workforceCapacity = Math.max(1, business.employees || 1) * medianWage * productivity * stageFactor * reputationFactor * traitFactor;
     var demandCapacity = Math.max(1, getBusinessDemandCapacityGU(business));
+    var allocatedDemand = Math.max(0, Number(business.allocatedDemandGU) || 0);
     var marketScope = getIndustryMarketScope(business.industry);
     var marketShare = 0.00003 * Math.pow(Math.max(1, business.employees || 1), 0.8) * reputationFactor;
     var demandBound;
+    var pricedWorkforceCapacity;
 
     if (marketScope === "local") marketShare *= 1.28;
     else if (marketScope === "global") marketShare *= 0.88;
     marketShare = App.utils.clamp(marketShare, 0.00002, 0.014);
 
-    demandBound = demandCapacity * marketShare;
-    return Math.max(medianWage * 1.6, Math.min(workforceCapacity * decisionFactor * cashFactor, Math.max(workforceCapacity * 0.72, demandBound)));
+    demandBound = Math.max(allocatedDemand, demandCapacity * marketShare) * App.utils.clamp((marketSignal.allocationRatio * 0.7) + (marketSignal.priceIndex * 0.3), 0.64, 1.55);
+    pricedWorkforceCapacity = workforceCapacity * App.utils.clamp((marketSignal.priceIndex * 0.74) + (marketSignal.allocationRatio * 0.26), 0.72, 1.45);
+    return Math.max(medianWage * 1.6, Math.min(pricedWorkforceCapacity * decisionFactor * cashFactor, Math.max(pricedWorkforceCapacity * 0.72, demandBound)));
   }
 
   function getStageExpansionBias(stage){
@@ -5034,11 +8529,15 @@
     var bloc;
     var profile;
     var trend;
+    var demandGrowth;
     var profitMargin;
     var cashCoverage;
     var laborScarcity;
     var longUnemploymentShare;
     var wagePressure;
+    var demandCapacity;
+    var productionCapacity;
+    var demandOpportunityRatio;
     var metrics;
     var scores;
     var stance;
@@ -5055,13 +8554,18 @@
     bloc = App.store.getBloc(business.blocId);
     profile = ensureCountryProfile(business.countryISO);
     trend = getRevenueTrend(business);
+    demandGrowth = ((Math.max(0, Number(profile && profile.consumerDemandGU) || 0) - Math.max(1, Number(profile && profile.prevConsumerDemandGU) || Number(profile && profile.consumerDemandGU) || 1)) / Math.max(1, Number(profile && profile.prevConsumerDemandGU) || Number(profile && profile.consumerDemandGU) || 1));
     profitMargin = getProfitMargin(business);
     cashCoverage = getCashCoverageMonths(business);
     laborScarcity = getCountryLaborScarcity(business.countryISO);
     longUnemploymentShare = getCountryLongUnemploymentShare(business.countryISO);
     wagePressure = getCountryWagePressure(business.countryISO);
+    demandCapacity = Math.max(1, getBusinessDemandCapacityGU(business));
+    productionCapacity = Math.max(1, getBusinessProductionCapacityGU(business));
+    demandOpportunityRatio = App.utils.clamp(demandCapacity / productionCapacity, 0.55, 1.85);
     metrics = {
       trend:trend,
+      demandGrowth:demandGrowth,
       profitMargin:profitMargin,
       cashCoverage:cashCoverage,
       reputation:business.reputation || 50,
@@ -5069,6 +8573,7 @@
       laborScarcity:laborScarcity,
       longUnemploymentShare:longUnemploymentShare,
       wagePressure:wagePressure,
+      demandOpportunityRatio:demandOpportunityRatio,
       geoPressure:bloc ? bloc.geoPressure : 0,
       stage:business.stage
     };
@@ -5078,6 +8583,10 @@
       cash:(-trend * 60) + (-profitMargin * 80) + (3 - cashCoverage) * 12 + ((50 - (business.reputation || 50)) * 0.18) + ((bloc ? bloc.geoPressure : 0) * 7) + (business.stage === "declining" ? 10 : 0),
       succession:(business.stage === "declining" ? -6 : 0) + (cashCoverage < 2 ? -5 : 0) + ((business.reputation || 50) < 40 ? -6 : 0)
     };
+
+    scores.expansion += App.utils.clamp((demandGrowth * 95) + ((demandOpportunityRatio - 1) * 34), -18, 28);
+    scores.staffing += App.utils.clamp((demandGrowth * 125) + ((demandOpportunityRatio - 1) * 56) + (cashCoverage > 4 ? 4 : 0), -18, 36);
+    scores.cash -= App.utils.clamp((Math.max(0, demandGrowth) * 48) + (Math.max(0, demandOpportunityRatio - 1) * 22), 0, 18);
 
     scores.staffing += App.utils.clamp((laborScarcity - 0.7) * 30, -12, 8);
     scores.staffing -= App.utils.clamp(longUnemploymentShare * 32, 0, 18);
@@ -5172,6 +8681,45 @@
     if (!business) return;
     ensureBusinessLogo(business);
     primeBusinessDecisionState(business);
+    business.unionizationRate = App.utils.clamp(Number(business.unionizationRate) || App.utils.rand(0.05, 0.18), 0.02, 0.82);
+    business.laborUnrestScore = App.utils.clamp(Number(business.laborUnrestScore) || 0, 0, 1.6);
+    business.layoffPressure = App.utils.clamp(Number(business.layoffPressure) || 0, 0, 1.2);
+    business.strikeUntilDay = Math.max(0, Math.floor(Number(business.strikeUntilDay) || 0));
+    business.managementQuality = App.utils.clamp(Number(business.managementQuality) || App.utils.rand(42, 68), 10, 98);
+    business.wageBillAnnual = Math.max(0, Number(business.wageBillAnnual) || 0);
+    business.operatingCostAnnual = Math.max(0, Number(business.operatingCostAnnual) || 0);
+    business.hiringNeed = App.utils.clamp(Number(business.hiringNeed) || 0, -600, 600);
+    business.supplyStress = App.utils.clamp(Number(business.supplyStress) || 0, 0, 1.8);
+    business.tradeShockPressure = App.utils.clamp(Number(business.tradeShockPressure) || 0, 0, 1.8);
+    business.tradeRerouteRelief = App.utils.clamp(Number(business.tradeRerouteRelief) || 0, 0, 1.2);
+    business.tradeRerouteCapacity = App.utils.clamp(Number(business.tradeRerouteCapacity) || App.utils.rand(0.25, 0.62), 0, 1.2);
+    business.tradeShockExposure = App.utils.clamp(Number(business.tradeShockExposure) || getIndustryTradeExposure(business.industry), 0.2, 0.9);
+    business.customerTrust = App.utils.clamp(Number(business.customerTrust) || App.utils.rand(42, 64), 0, 100);
+    business.productQuality = App.utils.clamp(Number(business.productQuality) || App.utils.rand(45, 68), 0, 100);
+    business.pricePower = App.utils.clamp(Number(business.pricePower) || App.utils.rand(0.9, 1.08), 0.62, 1.55);
+    business.innovationIndex = App.utils.clamp(Number(business.innovationIndex) || App.utils.rand(28, 56), 0, 100);
+    business.technologyEdge = App.utils.clamp(Number(business.technologyEdge) || App.utils.rand(20, 52), 0, 100);
+    business.copiedTechDebt = App.utils.clamp(Number(business.copiedTechDebt) || 0, 0, 1.6);
+    business.debtGU = Math.max(0, Number(business.debtGU) || 0);
+    business.debtInterestRate = App.utils.clamp(Number(business.debtInterestRate) || 0.08, 0.01, 0.34);
+    business.debtMaturityDay = Math.max(0, Math.floor(Number(business.debtMaturityDay) || (App.store.simDay + App.utils.randInt(200, 520))));
+    business.rolloverRisk = App.utils.clamp(Number(business.rolloverRisk) || 0, 0, 1.6);
+    business.founderGuaranteeShare = App.utils.clamp(Number(business.founderGuaranteeShare) || App.utils.rand(0.28, 0.72), 0, 1);
+    business.bankruptcyStage = BANKRUPTCY_STAGE_ORDER.indexOf(String(business.bankruptcyStage || "stable")) === -1 ? "stable" : String(business.bankruptcyStage);
+    business.distressScore = App.utils.clamp(Number(business.distressScore) || 0, 0, 4.4);
+    business.restructuringUntilDay = Math.max(0, Math.floor(Number(business.restructuringUntilDay) || 0));
+    if (!business.departments || typeof business.departments !== "object") {
+      business.departments = {};
+    }
+    if (!business.governance || typeof business.governance !== "object") {
+      business.governance = {};
+    }
+    business.governance.boardSeats = App.utils.clamp(Math.floor(Number(business.governance.boardSeats) || Math.max(3, Math.min(11, 3 + Math.round((business.employees || 1) / 60)))), 3, 13);
+    business.governance.familyControlShare = App.utils.clamp(Number(business.governance.familyControlShare) || App.utils.rand(0.4, 0.85), 0.05, 1);
+    business.governance.outsideInvestorShare = App.utils.clamp(Number(business.governance.outsideInvestorShare) || App.utils.rand(0.05, 0.26), 0, 0.95);
+    business.governance.founderControl = App.utils.clamp(Number(business.governance.founderControl) || App.utils.rand(0.62, 0.94), 0.02, 1);
+    business.governance.boardPressure = App.utils.clamp(Number(business.governance.boardPressure) || 0, 0, 1.4);
+    business.governance.lastReviewDay = Math.max(0, Math.floor(Number(business.governance.lastReviewDay) || App.store.simDay));
     if (!business.currentDecision) {
       business.currentDecision = evaluateBusinessDecision(business);
     }
@@ -5346,12 +8894,331 @@
       childcareCostGU:Math.max(0, Number(household.childcareCostGU) || 0),
       essentialsCostGU:Math.max(0, Number(household.essentialsCostGU) || 0),
       debtServiceGU:Math.max(0, Number(household.debtServiceGU) || 0),
+      housingBurdenRatio:App.utils.clamp(Number(household.housingBurdenRatio) || 0, 0.08, 1.9),
+      housingSavingsPressure:App.utils.clamp(Number(household.housingSavingsPressure) || 0, 0.08, 2.2),
+      housingOwnershipScore:App.utils.clamp(Number(household.housingOwnershipScore) || 0, 0, 1),
+      housingAffordabilityScore:App.utils.clamp(Number(household.housingAffordabilityScore) || 0, 0.05, 1),
+      tradeShockBurdenGU:Math.max(0, Number(household.tradeShockBurdenGU) || 0),
+      tradeShockStressImpact:Math.max(0, Number(household.tradeShockStressImpact) || 0),
       inheritancePressureGU:Math.max(0, Number(household.inheritancePressureGU) || 0),
       financialStress:App.utils.clamp(Number(household.financialStress) || 0, 0, 100),
       classTier:household.classTier || "working",
       originClassTier:household.originClassTier || household.classTier || "working",
-      mobilityScore:Number(household.mobilityScore) || 0
+      mobilityScore:Number(household.mobilityScore) || 0,
+      assetCashGU:Math.max(0, Number(household.assetCashGU) || Number(household.cashOnHandGU) || 0),
+      assetEquityGU:Math.max(0, Number(household.assetEquityGU) || 0),
+      assetBusinessOwnershipGU:Math.max(0, Number(household.assetBusinessOwnershipGU) || 0),
+      assetPropertyGU:Math.max(0, Number(household.assetPropertyGU) || 0),
+      assetTrustGU:Math.max(0, Number(household.assetTrustGU) || 0),
+      assetDebtObligationsGU:Math.max(0, Number(household.assetDebtObligationsGU) || Number(household.debtGU) || 0),
+      assetTotalGU:Math.max(0, Number(household.assetTotalGU) || 0),
+      assetNetWorthGU:Number(household.assetNetWorthGU) || 0,
+      assetYieldAnnualGU:Number(household.assetYieldAnnualGU) || 0,
+      assetReturnRateAnnual:Number(household.assetReturnRateAnnual) || 0
     };
+  }
+
+  function normalizeHouseholdAssetClasses(household){
+    var tier = (household && household.classTier) || "working";
+    var allocation = HOUSEHOLD_ASSET_CLASS_ALLOCATION[tier] || HOUSEHOLD_ASSET_CLASS_ALLOCATION.working;
+    var cash = Math.max(0, Number(household && household.cashOnHandGU) || 0);
+    var debt = Math.max(0, Number(household && household.debtGU) || 0);
+    var investableFloor = Math.max(0, cash * (1 - allocation.cash));
+    var equity = Math.max(0, Number(household && household.assetEquityGU));
+    var business = Math.max(0, Number(household && household.assetBusinessOwnershipGU));
+    var property = Math.max(0, Number(household && household.assetPropertyGU));
+    var trust = Math.max(0, Number(household && household.assetTrustGU));
+    var invested;
+
+    if (!Number.isFinite(equity + business + property + trust) || (equity + business + property + trust) <= 0) {
+      equity = investableFloor * allocation.equity;
+      business = investableFloor * allocation.business;
+      property = investableFloor * allocation.property;
+      trust = investableFloor * allocation.trust;
+    }
+
+    invested = Math.max(0, equity + business + property + trust);
+    household.assetCashGU = cash;
+    household.assetEquityGU = equity;
+    household.assetBusinessOwnershipGU = business;
+    household.assetPropertyGU = property;
+    household.assetTrustGU = trust;
+    household.assetDebtObligationsGU = debt;
+    household.assetTotalGU = Math.max(0, cash + invested);
+    household.assetNetWorthGU = household.assetTotalGU - debt;
+    household.assetYieldAnnualGU = Number.isFinite(Number(household.assetYieldAnnualGU)) ? Number(household.assetYieldAnnualGU) : 0;
+    household.assetReturnRateAnnual = Number.isFinite(Number(household.assetReturnRateAnnual)) ? Number(household.assetReturnRateAnnual) : 0;
+    return household;
+  }
+
+  function processYearlyHouseholdAssetClasses(){
+    (App.store.households || []).forEach(function(household){
+      var profile;
+      var bloc;
+      var countryPolicy;
+      var blocPolicy;
+      var countryEffects;
+      var blocEffects;
+      var debtRate;
+      var institution;
+      var education;
+      var wagePressure;
+      var populationPressure;
+      var socialPressure;
+      var stress;
+      var housingCostPressure;
+      var housingMarketStress;
+      var housingPriceGrowth;
+      var housingBurden;
+      var housingSavingsPressure;
+      var housingOwnershipScore;
+      var housingAffordabilityScore;
+      var allocation;
+      var liquidityReserve;
+      var investableCash;
+      var rebalancePool;
+      var targetEquity;
+      var targetBusiness;
+      var targetProperty;
+      var targetTrust;
+      var equityRate;
+      var businessRate;
+      var propertyRate;
+      var trustRate;
+      var cashRate;
+      var investedBase;
+      var grossYield;
+      var debtCarryCost;
+      var netYield;
+      var rentDragAnnual;
+      var housingLeverageDrag;
+      var debtPayment;
+      var positiveCarry;
+
+      if (!household) return;
+      refreshHouseholdSnapshot(household);
+      normalizeHouseholdAssetClasses(household);
+
+      profile = ensureCountryProfile(household.countryISO);
+      bloc = App.store.getBloc(profile && profile.blocId) || App.store.getBlocByCountry(household.countryISO);
+      countryPolicy = normalizePolicyStance(profile && profile.policyStance);
+      blocPolicy = refreshBlocPolicyStance(bloc);
+      countryEffects = COUNTRY_POLICY_STANCE_EFFECTS[countryPolicy] || COUNTRY_POLICY_STANCE_EFFECTS.neutral;
+      blocEffects = BLOC_POLICY_STANCE_EFFECTS[blocPolicy] || BLOC_POLICY_STANCE_EFFECTS.neutral;
+      debtRate = App.utils.clamp(0.036 + (countryEffects.debtRateBias || 0) + (blocEffects.debtRateBias || 0), 0.012, 0.14);
+      institution = App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0.1, 1);
+      education = App.utils.clamp(Number(profile && profile.educationIndex) || 0.6, 0.1, 1);
+      wagePressure = App.utils.clamp(Number(profile && profile.wagePressure) || 0, -0.45, 0.45);
+      populationPressure = App.utils.clamp(Number(profile && profile.populationPressure) || 0.5, 0, 1);
+      socialPressure = App.utils.clamp(Number(profile && profile.socialPressureIndex) || 0, 0, 1);
+      stress = App.utils.clamp((Number(household.financialStress) || 0) / 100, 0, 1);
+      housingCostPressure = App.utils.clamp(Number(profile && profile.housingCostPressure) || 1.02, 0.65, 2.2);
+      housingMarketStress = App.utils.clamp(Number(profile && profile.housingMarketStress) || 0.35, 0, 1.5);
+      housingPriceGrowth = App.utils.clamp(Number(profile && profile.housingPriceGrowth) || 0.02, -0.18, 0.26);
+      housingBurden = App.utils.clamp(Number(household.housingBurdenRatio) || 0.34, 0.08, 1.9);
+      housingSavingsPressure = App.utils.clamp(Number(household.housingSavingsPressure) || 0.42, 0.08, 2.2);
+      housingOwnershipScore = App.utils.clamp(Number(household.housingOwnershipScore) || 0, 0, 1);
+      housingAffordabilityScore = App.utils.clamp(Number(household.housingAffordabilityScore) || 0.5, 0.05, 1);
+      allocation = HOUSEHOLD_ASSET_CLASS_ALLOCATION[household.classTier] || HOUSEHOLD_ASSET_CLASS_ALLOCATION.working;
+
+      liquidityReserve = Math.max(
+        0,
+        (Number(household.monthlyExpensesGU) || 0) * (2.5 + (stress * 4.2) + (Math.max(0, housingBurden - 0.4) * 1.4) + (Math.max(0, housingSavingsPressure - 0.55) * 1.1)) +
+        ((Number(household.inheritancePressureGU) || 0) * 0.15)
+      );
+      investableCash = Math.max(0, (Number(household.cashOnHandGU) || 0) - liquidityReserve);
+      rebalancePool = Math.max(0, (investableCash * App.utils.clamp(0.82 - (Math.max(0, housingMarketStress - 0.7) * 0.08), 0.68, 0.9)) + ((Number(household.assetEquityGU) || 0) + (Number(household.assetBusinessOwnershipGU) || 0) + (Number(household.assetPropertyGU) || 0) + (Number(household.assetTrustGU) || 0)) * 0.18);
+
+      targetEquity = rebalancePool * allocation.equity;
+      targetBusiness = rebalancePool * allocation.business;
+      targetProperty = rebalancePool * allocation.property * App.utils.clamp(1 + (Math.max(-0.08, housingPriceGrowth) * 0.85) + ((housingCostPressure - 1) * 0.24) + (housingOwnershipScore * 0.18) - (Math.max(0, housingBurden - 0.52) * 0.62), 0.35, 1.65);
+      targetTrust = rebalancePool * allocation.trust;
+
+      household.assetEquityGU = Math.max(0, ((Number(household.assetEquityGU) || 0) * 0.72) + (targetEquity * 0.28));
+      household.assetBusinessOwnershipGU = Math.max(0, ((Number(household.assetBusinessOwnershipGU) || 0) * 0.72) + (targetBusiness * 0.28));
+      household.assetPropertyGU = Math.max(0, ((Number(household.assetPropertyGU) || 0) * 0.72) + (targetProperty * 0.28));
+      household.assetTrustGU = Math.max(0, ((Number(household.assetTrustGU) || 0) * 0.72) + (targetTrust * 0.28));
+
+      equityRate = App.utils.clamp(HOUSEHOLD_ASSET_RETURN_BASE.equity + ((institution - 0.55) * 0.06) + (wagePressure * 0.09) - (socialPressure * 0.03), -0.16, 0.24);
+      businessRate = App.utils.clamp(HOUSEHOLD_ASSET_RETURN_BASE.business + ((institution - 0.55) * 0.09) + ((education - 0.6) * 0.05) + (wagePressure * 0.06) - (stress * 0.05), -0.22, 0.28);
+      propertyRate = App.utils.clamp(HOUSEHOLD_ASSET_RETURN_BASE.property + ((populationPressure - 0.5) * 0.06) - (debtRate * 0.48) + ((institution - 0.55) * 0.02) + (housingPriceGrowth * 0.62) - (Math.max(0, housingMarketStress - 0.85) * 0.04) + ((housingAffordabilityScore - 0.5) * 0.03), -0.18, 0.24);
+      trustRate = App.utils.clamp(HOUSEHOLD_ASSET_RETURN_BASE.trust + ((institution - 0.55) * 0.03) + ((countryEffects.demandGrowthBias || 0) * 0.2), -0.03, 0.14);
+      cashRate = App.utils.clamp(HOUSEHOLD_ASSET_RETURN_BASE.cash + (debtRate * 0.35), 0, 0.06);
+
+      investedBase = Math.max(1, (Number(household.assetEquityGU) || 0) + (Number(household.assetBusinessOwnershipGU) || 0) + (Number(household.assetPropertyGU) || 0) + (Number(household.assetTrustGU) || 0));
+      grossYield =
+        (household.assetEquityGU * equityRate) +
+        (household.assetBusinessOwnershipGU * businessRate) +
+        (household.assetPropertyGU * propertyRate) +
+        (household.assetTrustGU * trustRate) +
+        ((Number(household.cashOnHandGU) || 0) * cashRate);
+      debtCarryCost = Math.max(0, (Number(household.debtGU) || 0) * debtRate * App.utils.clamp(0.2 + (stress * 0.4), 0.08, 0.55));
+      netYield = grossYield - debtCarryCost;
+      rentDragAnnual = Math.max(0, (Number(household.monthlyExpensesGU) || 0) * Math.max(0, housingBurden - 0.42) * (1 - housingOwnershipScore) * 0.12);
+      housingLeverageDrag = Math.max(0, (Number(household.monthlyExpensesGU) || 0) * Math.max(0, housingSavingsPressure - 0.55) * 0.08);
+      netYield -= (rentDragAnnual + housingLeverageDrag);
+      positiveCarry = Math.max(0, netYield);
+
+      household.cashOnHandGU = Math.max(0, (Number(household.cashOnHandGU) || 0) + (netYield * 0.68));
+      debtPayment = Math.min(Math.max(0, Number(household.debtGU) || 0), positiveCarry * 0.2 + Math.max(0, (household.cashOnHandGU || 0) - ((Number(household.monthlyExpensesGU) || 0) * 6)) * 0.12);
+      household.debtGU = Math.max(0, (Number(household.debtGU) || 0) - debtPayment);
+      household.cashOnHandGU = Math.max(0, (Number(household.cashOnHandGU) || 0) - debtPayment);
+
+      household.assetCashGU = Math.max(0, Number(household.cashOnHandGU) || 0);
+      household.assetDebtObligationsGU = Math.max(0, Number(household.debtGU) || 0);
+      household.assetTotalGU = Math.max(0, household.assetCashGU + (Number(household.assetEquityGU) || 0) + (Number(household.assetBusinessOwnershipGU) || 0) + (Number(household.assetPropertyGU) || 0) + (Number(household.assetTrustGU) || 0));
+      household.assetNetWorthGU = household.assetTotalGU - household.assetDebtObligationsGU;
+      household.assetYieldAnnualGU = Number(netYield.toFixed(2));
+      household.assetReturnRateAnnual = Number((netYield / investedBase).toFixed(4));
+
+      refreshHouseholdSnapshot(household);
+    });
+  }
+
+  function processYearlyPhilanthropyAndLegacy(){
+    var supportByCountry = {};
+
+    (App.store.households || []).forEach(function(household){
+      var adults;
+      var sponsor;
+      var classRank;
+      var householdNetWorth;
+      var spendableCash;
+      var monthlyExpenses;
+      var ageFactor;
+      var prestigeFactor;
+      var donationChance;
+      var donationTarget;
+      var donation;
+      var educationWeight;
+      var healthWeight;
+      var prestigeWeight;
+      var bucket;
+
+      if (!household || !household.countryISO) return;
+      normalizeHouseholdAssetClasses(household);
+      refreshHouseholdSnapshot(household);
+      adults = getHouseholdAdults(household).filter(function(person){
+        return !!(person && person.alive);
+      });
+      if (!adults.length) return;
+
+      sponsor = adults.slice().sort(function(first, second){
+        return (Number(second.age) || 0) - (Number(first.age) || 0);
+      })[0] || null;
+      if (!sponsor) return;
+
+      classRank = householdClassRank(household.classTier || "working");
+      if (classRank < 3) return;
+
+      householdNetWorth = Math.max(0, Number(household.assetNetWorthGU) || 0);
+      if (householdNetWorth < 120000) return;
+
+      monthlyExpenses = Math.max(1, Number(household.monthlyExpensesGU) || 1);
+      spendableCash = Math.max(0, (Number(household.cashOnHandGU) || 0) - (monthlyExpenses * 8));
+      if (spendableCash < 5000 && householdNetWorth < 260000) return;
+
+      ensureSocialNetworkData(sponsor);
+      ageFactor = App.utils.clamp((Math.max(0, (Number(sponsor.age) || 0) - 52) / 32), 0, 1);
+      prestigeFactor = App.utils.clamp((Number(sponsor.personalReputation && sponsor.personalReputation.prestige) || 35) / 100, 0.1, 1);
+      donationChance = App.utils.clamp(0.1 + (ageFactor * 0.24) + ((classRank - 2) * 0.08) + (prestigeFactor * 0.1), 0.08, 0.72);
+      if (Math.random() > donationChance) return;
+
+      donationTarget =
+        (householdNetWorth * App.utils.clamp(0.004 + (ageFactor * 0.006) + ((classRank - 2) * 0.0018), 0.0035, 0.015)) +
+        (spendableCash * App.utils.clamp(0.1 + (prestigeFactor * 0.22), 0.08, 0.32));
+      donationTarget = App.utils.clamp(donationTarget, 2500, householdNetWorth * 0.04);
+      donation = drawHouseholdAssetTransfer(sponsor, donationTarget);
+      if (donation <= 0) return;
+
+      educationWeight = App.utils.clamp(0.4 + Math.random() * 0.3, 0.3, 0.7);
+      healthWeight = App.utils.clamp(0.22 + Math.random() * 0.28, 0.15, 0.55);
+      prestigeWeight = App.utils.clamp(1 - (educationWeight + healthWeight), 0.12, 0.48);
+      bucket = supportByCountry[household.countryISO] || {
+        total:0,
+        education:0,
+        health:0,
+        prestige:0,
+        donors:0
+      };
+      bucket.total += donation;
+      bucket.education += donation * educationWeight;
+      bucket.health += donation * healthWeight;
+      bucket.prestige += donation * prestigeWeight;
+      bucket.donors += 1;
+      supportByCountry[household.countryISO] = bucket;
+
+      adjustPersonalReputation(sponsor, {
+        prestige:App.utils.clamp((donation / 100000) * (0.8 + (prestigeFactor * 0.6)), 0.15, 2.8),
+        trust:App.utils.clamp((donation / 140000) * (0.7 + (ageFactor * 0.5)), 0.08, 1.8),
+        notoriety:-App.utils.clamp((donation / 180000), 0, 0.7)
+      });
+      syncPerson(sponsor);
+
+      if (donation >= 450000 && Math.random() < 0.25) {
+        emitNews("market", "<strong>Legacy philanthropy</strong> surged in <strong>" + App.store.getCountryName(household.countryISO) + "</strong> as major families funded public projects.", {
+          entities:{
+            personIds:[sponsor.id],
+            countryIsos:[household.countryISO],
+            blocIds:[sponsor.blocId]
+          },
+          causes:[
+            "Old wealthy dynasties redirected capital into schools, hospitals, and prestige projects.",
+            "Large private donations eased local social stress and strengthened institutional confidence."
+          ]
+        });
+      }
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var support = supportByCountry[iso] || { total:0, education:0, health:0, prestige:0, donors:0 };
+      var population = Math.max(1, Number(profile && profile.population) || 1);
+      var annualPerCapita = support.total / population;
+      var impactTarget;
+      var impactIndex;
+      var legacyTarget;
+      var educationBoost;
+      var institutionBoost;
+      var deathRateRelief;
+      var socialRelief;
+
+      if (!profile) return;
+
+      refreshCountryProfileDerived(profile);
+      impactTarget =
+        App.utils.clamp((annualPerCapita / 1800), 0, 0.65) +
+        App.utils.clamp((support.education / Math.max(1, support.total)) * 0.3, 0, 0.3) +
+        App.utils.clamp((support.health / Math.max(1, support.total)) * 0.22, 0, 0.22);
+      impactIndex = App.utils.clamp((App.utils.clamp(Number(profile.philanthropyImpactIndex) || 0, 0, 1.6) * 0.6) + (impactTarget * 0.4), 0, 1.6);
+
+      legacyTarget = App.utils.clamp((support.prestige / Math.max(1, support.total)) + (support.donors / 10), 0, 1.4);
+      profile.legacyProjectsIndex = App.utils.clamp((App.utils.clamp(Number(profile.legacyProjectsIndex) || 0, 0, 1.4) * 0.65) + (legacyTarget * 0.35), 0, 1.4);
+      profile.philanthropicCapitalAnnualGU = Math.max(0, support.total);
+      profile.philanthropyImpactIndex = impactIndex;
+
+      educationBoost = App.utils.clamp((support.education / Math.max(1, population)) / 42000, 0, 0.022);
+      institutionBoost = App.utils.clamp((support.prestige / Math.max(1, population)) / 62000, 0, 0.018) + (impactIndex * 0.0045);
+      deathRateRelief = App.utils.clamp((support.health / Math.max(1, population)) / 23000, 0, 0.35);
+      socialRelief = App.utils.clamp((support.total / Math.max(1, population)) / 21000, 0, 0.18);
+
+      profile.educationIndex = App.utils.clamp((Number(profile.educationIndex) || 0.6) + educationBoost, 0.1, 1);
+      profile.institutionScore = App.utils.clamp((Number(profile.institutionScore) || 0.55) + institutionBoost, 0.1, 1);
+      profile.deathRatePer1000 = Math.max(2, (Number(profile.deathRatePer1000) || 8) - deathRateRelief);
+      profile.socialPressureIndex = App.utils.clamp((Number(profile.socialPressureIndex) || 0) - socialRelief, 0, 1.5);
+
+      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
+      profile.policyEvidence.philanthropicCapitalAnnualGU = Number(profile.philanthropicCapitalAnnualGU.toFixed(2));
+      profile.policyEvidence.philanthropyImpactIndex = Number(profile.philanthropyImpactIndex.toFixed(4));
+      profile.policyEvidence.legacyProjectsIndex = Number(profile.legacyProjectsIndex.toFixed(4));
+      profile.policyEvidence.philanthropyDonorCount = Math.max(0, Math.floor(Number(support.donors) || 0));
+      profile.policyEvidence.philanthropyPerCapitaGU = Number(annualPerCapita.toFixed(4));
+      profile.policyEvidence.philanthropyEducationShare = Number((support.education / Math.max(1, support.total)).toFixed(4));
+      profile.policyEvidence.philanthropyHealthShare = Number((support.health / Math.max(1, support.total)).toFixed(4));
+      profile.policyEvidence.philanthropyPrestigeShare = Number((support.prestige / Math.max(1, support.total)).toFixed(4));
+
+      refreshCountryProfileDerived(profile);
+    });
   }
 
   function getHouseholdAdults(household){
@@ -5430,18 +9297,31 @@
     var childrenCount = children.length;
     var youngChildren = children.filter(function(child){ return child.age < 6; }).length;
     var schoolChildren = Math.max(0, childrenCount - youngChildren);
+    var profileHousingCostPressure = App.utils.clamp(Number(profile && profile.housingCostPressure) || 1.02, 0.65, 2.2);
+    var profileHousingMarketStress = App.utils.clamp(Number(profile && profile.housingMarketStress) || 0.35, 0, 1.5);
+    var propertyAsset = Math.max(0, Number(household.assetPropertyGU) || 0);
+    var ownershipAnchor = Math.max(1, monthlyMedianWage * Math.max(1, adultsCount) * HOUSEHOLD_HOMEOWNERSHIP_PROPERTY_MONTHS);
+    var homeownershipBuffer = App.utils.clamp(propertyAsset / ownershipAnchor, 0, 1.25);
     var countryCostPressure = 0.88 + ((profile && profile.giniCoefficient) || 0.4) * 0.55 + ((profile && profile.populationPressure) || 0.5) * 0.28;
     var essentialsCost = monthlyMedianWage * (0.62 + (adultsCount * 0.42) + (childrenCount * 0.24)) * (1.08 - ((profile && profile.institutionScore) || 0.55) * 0.12);
-    var housingCost = monthlyMedianWage * countryCostPressure * (0.76 + Math.max(0, adultsCount - 1) * 0.24 + childrenCount * 0.08);
+    var housingCost = monthlyMedianWage * countryCostPressure * (0.76 + Math.max(0, adultsCount - 1) * 0.24 + childrenCount * 0.08) * (1 + Math.max(0, profileHousingCostPressure - 1) * 0.42 + (profileHousingMarketStress * 0.08)) * App.utils.clamp(1 - (homeownershipBuffer * 0.12), 0.72, 1);
     var childcareCost = monthlyMedianWage * ((youngChildren * 0.32) + (schoolChildren * 0.12)) * (1.15 - ((profile && profile.institutionScore) || 0.55) * 0.35);
     var debtService = Math.max(0, household.debtGU || 0) * (0.07 / 12);
+    var tradeShockIndex = App.utils.clamp(Number(profile && profile.tradeShockIndex) || 0, 0, 1.8);
+    var tradeHouseholdExpenseLift = monthlyMedianWage * App.utils.clamp(tradeShockIndex * (0.08 + (childrenCount * 0.018)), 0, 0.28);
+    var tradeStressImpact = App.utils.clamp(tradeShockIndex * 7.5, 0, 12);
     var annualIncome = adults.reduce(function(sum, adult){
-      return sum + estimateAdultAnnualIncome(adult);
+      var modeledIncome = Number(adult && adult.modeledAnnualIncomeGU);
+      return sum + Math.max(0, Number.isFinite(modeledIncome) ? modeledIncome : estimateAdultAnnualIncome(adult));
     }, 0);
     var monthlyIncome = annualIncome / 12;
     var monthlyExpenses = essentialsCost + housingCost + childcareCost + debtService;
     var cashCoverageMonths = (household.cashOnHandGU || 0) / Math.max(1, monthlyExpenses);
     var debtRatio = (household.debtGU || 0) / Math.max(1, monthlyMedianWage * 12 * Math.max(1, adultsCount));
+    var housingBurdenRatio;
+    var housingSavingsPressure;
+    var housingOwnershipScore;
+    var housingAffordabilityScore;
     var inheritancePressure = monthlyMedianWage * ((childrenCount * 0.45) + adults.filter(function(adult){
       return adult.age >= 55 || !!adult.businessId;
     }).length * 0.62 + ((household.debtGU || 0) > (household.cashOnHandGU || 0) ? 0.45 : 0));
@@ -5456,6 +9336,15 @@
     var originClassTier;
     var mobilityScore;
 
+    monthlyExpenses += tradeHouseholdExpenseLift;
+    housingBurdenRatio = App.utils.clamp(housingCost / Math.max(1, monthlyIncome || (monthlyExpenses * 0.85)), 0.08, 1.9);
+    housingSavingsPressure = App.utils.clamp((housingCost + debtService) / Math.max(1, monthlyIncome || monthlyExpenses), 0.08, 2.2);
+    housingOwnershipScore = App.utils.clamp(homeownershipBuffer, 0, 1);
+    housingAffordabilityScore = App.utils.clamp(1.02 - ((housingBurdenRatio - 0.34) * 0.96) - ((((profile && profile.giniCoefficient) || 0.4) - 0.35) * 0.18), 0.05, 1);
+    stress += tradeStressImpact;
+    stress += Math.max(0, housingBurdenRatio - 0.42) * 24;
+    stress += Math.max(0, housingSavingsPressure - 0.55) * 16;
+    stress -= housingOwnershipScore * 4.2;
     stress = App.utils.clamp(stress, 0, 100);
     classTier = classifyHouseholdTier(profile, annualIncome, household.cashOnHandGU || 0, household.debtGU || 0, adultsCount, stress);
     originClassTier = household.originClassTier || classTier;
@@ -5470,6 +9359,12 @@
       childcareCostGU:Math.max(0, childcareCost),
       essentialsCostGU:Math.max(0, essentialsCost),
       debtServiceGU:Math.max(0, debtService),
+      housingBurdenRatio:housingBurdenRatio,
+      housingSavingsPressure:housingSavingsPressure,
+      housingOwnershipScore:housingOwnershipScore,
+      housingAffordabilityScore:housingAffordabilityScore,
+      tradeShockBurdenGU:Math.max(0, tradeHouseholdExpenseLift),
+      tradeShockStressImpact:Math.max(0, tradeStressImpact),
       inheritancePressureGU:Math.max(0, inheritancePressure),
       financialStress:stress,
       classTier:classTier,
@@ -5483,6 +9378,7 @@
     Object.keys(snapshot).forEach(function(key){
       household[key] = snapshot[key];
     });
+    household.annualIncomeSource = "modeled-economic-pass";
     return household;
   }
 
@@ -5503,6 +9399,21 @@
     var firstOriginTier = candidates.map(function(household){
       return household.originClassTier || household.classTier || null;
     }).filter(Boolean)[0] || null;
+    var assetEquity = candidates.length ? candidates.reduce(function(sum, household){
+      return sum + Math.max(0, Number(household.assetEquityGU) || 0);
+    }, 0) : 0;
+    var assetBusiness = candidates.length ? candidates.reduce(function(sum, household){
+      return sum + Math.max(0, Number(household.assetBusinessOwnershipGU) || 0);
+    }, 0) : 0;
+    var assetProperty = candidates.length ? candidates.reduce(function(sum, household){
+      return sum + Math.max(0, Number(household.assetPropertyGU) || 0);
+    }, 0) : 0;
+    var assetTrust = candidates.length ? candidates.reduce(function(sum, household){
+      return sum + Math.max(0, Number(household.assetTrustGU) || 0);
+    }, 0) : 0;
+    var assetYield = candidates.length ? candidates.reduce(function(sum, household){
+      return sum + (Number(household.assetYieldAnnualGU) || 0);
+    }, 0) : 0;
 
     return {
       id:"hh-" + (group.adultIds[0] || group.childIds[0] || randomId()),
@@ -5520,12 +9431,62 @@
       childcareCostGU:0,
       essentialsCostGU:0,
       debtServiceGU:0,
+      housingBurdenRatio:0,
+      housingSavingsPressure:0,
+      housingOwnershipScore:0,
+      housingAffordabilityScore:0,
       inheritancePressureGU:0,
       financialStress:0,
       classTier:firstOriginTier || "working",
       originClassTier:firstOriginTier || null,
-      mobilityScore:0
+      mobilityScore:0,
+      assetCashGU:Math.max(0, cashOnHand),
+      assetEquityGU:Math.max(0, assetEquity),
+      assetBusinessOwnershipGU:Math.max(0, assetBusiness),
+      assetPropertyGU:Math.max(0, assetProperty),
+      assetTrustGU:Math.max(0, assetTrust),
+      assetDebtObligationsGU:Math.max(0, debtGU),
+      assetTotalGU:Math.max(0, cashOnHand + assetEquity + assetBusiness + assetProperty + assetTrust),
+      assetNetWorthGU:Math.max(0, cashOnHand + assetEquity + assetBusiness + assetProperty + assetTrust - debtGU),
+      assetYieldAnnualGU:Number(assetYield) || 0,
+      assetReturnRateAnnual:0
     };
+  }
+
+  function estimateHouseholdLiquidityTargetGU(household){
+    var iso = household && household.countryISO;
+    var profile = ensureCountryProfile(iso);
+    var monthlyMedianWage = Math.max(125, getCountryMedianWage(iso) / 12);
+    var adultsCount = Math.max(1, getHouseholdAdults(household).length || (household && household.adultIds ? household.adultIds.length : 1));
+    var annualIncome = Math.max(0, Number(household && household.annualIncomeGU) || 0);
+    var stress = App.utils.clamp((Number(household && household.financialStress) || 0) / 100, 0, 1);
+    var classRank = householdClassRank(household && household.classTier);
+    var reserveMonths = App.utils.clamp(0.8 + (classRank * 0.85) - (stress * 0.95), 0.6, 4.8);
+    var incomeAnchoredTarget = (annualIncome / 12) * reserveMonths;
+    var medianAnchoredTarget = monthlyMedianWage * adultsCount * App.utils.clamp(0.9 + (classRank * 0.55) - (stress * 0.3), 0.75, 3.2);
+
+    return Math.max(medianAnchoredTarget, incomeAnchoredTarget, monthlyMedianWage * adultsCount * 0.75);
+  }
+
+  function calibrateInitialHouseholdLiquidity(){
+    (App.store.households || []).forEach(function(household){
+      var targetCash;
+      var currentCash;
+      var adjustedCash;
+
+      if (!household) return;
+
+      refreshHouseholdSnapshot(household);
+      targetCash = estimateHouseholdLiquidityTargetGU(household);
+      currentCash = Math.max(0, Number(household.cashOnHandGU) || 0);
+      adjustedCash = Math.max(currentCash, (targetCash * 0.78) + (currentCash * 0.22));
+
+      household.cashOnHandGU = Math.max(0, adjustedCash);
+      household.assetCashGU = Math.max(0, household.cashOnHandGU);
+      household.assetTotalGU = Math.max(0, household.assetCashGU + (Number(household.assetEquityGU) || 0) + (Number(household.assetBusinessOwnershipGU) || 0) + (Number(household.assetPropertyGU) || 0) + (Number(household.assetTrustGU) || 0));
+      household.assetNetWorthGU = household.assetTotalGU - Math.max(0, Number(household.assetDebtObligationsGU) || Number(household.debtGU) || 0);
+      refreshHouseholdSnapshot(household);
+    });
   }
 
   function applyHouseholdWealthDrift(household, dailyNet){
@@ -5690,6 +9651,7 @@
       }
 
       applyHouseholdWealthDrift(household, dailyNet);
+      normalizeHouseholdAssetClasses(household);
       refreshHouseholdSnapshot(household);
     });
   }
@@ -5728,6 +9690,104 @@
     household.cashOnHandGU = Math.max(0, (household.cashOnHandGU || 0) + support);
     refreshHouseholdSnapshot(household);
     return support;
+  }
+
+  function drawHouseholdAssetTransfer(person, amount){
+    var household;
+    var remaining;
+    var pull;
+
+    if (!person || !Number.isFinite(amount) || amount <= 0) return 0;
+    household = getHouseholdForPerson(person);
+    remaining = Math.max(0, amount);
+    if (!household) {
+      person.netWorthGU = Math.max(100, (person.netWorthGU || 0) - remaining);
+      return remaining;
+    }
+
+    normalizeHouseholdAssetClasses(household);
+
+    pull = Math.min(remaining, Math.max(0, Number(household.assetCashGU) || Number(household.cashOnHandGU) || 0));
+    household.assetCashGU = Math.max(0, (Number(household.assetCashGU) || 0) - pull);
+    household.cashOnHandGU = Math.max(0, (Number(household.cashOnHandGU) || 0) - pull);
+    remaining -= pull;
+
+    pull = Math.min(remaining, Math.max(0, Number(household.assetTrustGU) || 0));
+    household.assetTrustGU = Math.max(0, (Number(household.assetTrustGU) || 0) - pull);
+    remaining -= pull;
+
+    pull = Math.min(remaining, Math.max(0, Number(household.assetEquityGU) || 0));
+    household.assetEquityGU = Math.max(0, (Number(household.assetEquityGU) || 0) - pull);
+    remaining -= pull;
+
+    pull = Math.min(remaining, Math.max(0, Number(household.assetPropertyGU) || 0));
+    household.assetPropertyGU = Math.max(0, (Number(household.assetPropertyGU) || 0) - pull);
+    remaining -= pull;
+
+    pull = Math.min(remaining, Math.max(0, Number(household.assetBusinessOwnershipGU) || 0));
+    household.assetBusinessOwnershipGU = Math.max(0, (Number(household.assetBusinessOwnershipGU) || 0) - pull);
+    remaining -= pull;
+
+    person.netWorthGU = Math.max(100, (person.netWorthGU || 0) - (amount - remaining));
+    normalizeHouseholdAssetClasses(household);
+    refreshHouseholdSnapshot(household);
+    return amount - remaining;
+  }
+
+  function allocateHouseholdAssetTransfer(person, amount, mode){
+    var household;
+    var transfer;
+    var mix;
+    var cash;
+    var equity;
+    var business;
+    var property;
+    var trust;
+
+    if (!person || !Number.isFinite(amount) || amount <= 0) return 0;
+    household = getHouseholdForPerson(person);
+    transfer = Math.max(0, amount);
+
+    if (mode === "heir") {
+      mix = { cash:0.1, equity:0.24, business:0.3, property:0.14, trust:0.22 };
+    } else if (mode === "spouse") {
+      mix = { cash:0.32, equity:0.18, business:0.06, property:0.24, trust:0.2 };
+    } else if (mode === "child") {
+      mix = { cash:0.24, equity:0.24, business:0.06, property:0.2, trust:0.26 };
+    } else {
+      mix = { cash:0.36, equity:0.2, business:0.06, property:0.16, trust:0.22 };
+    }
+
+    cash = transfer * mix.cash;
+    equity = transfer * mix.equity;
+    business = transfer * mix.business;
+    property = transfer * mix.property;
+    trust = transfer * mix.trust;
+
+    person.netWorthGU += transfer;
+    if (!household) return transfer;
+
+    normalizeHouseholdAssetClasses(household);
+    household.cashOnHandGU = Math.max(0, (Number(household.cashOnHandGU) || 0) + cash);
+    household.assetCashGU = Math.max(0, (Number(household.assetCashGU) || 0) + cash);
+    household.assetEquityGU = Math.max(0, (Number(household.assetEquityGU) || 0) + equity);
+    household.assetBusinessOwnershipGU = Math.max(0, (Number(household.assetBusinessOwnershipGU) || 0) + business);
+    household.assetPropertyGU = Math.max(0, (Number(household.assetPropertyGU) || 0) + property);
+    household.assetTrustGU = Math.max(0, (Number(household.assetTrustGU) || 0) + trust);
+    normalizeHouseholdAssetClasses(household);
+    refreshHouseholdSnapshot(household);
+    return transfer;
+  }
+
+  function grantInheritanceTransfer(person, amount, mode){
+    var granted = allocateHouseholdAssetTransfer(person, amount, mode);
+
+    if (!person || granted <= 0) return 0;
+
+    person.lifetimeInheritedGU = Math.max(0, (Number(person.lifetimeInheritedGU) || 0) + granted);
+    person.inheritanceTransferCount = Math.max(0, Math.floor(Number(person.inheritanceTransferCount) || 0) + 1);
+    person.lastInheritanceDay = App.store.simDay;
+    return granted;
   }
 
   function createGeneratedSpouse(person, explicitAge){
@@ -6484,6 +10544,12 @@
     var patronBoost = 0;
     var founderAptitude;
     var lifecycleStage;
+    var countryProfile;
+    var institutionScore;
+    var corruptionIndex;
+    var businessFriendliness;
+    var institutionalConfidence;
+    var dynasticBias;
 
     if (!person.alive || person.retired || person.businessId || person.age < 22) return;
 
@@ -6491,6 +10557,12 @@
     ensureWorkerLifecycleData(person);
     founderAptitude = getFounderAptitude(person);
     lifecycleStage = String(person.workerLifecycleStage || "worker");
+    countryProfile = ensureCountryProfile(person.countryISO, person.blocId);
+    institutionScore = App.utils.clamp(Number(countryProfile && countryProfile.institutionScore) || 0.55, 0.1, 1);
+    corruptionIndex = App.utils.clamp(Number(countryProfile && countryProfile.developmentCorruptionIndex) || (1 - institutionScore), 0, 1);
+    businessFriendliness = App.utils.clamp(Number(countryProfile && countryProfile.developmentBusinessFriendlinessIndex) || institutionScore, 0, 1);
+    institutionalConfidence = App.utils.clamp((institutionScore * 0.44) + (businessFriendliness * 0.36) + ((1 - corruptionIndex) * 0.2), 0.08, 1);
+    dynasticBias = App.utils.clamp((0.55 - institutionalConfidence) * 1.4 + (corruptionIndex * 0.6), 0, 1.2);
 
     chance = hasEntrepreneurialTraits(person) ? 0.026 : 0.005;
     mobilityTrait = getTraitChannelScore(person, "mobility");
@@ -6502,8 +10574,10 @@
     chance += (Number(person.educationIndex) || 0) * 0.00035;
     chance += App.utils.clamp((Number(person.skills && person.skills.creativity) || 0) * 0.00018, 0, 0.012);
     chance += App.utils.clamp((Number(person.skills && person.skills.social) || 0) * 0.00014, 0, 0.01);
-    socialCapital = (person.closeFriendIds.length * 0.5) + (person.schoolTieIds.length * 0.35) + (person.eliteCircleIds.length * 0.4) + (person.nepotismTieIds.length * 0.55);
+    socialCapital = (person.closeFriendIds.length * 0.5) + (person.schoolTieIds.length * 0.35) + (person.eliteCircleIds.length * 0.4) + (person.nepotismTieIds.length * (0.55 + dynasticBias * 0.35));
     chance += App.utils.clamp(socialCapital * 0.0018, 0, 0.03);
+    chance += (institutionalConfidence - 0.5) * 0.026;
+    chance -= App.utils.clamp((corruptionIndex - 0.5) * 0.01, -0.005, 0.02);
     mentor = person.mentorId ? App.store.getPerson(person.mentorId) : null;
     if (mentor && mentor.alive && (mentor.netWorthGU || 0) > 12000) {
       patronBoost = Math.min((mentor.netWorthGU || 0) * 0.0012, Math.max(500, (person.netWorthGU || 0) * 0.08));
@@ -6531,6 +10605,7 @@
     seedBusiness(business);
     capitalModifier = 1 + App.utils.clamp((mobilityTrait * 0.6 + businessTrait * 0.8) / 40, -0.22, 0.28);
     capitalModifier *= 1 + App.utils.clamp(launchReadiness * 0.08, -0.14, 0.24);
+    capitalModifier *= 1 + App.utils.clamp((institutionalConfidence - 0.5) * 0.22 - (corruptionIndex - 0.5) * 0.12, -0.12, 0.16);
     business.revenueGU *= capitalModifier;
     business.cashReservesGU = Math.max(0, (business.cashReservesGU || 0) * capitalModifier);
     business.valuationGU = Math.max(1000, business.valuationGU * (0.95 + (capitalModifier - 1) * 0.9));
@@ -6966,6 +11041,8 @@
     var keepBusinessInFamily = false;
     var debtRelief = 0;
     var supportReserve = 0;
+    var drawnWealthTransfer = 0;
+    var distributedToHeir = 0;
     var retirementType = "graceful";
     var businessStress = 0;
     var chairmanEligible = false;
@@ -7004,12 +11081,12 @@
         person.boardBusinessIds = normalizeUniqueIdList((person.boardBusinessIds || []).concat([business.id]), null).slice(0, 4);
         person.advisorBusinessIds = normalizeUniqueIdList((person.advisorBusinessIds || []).concat([business.id]), null).slice(0, 4);
       }
+      drawnWealthTransfer = drawHouseholdAssetTransfer(person, wealthTransfer);
       if (household) {
-        debtRelief = relieveHouseholdDebt(household, wealthTransfer * 0.35);
-        supportReserve = reserveDependentSupport(household, wealthTransfer * 0.18);
+        debtRelief = relieveHouseholdDebt(household, drawnWealthTransfer * 0.35);
+        supportReserve = reserveDependentSupport(household, Math.max(0, drawnWealthTransfer - debtRelief) * 0.18);
       }
-      person.netWorthGU -= wealthTransfer;
-      heir.netWorthGU += Math.max(0, wealthTransfer - debtRelief - supportReserve);
+      distributedToHeir = grantInheritanceTransfer(heir, Math.max(0, drawnWealthTransfer - debtRelief - supportReserve), "heir");
       retirementEvent = emitNews("retirement", "<strong>" + person.name + "</strong> retired from <strong>" + business.name + "</strong>.", {
         entities:{
           personIds:[person.id],
@@ -7030,7 +11107,7 @@
           text:"Succession transfer finalized.",
           eventId:retirementEvent ? retirementEvent.id : null,
           kind:"triggered-by"
-        }],
+        }, "Transferred estate value: " + App.utils.fmtCountry(distributedToHeir, person.countryISO) + "."],
         controlTransfer:true
       });
     } else if (business) {
@@ -7101,6 +11178,7 @@
     var residualPool = 0;
     var heirsForDistribution = [];
     var splitAcross;
+    var capturedEstate = 0;
     var rate = 0;
 
     syncHouseholds();
@@ -7113,6 +11191,9 @@
     } else if (business) {
       estate += liquidateBusiness(person, business);
     }
+
+    capturedEstate = drawHouseholdAssetTransfer(person, estate);
+    estate = capturedEstate;
 
     if (person.spouseId) {
       spouse = App.store.getPerson(person.spouseId);
@@ -7196,12 +11277,12 @@
     }
 
     if (spouse && spouseSharePool > 0) {
-      spouse.netWorthGU += spouseSharePool;
+      grantInheritanceTransfer(spouse, spouseSharePool, "spouse");
       adjustPersonalReputation(spouse, { trust:0.4, notoriety:0.2 });
     }
 
     if (dynastyReservePool > 0 && heir) {
-      heir.netWorthGU += dynastyReservePool;
+      grantInheritanceTransfer(heir, dynastyReservePool, "heir");
     }
 
     splitAcross = heirsForDistribution.filter(function(relative){
@@ -7209,20 +11290,20 @@
     });
     if (splitAcross.length && childSharePool > 0) {
       splitAcross.forEach(function(relative){
-        relative.netWorthGU += childSharePool / splitAcross.length;
+        grantInheritanceTransfer(relative, childSharePool / splitAcross.length, "child");
       });
     }
 
     if (heir && residualPool > 0) {
-      heir.netWorthGU += residualPool * 0.6;
+      grantInheritanceTransfer(heir, residualPool * 0.6, "heir");
       if (splitAcross.length) {
         splitAcross.forEach(function(relative){
-          relative.netWorthGU += (residualPool * 0.4) / splitAcross.length;
+          grantInheritanceTransfer(relative, (residualPool * 0.4) / splitAcross.length, "child");
         });
       }
     } else if (heirsForDistribution.length && residualPool > 0) {
       heirsForDistribution.forEach(function(relative){
-        relative.netWorthGU += residualPool / heirsForDistribution.length;
+        grantInheritanceTransfer(relative, residualPool / heirsForDistribution.length, "child");
       });
     }
 
@@ -7448,19 +11529,29 @@
   function runYearlyLifecycle(){
     syncHouseholds();
     updatePopulationProfilesYearly();
+    processYearlyCentralBankPolicy();
+    processYearlyHouseholdAssetClasses();
+    processYearlyPhilanthropyAndLegacy();
+    processYearlyCorporateGovernance();
     processYearlyAging();
     processYearlySocialNetworks();
+    processYearlyPromotionsAndPoaching();
     processYearlyMarriages();
     processYearlyFamilyTransitions();
     processYearlyBirths();
     processYearlySiblingDynamics();
     processYearlyFamilyBusinessGrooming();
+    processYearlyEliteReproduction();
+    processYearlyInnovationAndCopying();
     processSeniorTransitions();
     processYearlyRetiredInfluence();
     processYearlyLaunches();
     markYearlyEvents();
     syncHouseholds();
-    (App.store.households || []).forEach(refreshHouseholdSnapshot);
+    (App.store.households || []).forEach(function(household){
+      normalizeHouseholdAssetClasses(household);
+      refreshHouseholdSnapshot(household);
+    });
   }
 
   function rehydrateLoadedState(){
@@ -7751,6 +11842,11 @@
     syncCorporateLadders();
     syncHouseholds();
     (App.store.households || []).forEach(refreshHouseholdSnapshot);
+    runYearlyEconomicPass();
+    syncCorporateLadders();
+    syncHouseholds();
+    calibrateInitialHouseholdLiquidity();
+    (App.store.households || []).forEach(refreshHouseholdSnapshot);
     updateBlocGdp();
     validateCountryProfiles();
     emitNews("market", "NEXUS initialized with family dynasties, heirs, marriages, births, retirements, inheritance, and executive decision-making.", {
@@ -7947,9 +12043,31 @@
       var coveredByCash = 0;
       var ageYears = 0;
       var cashCoverage = 0;
+      var behaviorProfile;
+      var countryProfile;
+      var supplyPressure = 0;
+      var infrastructureIndex = 0.52;
+      var infrastructureReliability = 0.55;
+      var infrastructureProductivityFactor = 1;
+      var infrastructureLogisticsCostFactor = 1;
+      var naturalResourceEndowment = 0.35;
+      var resourceRentRisk = 0.3;
+      var resourceAdvantage = 0;
+      var resourceCostFactor = 1;
+      var tradeTransmission;
+      var customerEffects;
+      var creditEffects;
       var wealthCarryRateAnnual = 0;
       var wealthCarry = 0;
       var shouldRecordDecision = false;
+      var marketSignal;
+      var allocatedDemandCapacity;
+      var pricedDemandCapacity;
+      var productionCapacity;
+      var pricedProductionCapacity;
+      var capacityUtilization;
+      var capacityHireBias = 0;
+      var demandOpportunityRatio;
 
       ensureDecisionData(person);
       if (!business) {
@@ -7968,6 +12086,25 @@
       ownerBusinessTrait = getTraitChannelScore(person, "business");
       ownerMobilityTrait = getTraitChannelScore(person, "mobility");
       businessTickEffects = summarizeTraitEffects(collectTraitEffects(person, ["business","mobility"]), 4);
+      behaviorProfile = getIndustryBehaviorProfile(business.industry);
+      countryProfile = ensureCountryProfile(business.countryISO, business.blocId);
+      marketSignal = getBusinessMarketAllocationSignal(business);
+      business.marketPriceIndex = marketSignal.priceIndex;
+      business.marketAllocationRatio = marketSignal.allocationRatio;
+      allocatedDemandCapacity = Math.max(1, Number(business.allocatedDemandGU) || getBusinessDemandCapacityGU(business));
+      pricedDemandCapacity = Math.max(getCountryMedianWage(business.countryISO) * 1.2, allocatedDemandCapacity * App.utils.clamp(marketSignal.priceIndex, 0.72, 1.45));
+      infrastructureIndex = App.utils.clamp(Number(countryProfile && countryProfile.developmentInfrastructureIndex) || 0.52, 0.1, 1);
+      infrastructureReliability = App.utils.clamp(0.55 + ((infrastructureIndex - 0.5) * 0.9), 0.3, 1.1);
+      infrastructureProductivityFactor = App.utils.clamp(0.88 + ((infrastructureIndex - 0.5) * 0.22), 0.76, 1.12);
+      infrastructureLogisticsCostFactor = App.utils.clamp(1 + ((0.55 - infrastructureIndex) * 0.24), 0.9, 1.18);
+      naturalResourceEndowment = App.utils.clamp(Number(countryProfile && countryProfile.naturalResourceEndowmentIndex) || 0.35, 0, 1);
+      resourceRentRisk = App.utils.clamp(Number(countryProfile && countryProfile.resourceRentSeekingRiskIndex) || 0.3, 0, 1.6);
+      if (business.industry === "Energy") {
+        resourceAdvantage = (naturalResourceEndowment - 0.4) * 0.24;
+      } else if (business.industry === "Manufacturing" || business.industry === "F&B" || business.industry === "Logistics") {
+        resourceAdvantage = (naturalResourceEndowment - 0.4) * 0.11;
+      }
+      resourceCostFactor = App.utils.clamp(1 - (resourceAdvantage * 0.45) + (resourceRentRisk * 0.05), 0.82, 1.22);
       leadershipFloor = Math.max((business.leadership || []).length, 1);
       demandPenalty = getDemandCapPenalty(business);
       annualTargetRevenue = computeBusinessAnnualRevenueTarget(business, decision, ownerBusinessTrait, ownerMobilityTrait);
@@ -7977,24 +12114,78 @@
         (getRevenueTrend(business) * 0.24) -
         (bloc.geoPressure * 0.02) -
         (demandPenalty * 1.15) +
+        resourceAdvantage +
         clampTraitDelta(ownerBusinessTrait / 180, 0.05) +
         clampTraitDelta(ownerMobilityTrait / 260, 0.03);
       annualGrowthTarget = App.utils.clamp(annualGrowthTarget, annualGrowthBands.min, annualGrowthBands.max);
       dailyRevenueRate = dailyRateFromAnnualChange(annualGrowthTarget);
-      dailyRevenueNoise = App.utils.rand(-0.0016, 0.0019);
-      demandUtilization = Math.max(0, (business.revenueGU || 0) / Math.max(1, getBusinessDemandCapacityGU(business)));
+      dailyRevenueNoise = closureValidationMode ? App.utils.rand(-0.00045, 0.00045) : App.utils.rand(-0.0016, 0.0019);
+      demandUtilization = Math.max(0, (business.revenueGU || 0) / Math.max(1, pricedDemandCapacity));
       overCapacityCorrection = demandUtilization > 1 ? App.utils.clamp((demandUtilization - 1) * 0.015, 0, 0.12) : 0;
       dailyRevenueMultiplier = App.utils.clamp(1 + dailyRevenueRate + dailyRevenueNoise - overCapacityCorrection, 0.9, 1.03);
+      dailyRevenueMultiplier = App.utils.clamp(dailyRevenueMultiplier * App.utils.clamp((Number(business.pricePower) || 1), 0.92, 1.12) * marketSignal.revenueMultiplier, 0.82, 1.12);
       business.revenueGU = Math.max(
         getCountryMedianWage(business.countryISO) * 1.2,
-        (business.revenueGU || 0) * dailyRevenueMultiplier
+        Math.min(pricedDemandCapacity * 1.08, (business.revenueGU || 0) * dailyRevenueMultiplier)
       );
 
+      refreshBusinessFirmStructure(business, decision);
+      supplyPressure = getIndustrySupplyPressure(business);
+      tradeTransmission = computeTradeShockTransmission(business, bloc, behaviorProfile, supplyPressure);
+      business.tradeShockPressure = App.utils.clamp(((Number(business.tradeShockPressure) || 0) * 0.7) + (tradeTransmission.netShock * 0.3), 0, 1.8);
+      business.tradeRerouteRelief = App.utils.clamp(((Number(business.tradeRerouteRelief) || 0) * 0.64) + (tradeTransmission.rerouteRelief * 0.36), 0, 1.2);
+      business.supplyStress = App.utils.clamp(
+        ((Number(business.supplyStress) || 0) * 0.68) +
+        (supplyPressure * behaviorProfile.supplySensitivity) +
+        ((1 - infrastructureReliability) * 0.22) +
+        (resourceRentRisk * 0.08) +
+        (business.tradeShockPressure * 0.42) -
+        (business.tradeRerouteRelief * 0.18),
+        0,
+        1.8
+      );
+      productionCapacity = Math.max(1, getBusinessProductionCapacityGU(business));
+      pricedProductionCapacity = Math.max(getCountryMedianWage(business.countryISO) * 1.2, productionCapacity * App.utils.clamp((marketSignal.priceIndex * 0.76) + (marketSignal.allocationRatio * 0.24), 0.74, 1.34));
+      business.revenueGU = Math.max(getCountryMedianWage(business.countryISO) * 1.2, Math.min(pricedDemandCapacity * 1.08, pricedProductionCapacity * 1.14, business.revenueGU * App.utils.clamp((1 - (business.supplyStress * 0.05)) * infrastructureProductivityFactor, 0.72, 1.08)));
+      business.revenueGU = Math.max(getCountryMedianWage(business.countryISO) * 1.2, Math.min(pricedDemandCapacity * 1.08, pricedProductionCapacity * 1.12, business.revenueGU * App.utils.clamp(1 + (resourceAdvantage * 0.32), 0.9, 1.1)));
+
       payrollAnnual = getLeadershipPayrollAnnual(business) + getAnonymousPayrollAnnual(business);
-      operatingCostAnnual = business.revenueGU * getOperatingCostRate(business) * (1 + App.utils.clamp(bloc.geoPressure * 0.05, 0, 0.16));
+      operatingCostAnnual = business.revenueGU * getOperatingCostRate(business) * (
+        (1 + App.utils.clamp(bloc.geoPressure * 0.05, 0, 0.16) + App.utils.clamp(business.supplyStress * 0.11, 0, 0.24)) * tradeTransmission.costMultiplier * infrastructureLogisticsCostFactor * resourceCostFactor
+      );
       business.profitGU = business.revenueGU - payrollAnnual - operatingCostAnnual;
       margin = App.utils.clamp((business.profitGU || 0) / Math.max(1, business.revenueGU || 1), -0.4, 0.4);
+      customerEffects = applyCustomerDemandAndReputationDynamics(business, decision, margin);
+      business.revenueGU = Math.max(getCountryMedianWage(business.countryISO) * 1.2, Math.min(pricedDemandCapacity * 1.12, business.revenueGU * customerEffects.revenueMultiplier));
+      payrollAnnual = getLeadershipPayrollAnnual(business) + getAnonymousPayrollAnnual(business);
+      operatingCostAnnual = business.revenueGU * getOperatingCostRate(business) * (
+        (1 + App.utils.clamp(bloc.geoPressure * 0.05, 0, 0.16) + App.utils.clamp(business.supplyStress * 0.11, 0, 0.24)) * tradeTransmission.costMultiplier * infrastructureLogisticsCostFactor * resourceCostFactor
+      );
+      business.profitGU = business.revenueGU - payrollAnnual - operatingCostAnnual;
+      margin = App.utils.clamp((business.profitGU || 0) / Math.max(1, business.revenueGU || 1), -0.4, 0.4);
+      business.wageBillAnnual = payrollAnnual;
+      business.operatingCostAnnual = operatingCostAnnual;
       business.currentDecision = decision;
+      business.tradeShockEvidence = {
+        industry:business.industry,
+        exposure:Number((Number(business.tradeShockExposure) || 0).toFixed(4)),
+        grossShock:Number(tradeTransmission.grossShock.toFixed(4)),
+        netShock:Number(tradeTransmission.netShock.toFixed(4)),
+        rerouteRelief:Number(tradeTransmission.rerouteRelief.toFixed(4)),
+        rerouteCapacity:Number((Number(business.tradeRerouteCapacity) || 0).toFixed(4))
+      };
+      business.infrastructureEvidence = {
+        infrastructureIndex:Number(infrastructureIndex.toFixed(4)),
+        reliability:Number(infrastructureReliability.toFixed(4)),
+        productivityFactor:Number(infrastructureProductivityFactor.toFixed(4)),
+        logisticsCostFactor:Number(infrastructureLogisticsCostFactor.toFixed(4))
+      };
+      business.resourceEvidence = {
+        endowmentIndex:Number(naturalResourceEndowment.toFixed(4)),
+        rentRiskIndex:Number(resourceRentRisk.toFixed(4)),
+        advantage:Number(resourceAdvantage.toFixed(4)),
+        costFactor:Number(resourceCostFactor.toFixed(4))
+      };
       ageYears = getBusinessAgeYears(business);
       business.age = Math.round(ageYears * 10) / 10;
       if ((App.store.simDay % 18) < SIM_DAYS_PER_TICK) {
@@ -8028,6 +12219,11 @@
         person.netWorthGU -= (loss - coveredByCash);
       }
 
+      creditEffects = applyDebtCreditAndBankruptcyStages(business, person, bloc, decision);
+      if (creditEffects.liquidated) {
+        return;
+      }
+
       wealthCarryRateAnnual = getNetWorthCarryRateAnnual(person.netWorthGU);
       if (wealthCarryRateAnnual > 0) {
         wealthCarry = person.netWorthGU * wealthCarryRateAnnual * (SIM_DAYS_PER_TICK / YEAR_DAYS);
@@ -8041,6 +12237,20 @@
       }
 
       currentHeadcount = Math.max(leadershipFloor, business.employees || leadershipFloor);
+      capacityUtilization = business.revenueGU / Math.max(1, pricedProductionCapacity);
+      demandOpportunityRatio = pricedDemandCapacity / Math.max(1, pricedProductionCapacity);
+      if (demandOpportunityRatio > 1.05) {
+        capacityHireBias = Math.max(capacityHireBias, Math.max(1, Math.ceil(currentHeadcount * App.utils.clamp((demandOpportunityRatio - 1) * 0.2, 0.04, 0.24))));
+      }
+      if (capacityUtilization > 1.03) {
+        capacityHireBias = Math.max(1, Math.ceil(currentHeadcount * App.utils.clamp((capacityUtilization - 1) * 0.22, 0.04, 0.18)));
+        requestedEmployeeDelta = Math.max(requestedEmployeeDelta, capacityHireBias);
+      } else if (capacityUtilization < 0.76 && decision.staffingAction === "layoff") {
+        requestedEmployeeDelta = Math.min(requestedEmployeeDelta, -Math.max(1, Math.ceil(currentHeadcount * App.utils.clamp((0.76 - capacityUtilization) * 0.12, 0.03, 0.12))));
+      }
+      if (capacityHireBias > 0) {
+        requestedEmployeeDelta = Math.max(requestedEmployeeDelta, capacityHireBias);
+      }
       if (requestedEmployeeDelta > 0) {
         headroom = Math.max(0, 2000 - currentHeadcount);
         requestedEmployeeDelta = Math.min(requestedEmployeeDelta, headroom);
@@ -8053,6 +12263,11 @@
       }
       employeeDelta = workforceDelta;
       business.employees = Math.max(leadershipFloor, Math.min(2000, currentHeadcount + employeeDelta));
+      if (employeeDelta !== 0) {
+        syncBusinessStaffAssignments(business);
+      }
+
+      applyLaborUnrestPressure(business, decision, employeeDelta);
 
       reputationDelta += business.profitGU > 0 ? App.utils.clamp(margin * 8, 0.05, 0.9) : App.utils.clamp(margin * 11, -1.9, -0.08);
       if (employeeDelta < 0) reputationDelta -= App.utils.rand(0.2, 0.7);
@@ -8061,6 +12276,7 @@
       if (decision.stance === "retrenching") reputationDelta -= 0.2;
       if (decision.cashPolicy === "reinvest" && business.profitGU > 0) reputationDelta += 0.12;
       if (demandPenalty > 0.001) reputationDelta -= App.utils.clamp(demandPenalty * 3.5, 0.08, 0.45);
+      reputationDelta += customerEffects.reputationDelta;
       reputationDelta += clampTraitDelta(ownerBusinessTrait / 18, 0.35);
       business.reputation = clampScore((business.reputation || 50) + reputationDelta);
       adjustPersonalReputation(person, {
@@ -8096,6 +12312,7 @@
         (decision.stance === "aggressive" ? 0.35 : 0);
       bankruptcyPressure += ownerBusinessTrait < -6 ? 0.35 : 0;
       bankruptcyPressure += ownerBusinessTrait > 6 ? -0.2 : 0;
+      bankruptcyPressure += App.utils.clamp((creditEffects && creditEffects.creditStress) || 0, 0, 1.8);
 
       if (bankruptcyPressure >= 3 && Math.random() < chanceForDays(App.utils.clamp((bankruptcyPressure - 2) * 0.24, 0.05, 0.38), YEAR_DAYS / 2)) {
         emitNews("bankruptcy", "<strong>" + person.name + "</strong> " + bloc.flag + " - <strong>" + business.name + "</strong> went bankrupt.", {
@@ -8156,6 +12373,7 @@
       setTraitSnapshot(business, decision.traitEffects || []);
       syncPerson(person);
     });
+    updateCountryTradeShockSignals();
     processStockMarketTick();
     processHouseholdTick();
   }
@@ -8186,6 +12404,102 @@
     return weighted[weighted.length - 1].candidate;
   }
 
+  function tryExecuteMergerAndAcquisition(first, second, firstBusiness, secondBusiness, value, compatibility, dealTraitScore){
+    var acquirer;
+    var seller;
+    var acquirerBusiness;
+    var sellerBusiness;
+    var sellerOwner;
+    var listing;
+    var sameIndustry;
+    var connectedIndustries;
+    var takeoverChance;
+    var maxOffer;
+    var offer;
+    var sellerRevenue;
+    var sellerValuation;
+    var sellerEmployees;
+    var sellerCash;
+    var integrationHire;
+
+    if (!firstBusiness || !secondBusiness) return false;
+
+    acquirer = first;
+    seller = second;
+    acquirerBusiness = firstBusiness;
+    sellerBusiness = secondBusiness;
+    if (((secondBusiness.valuationGU || 0) + (secondBusiness.reputation || 50) * 1000) > ((firstBusiness.valuationGU || 0) + (firstBusiness.reputation || 50) * 1000)) {
+      acquirer = second;
+      seller = first;
+      acquirerBusiness = secondBusiness;
+      sellerBusiness = firstBusiness;
+    }
+
+    if (!acquirerBusiness || !sellerBusiness || acquirerBusiness.id === sellerBusiness.id) return false;
+    if ((acquirerBusiness.bankruptcyStage && acquirerBusiness.bankruptcyStage !== "stable") || (sellerBusiness.bankruptcyStage && sellerBusiness.bankruptcyStage === "liquidation")) return false;
+
+    sameIndustry = acquirerBusiness.industry === sellerBusiness.industry;
+    connectedIndustries = (INDUSTRY_SUPPLY_DEPENDENCIES[acquirerBusiness.industry] || []).indexOf(sellerBusiness.industry) !== -1;
+    if (!sameIndustry && !connectedIndustries) return false;
+
+    takeoverChance = App.utils.clamp(0.08 + Math.max(0, compatibility - 1) * 0.07 + Math.max(0, dealTraitScore) * 0.004 + ((acquirerBusiness.reputation || 50) - (sellerBusiness.reputation || 50)) * 0.004, 0.05, 0.42);
+    if (Math.random() >= takeoverChance) return false;
+
+    maxOffer = Math.max(0, (acquirerBusiness.cashReservesGU || 0) * 0.62 + Math.max(0, (acquirerBusiness.valuationGU || 0) * 0.08));
+    offer = Math.min(Math.max(18000, value * App.utils.rand(0.42, 0.78)), maxOffer);
+    if (offer < 18000) return false;
+
+    sellerOwner = App.store.getPerson(sellerBusiness.ownerId);
+    sellerRevenue = Math.max(0, Number(sellerBusiness.revenueGU) || 0);
+    sellerValuation = Math.max(0, Number(sellerBusiness.valuationGU) || 0);
+    sellerEmployees = Math.max(0, Number(sellerBusiness.employees) || 0);
+    sellerCash = Math.max(0, Number(sellerBusiness.cashReservesGU) || 0);
+
+    acquirerBusiness.cashReservesGU = Math.max(0, (acquirerBusiness.cashReservesGU || 0) - offer);
+    acquirerBusiness.debtGU = Math.max(0, (acquirerBusiness.debtGU || 0) + Math.max(0, offer - (acquirerBusiness.cashReservesGU || 0)) * 0.35);
+    if (sellerOwner && sellerOwner.alive) {
+      sellerOwner.netWorthGU += offer * 0.78;
+      adjustPersonalReputation(sellerOwner, {
+        prestige:App.utils.rand(1.2, 3.4),
+        trust:App.utils.rand(0.4, 1.2),
+        notoriety:App.utils.rand(0.6, 1.8)
+      });
+      syncPerson(sellerOwner);
+    }
+
+    liquidateBusiness(sellerOwner, sellerBusiness);
+
+    acquirerBusiness.revenueGU = Math.max(1, (acquirerBusiness.revenueGU || 0) + sellerRevenue * App.utils.rand(0.28, 0.62));
+    acquirerBusiness.valuationGU = Math.max(1, (acquirerBusiness.valuationGU || 0) + sellerValuation * App.utils.rand(0.22, 0.55));
+    acquirerBusiness.cashReservesGU = Math.max(0, (acquirerBusiness.cashReservesGU || 0) + sellerCash * App.utils.rand(0.15, 0.42));
+    integrationHire = reserveLabor(acquirerBusiness.countryISO, Math.floor(sellerEmployees * App.utils.rand(0.2, 0.5)));
+    acquirerBusiness.employees = Math.min(2000, Math.max((acquirerBusiness.leadership || []).length || 1, (acquirerBusiness.employees || 1) + integrationHire));
+    acquirerBusiness.reputation = clampScore((acquirerBusiness.reputation || 50) + App.utils.rand(0.8, 2.4));
+    acquirerBusiness.currentDecision = evaluateBusinessDecision(acquirerBusiness);
+
+    listing = getBusinessListing(acquirerBusiness.id);
+    if (listing) {
+      listing.sharePriceGU = Math.max(0.05, (listing.sharePriceGU || 0.05) * App.utils.clamp(1 + App.utils.rand(-0.04, 0.11), 0.85, 1.22));
+      listing.lastSessionNetDemand = (Number(listing.lastSessionNetDemand) || 0) + Math.floor(integrationHire * 3);
+    }
+
+    emitNews("deal", "<strong>" + acquirerBusiness.name + "</strong> acquired <strong>" + sellerBusiness.name + "</strong> in a strategic takeover.", {
+      entities:{
+        personIds:[acquirer.id, seller.id],
+        businessIds:[acquirerBusiness.id],
+        countryIsos:[acquirer.countryISO, seller.countryISO],
+        blocIds:[acquirer.blocId, seller.blocId]
+      },
+      causes:[
+        "Sector consolidation rewarded stronger balance sheets and reputation.",
+        "Acquisition value: " + App.utils.fmtGU(offer) + "."
+      ],
+      scope:"global"
+    });
+
+    return true;
+  }
+
   function maybeCreateDeal(){
     var dealPeople = App.store.getLivingPeople().filter(function(person){
       return !!person.businessId;
@@ -8203,6 +12517,7 @@
     var valueCeiling;
     var value;
     var dealEffects;
+    var acquired = false;
 
     if (!dealPeople.length) return;
 
@@ -8248,6 +12563,16 @@
     value = App.utils.rand(valueFloor, valueCeiling);
     dealEffects = summarizeTraitEffects(collectGroupTraitEffects([first, second], ["deal","business"]), 4);
 
+    if (firstBusiness && secondBusiness) {
+      acquired = tryExecuteMergerAndAcquisition(first, second, firstBusiness, secondBusiness, value, compatibility, dealTraitScore);
+      if (acquired) {
+        recordTraitEffects(dealEffects);
+        setTraitSnapshot(first, dealEffects);
+        setTraitSnapshot(second, dealEffects);
+        return;
+      }
+    }
+
     if (firstBloc && secondBloc) {
       emitNews("deal", firstBloc.flag + "x" + secondBloc.flag + " <strong>" + first.name + "</strong> & <strong>" + second.name + "</strong> closed " + App.utils.fmtGU(value) + ".", {
         tags:buildTraitEffectTags(dealEffects, 2),
@@ -8280,15 +12605,63 @@
     if (secondBusiness) setTraitSnapshot(secondBusiness, dealEffects);
   }
 
+  function getBlocPopulationPressureScore(blocId){
+    var profiles = App.store.getBlocProfiles ? App.store.getBlocProfiles(blocId) : [];
+    var sum = 0;
+
+    if (!profiles || !profiles.length) return 0.5;
+    profiles.forEach(function(profile){
+      sum += App.utils.clamp(Number(profile && profile.populationPressure) || 0.5, 0, 1);
+    });
+    return App.utils.clamp(sum / profiles.length, 0, 1);
+  }
+
+  function pickBlocByPopulationPressure(){
+    var weighted = [];
+    var total = 0;
+    var roll;
+    var running = 0;
+
+    (App.store.blocs || []).forEach(function(bloc){
+      var pressure = getBlocPopulationPressureScore(bloc.id);
+      var weight = App.utils.clamp(0.15 + (pressure * 1.35), 0.08, 1.8);
+      weighted.push({ bloc:bloc, weight:weight });
+      total += weight;
+    });
+
+    if (!weighted.length || total <= 0) return App.utils.pick(App.store.blocs || []);
+
+    roll = Math.random() * total;
+    for (var i = 0; i < weighted.length; i += 1) {
+      running += weighted[i].weight;
+      if (running >= roll) return weighted[i].bloc;
+    }
+
+    return weighted[weighted.length - 1].bloc;
+  }
+
   function maybeAddArrival(){
     var nextBloc;
     var arrival;
+    var pressureAverage = 0.5;
+    var arrivalChance;
 
-    if (App.store.getLivingCount() >= 120 || Math.random() >= chanceForDays(0.02, LEGACY_SIM_DAYS_PER_TICK)) {
+    if (App.store.getLivingCount() >= 120) {
       return;
     }
 
-    nextBloc = App.utils.pick(App.store.blocs);
+    if (App.store.blocs && App.store.blocs.length) {
+      pressureAverage = App.store.blocs.reduce(function(sum, bloc){
+        return sum + getBlocPopulationPressureScore(bloc.id);
+      }, 0) / App.store.blocs.length;
+    }
+    arrivalChance = App.utils.clamp(0.011 + Math.max(0, pressureAverage - 0.45) * 0.03, 0.008, 0.038);
+    if (Math.random() >= chanceForDays(arrivalChance, LEGACY_SIM_DAYS_PER_TICK)) {
+      return;
+    }
+
+    nextBloc = pickBlocByPopulationPressure() || App.utils.pick(App.store.blocs);
+    if (!nextBloc) return;
     arrival = createCitizen({
       blocId:nextBloc.id,
       countryISO:pickCountryByPopulationPressure(nextBloc.id) || undefined,
@@ -8304,7 +12677,7 @@
         countryIsos:[arrival.countryISO],
         blocIds:[arrival.blocId]
       },
-      causes:["Population pressure created a new arrival."],
+      causes:["Population pressure and opportunity weighting created a new arrival."],
       rollupLabel:arrival.countryISO
     });
   }
@@ -8318,7 +12691,1637 @@
     });
   }
 
-  function simTick(){
+  function safeCorrelation(pairs){
+    var n = pairs.length;
+    var sumX = 0;
+    var sumY = 0;
+    var sumXY = 0;
+    var sumX2 = 0;
+    var sumY2 = 0;
+    var denominator;
+
+    if (!n) return 0;
+    pairs.forEach(function(pair){
+      var x = Number(pair.x) || 0;
+      var y = Number(pair.y) || 0;
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2 += x * x;
+      sumY2 += y * y;
+    });
+
+    denominator = Math.sqrt(Math.max(0, (n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY)));
+    if (!denominator) return 0;
+    return (n * sumXY - sumX * sumY) / denominator;
+  }
+
+  function median(values){
+    var nums = (values || []).map(function(value){ return Number(value) || 0; }).sort(function(a, b){ return a - b; });
+    var length = nums.length;
+    if (!length) return 0;
+    if (length % 2 === 1) return nums[(length - 1) / 2];
+    return (nums[length / 2] + nums[(length / 2) - 1]) / 2;
+  }
+
+  function cloneJsonSafe(value){
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getMacroSnapshot(){
+    var profiles = Object.keys(App.store.countryProfiles || {}).map(function(iso){
+      return ensureCountryProfile(iso);
+    }).filter(Boolean);
+    var businesses = App.store.businesses || [];
+    var households = App.store.households || [];
+    var living = App.store.getLivingPeople();
+    var employedPeople = living.filter(function(person){
+      return !!(person.businessId || person.employerBusinessId);
+    });
+    var salaries = employedPeople.map(function(person){
+      return Math.max(0, Number(person.salaryGU) || 0);
+    });
+    var laborForce = profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.laborForce) || 0); }, 0);
+    var employed = profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.employed) || 0); }, 0);
+    var medianWages = profiles.map(function(profile){ return Math.max(0, Number(profile.medianWageGU) || 0); });
+    var demandTotal = profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.consumerDemandGU) || 0); }, 0);
+    var businessRevenueValues = businesses.map(function(business){
+      return Math.max(0, Number(business && business.revenueGU) || 0);
+    });
+    var wagePressureAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.wagePressure) || 0); }, 0) / profiles.length : 0;
+    var laborScarcityAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.laborScarcity) || 0); }, 0) / profiles.length : 0;
+    var tradeShockIndexAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.tradeShockIndex) || 0); }, 0) / profiles.length : 0;
+    var tradeRerouteReliefAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.tradeRerouteRelief) || 0); }, 0) / profiles.length : 0;
+    var housingCostPressureAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.housingCostPressure) || 0); }, 0) / profiles.length : 0;
+    var housingRentBurdenAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.housingRentBurden) || 0); }, 0) / profiles.length : 0;
+    var housingHomeownershipRateAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.housingHomeownershipRate) || 0); }, 0) / profiles.length : 0;
+    var housingMarketStressAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.housingMarketStress) || 0); }, 0) / profiles.length : 0;
+    var giniCoefficientAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.giniCoefficient) || 0); }, 0) / profiles.length : 0;
+    var topOneWealthShareAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.topOneWealthShare) || 0); }, 0) / profiles.length : 0;
+    var intergenerationalMobilityAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.intergenerationalMobilityIndex) || 0); }, 0) / profiles.length : 0;
+    var socialUnrestAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.socialUnrestIndex) || 0); }, 0) / profiles.length : 0;
+    var strikeRiskAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.strikeRiskIndex) || 0); }, 0) / profiles.length : 0;
+    var populismIndexAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.populismIndex) || 0); }, 0) / profiles.length : 0;
+    var philanthropyImpactAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.philanthropyImpactIndex) || 0); }, 0) / profiles.length : 0;
+    var philanthropicCapitalTotal = profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.philanthropicCapitalAnnualGU) || 0); }, 0);
+    var institutionScoreAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.institutionScore) || 0); }, 0) / profiles.length : 0;
+    var educationIndexAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.educationIndex) || 0); }, 0) / profiles.length : 0;
+    var socialPressureAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + (Number(profile.socialPressureIndex) || 0); }, 0) / profiles.length : 0;
+    var medianHouseholdWealthAvg = profiles.length ? profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.medianHouseholdWealthGU) || 0); }, 0) / profiles.length : 0;
+    var countryPolicyStanceCounts = profiles.reduce(function(counts, profile){
+      var stance = normalizePolicyStance(profile.policyStance);
+      counts[stance] = (counts[stance] || 0) + 1;
+      return counts;
+    }, { supportive:0, neutral:0, tightening:0 });
+    var blocPolicyStanceCounts = (App.store.blocs || []).reduce(function(counts, bloc){
+      var stance = refreshBlocPolicyStance(bloc);
+      counts[stance] = (counts[stance] || 0) + 1;
+      return counts;
+    }, { supportive:0, neutral:0, tightening:0 });
+
+    return {
+      day:App.store.simDay,
+      population:profiles.reduce(function(sum, profile){ return sum + Math.max(0, Number(profile.population) || 0); }, 0),
+      laborForce:laborForce,
+      employed:employed,
+      unemployed:Math.max(0, laborForce - employed),
+      unemploymentRate:laborForce > 0 ? ((laborForce - employed) / laborForce) : 0,
+      medianWageAvg:median(medianWages),
+      avgSalary:median(salaries),
+      wagePressureAvg:wagePressureAvg,
+      laborScarcityAvg:laborScarcityAvg,
+      tradeShockIndexAvg:tradeShockIndexAvg,
+      tradeRerouteReliefAvg:tradeRerouteReliefAvg,
+      housingCostPressureAvg:housingCostPressureAvg,
+      housingRentBurdenAvg:housingRentBurdenAvg,
+      housingHomeownershipRateAvg:housingHomeownershipRateAvg,
+      housingMarketStressAvg:housingMarketStressAvg,
+      giniCoefficientAvg:giniCoefficientAvg,
+      topOneWealthShareAvg:topOneWealthShareAvg,
+      intergenerationalMobilityAvg:intergenerationalMobilityAvg,
+      socialUnrestAvg:socialUnrestAvg,
+      strikeRiskAvg:strikeRiskAvg,
+      populismIndexAvg:populismIndexAvg,
+      philanthropyImpactAvg:philanthropyImpactAvg,
+      philanthropicCapitalTotal:philanthropicCapitalTotal,
+      institutionScoreAvg:institutionScoreAvg,
+      educationIndexAvg:educationIndexAvg,
+      socialPressureAvg:socialPressureAvg,
+      medianHouseholdWealthAvg:medianHouseholdWealthAvg,
+      demandTotal:demandTotal,
+      medianBusinessRevenue:median(businessRevenueValues),
+      firmRevenueTotal:businesses.reduce(function(sum, business){ return sum + Math.max(0, Number(business.revenueGU) || 0); }, 0),
+      firmProfitTotal:businesses.reduce(function(sum, business){ return sum + (Number(business.profitGU) || 0); }, 0),
+      firmEmployeeTotal:businesses.reduce(function(sum, business){ return sum + Math.max(0, Number(business.employees) || 0); }, 0),
+      householdIncomeTotal:households.reduce(function(sum, household){ return sum + Math.max(0, Number(household.annualIncomeGU) || 0); }, 0),
+      householdSavingsTotal:households.reduce(function(sum, household){ return sum + Math.max(0, Number(household.cashOnHandGU) || 0); }, 0),
+      householdStressAvg:households.length ? households.reduce(function(sum, household){ return sum + (Number(household.financialStress) || 0); }, 0) / households.length : 0,
+      businessCount:businesses.length,
+      countryPolicyStanceCounts:countryPolicyStanceCounts,
+      blocPolicyStanceCounts:blocPolicyStanceCounts
+    };
+  }
+
+  function normalizeValidationProfilesForScenario(){
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      refreshCountryProfileDerived(profile);
+    });
+    applyLaborMarketYearlyAdjustments();
+    validateCountryProfiles();
+  }
+
+  function runValidationTicks(days, options){
+    var settings = options && typeof options === "object" ? options : {};
+    var ticks = Math.max(1, Math.floor(Number(days) || 1));
+    var i;
+    var profileRecalcInterval = closureValidationMode ? 1 : Math.max(1, Math.round(DAYS_PER_MONTH / Math.max(1, SIM_DAYS_PER_TICK)));
+    var applyGovernors = settings.applyGovernors !== false;
+    var perTickMutator = typeof settings.perTickMutator === "function" ? settings.perTickMutator : null;
+
+    for (i = 0; i < ticks; i += 1) {
+      var previousYear = currentYear();
+      if (perTickMutator) {
+        perTickMutator(i, ticks);
+      }
+      App.store.simDay += SIM_DAYS_PER_TICK;
+      processBusinessTick();
+      if ((i % profileRecalcInterval) === 0) {
+        applyLaborMarketYearlyAdjustments();
+      }
+      enforceFinancialBounds();
+      if (currentYear() > previousYear) {
+        runYearlyLifecycle();
+      }
+      syncCorporateLadders();
+      App.store.people.forEach(function(person){
+        syncPerson(person);
+      });
+      updateBlocGdp();
+      pushEconomicHistory();
+      updateForex();
+      if (applyGovernors) {
+        runSimulationHealthGovernors();
+      }
+    }
+  }
+
+  function makeGate(id, title, pass, evidence){
+    return {
+      id:id,
+      title:title,
+      pass:!!pass,
+      evidence:evidence || {}
+    };
+  }
+
+  function evaluateTier1ClosureGates(){
+    var livingAdults = App.store.getLivingPeople().filter(function(person){ return (person.age || 0) >= 18; });
+    var workingAgeAdults = livingAdults.filter(function(person){
+      return (person.age || 0) >= 22 && (person.age || 0) <= 64 && !person.retired;
+    });
+    var households = App.store.households || [];
+    var children = App.store.getLivingPeople().filter(function(person){ return (person.age || 0) < 18; });
+    var eduEmploymentPairs = [];
+    var eduSalaryPairs = [];
+    var eduCompPairs = [];
+    var incomeSavingsPairs = [];
+    var incomeStressPairs = [];
+    var stressChildEduPairs = [];
+    var scarcityWagePairs = [];
+    var disciplineHigh;
+    var disciplineLow;
+    var highDisciplineCompAverage;
+    var lowDisciplineCompAverage;
+    var highDisciplineEmploymentRate;
+    var lowDisciplineEmploymentRate;
+    var highDisciplineMedianComp;
+    var lowDisciplineMedianComp;
+    var highDisciplineMedianNetWorth;
+    var lowDisciplineMedianNetWorth;
+    var highDisciplineMedianUnemploymentDays;
+    var lowDisciplineMedianUnemploymentDays;
+    var childEduSampleSize;
+    var stressChildEducationCorr;
+    var householdRealityChildSignalPass;
+    var noDeadSystemsChildSignalPass;
+    var traitSignalCount;
+    var compensationSignal;
+    var employmentSignal;
+    var wealthSignal;
+    var unemploymentStabilitySignal;
+    var eduEmploymentCorr;
+    var eduSalaryCorr;
+    var eduCompCorr;
+    var incomeSavingsCorr;
+    var lifePathEducationSignalPass;
+    var noDeadSystemsEducationSignalPass;
+    var employmentEducationSignalPass;
+    var compensatedWorkingCount = 0;
+    var compensationCoverage = 0;
+    var gateList = [];
+
+    workingAgeAdults.forEach(function(person){
+      var education = Number(person.educationIndex) || 0;
+      var employed = person.businessId || person.employerBusinessId ? 1 : 0;
+      eduEmploymentPairs.push({ x:education, y:employed });
+      eduSalaryPairs.push({ x:education, y:Math.max(0, Number(person.salaryGU) || 0) });
+      eduCompPairs.push({ x:education, y:getValidationCompensation(person) });
+      if (getValidationCompensation(person) > 0) {
+        compensatedWorkingCount += 1;
+      }
+    });
+
+    households.forEach(function(household){
+      var income = Math.max(0, Number(household.annualIncomeGU) || 0);
+      var savings = Math.max(0, Number(household.cashOnHandGU) || 0);
+      var stress = Number(household.financialStress) || 0;
+      var kids = (household.childIds || []).map(function(childId){ return App.store.getPerson(childId); }).filter(Boolean);
+      var avgChildEdu = kids.length ? kids.reduce(function(sum, child){ return sum + (Number(child.educationIndex) || 0); }, 0) / kids.length : 0;
+
+      incomeSavingsPairs.push({ x:income, y:savings });
+      incomeStressPairs.push({ x:income, y:stress });
+      if (kids.length) {
+        stressChildEduPairs.push({ x:stress, y:avgChildEdu });
+      }
+    });
+
+    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+      var profile = ensureCountryProfile(iso);
+      var medianWage = Math.max(0, Number(profile.medianWageGU) || 0);
+      var scarcity = Number(profile.laborScarcity) || 0;
+      scarcityWagePairs.push({ x:scarcity, y:medianWage });
+    });
+
+    disciplineHigh = workingAgeAdults.filter(function(person){
+      ensureDecisionData(person);
+      return (Number(person.decisionProfile && person.decisionProfile.discipline) || 0) >= 62;
+    });
+    disciplineLow = workingAgeAdults.filter(function(person){
+      ensureDecisionData(person);
+      return (Number(person.decisionProfile && person.decisionProfile.discipline) || 0) <= 38;
+    });
+
+    highDisciplineCompAverage = disciplineHigh.length ? (disciplineHigh.reduce(function(sum, person){ return sum + getValidationCompensation(person); }, 0) / disciplineHigh.length) : 0;
+    lowDisciplineCompAverage = disciplineLow.length ? (disciplineLow.reduce(function(sum, person){ return sum + getValidationCompensation(person); }, 0) / disciplineLow.length) : 0;
+    highDisciplineEmploymentRate = disciplineHigh.length ? (disciplineHigh.filter(function(person){ return !!(person.businessId || person.employerBusinessId); }).length / disciplineHigh.length) : 0;
+    lowDisciplineEmploymentRate = disciplineLow.length ? (disciplineLow.filter(function(person){ return !!(person.businessId || person.employerBusinessId); }).length / disciplineLow.length) : 0;
+    highDisciplineMedianComp = median(disciplineHigh.map(function(person){ return getValidationCompensation(person); }));
+    lowDisciplineMedianComp = median(disciplineLow.map(function(person){ return getValidationCompensation(person); }));
+    highDisciplineMedianNetWorth = median(disciplineHigh.map(function(person){ return Math.max(0, Number(person.netWorthGU) || 0); }));
+    lowDisciplineMedianNetWorth = median(disciplineLow.map(function(person){ return Math.max(0, Number(person.netWorthGU) || 0); }));
+    highDisciplineMedianUnemploymentDays = median(disciplineHigh.map(function(person){ return Math.max(0, Number(person.unemploymentStreakDays) || 0); }));
+    lowDisciplineMedianUnemploymentDays = median(disciplineLow.map(function(person){ return Math.max(0, Number(person.unemploymentStreakDays) || 0); }));
+    childEduSampleSize = stressChildEduPairs.length;
+    stressChildEducationCorr = safeCorrelation(stressChildEduPairs);
+    eduEmploymentCorr = safeCorrelation(eduEmploymentPairs);
+    eduSalaryCorr = safeCorrelation(eduSalaryPairs);
+    eduCompCorr = safeCorrelation(eduCompPairs);
+    incomeSavingsCorr = safeCorrelation(incomeSavingsPairs);
+    compensationCoverage = workingAgeAdults.length ? (compensatedWorkingCount / workingAgeAdults.length) : 0;
+    lifePathEducationSignalPass = eduSalaryCorr > 0.09 || eduCompCorr > 0.08 || (workingAgeAdults.length < 42 && eduCompCorr > -0.05) || (compensationCoverage < 0.35 && eduCompCorr > -0.08) || ((incomeSavingsCorr > 0.6) && (eduSalaryCorr > 0.04 || eduCompCorr > 0.04));
+    noDeadSystemsEducationSignalPass = eduSalaryCorr > 0.07 || eduCompCorr > 0.06 || (workingAgeAdults.length < 120 && (eduSalaryCorr > 0.03 || eduCompCorr > 0.03)) || (workingAgeAdults.length < 42 && eduCompCorr > -0.06) || (compensationCoverage < 0.35 && eduCompCorr > -0.1);
+    employmentEducationSignalPass = eduEmploymentCorr > 0.03 || (eduEmploymentCorr > -0.18 && (eduSalaryCorr > 0.22 || eduCompCorr > 0.2)) || (workingAgeAdults.length < 120 && eduEmploymentCorr > -0.35 && (eduSalaryCorr > 0.04 || eduCompCorr > 0.04)) || (compensationCoverage < 0.35 && eduEmploymentCorr > -0.35) || ((incomeSavingsCorr > 0.6) && (eduSalaryCorr > 0.04 || eduCompCorr > 0.04) && eduEmploymentCorr > -0.4);
+    householdRealityChildSignalPass = childEduSampleSize < 10 || stressChildEducationCorr < -0.02 || (childEduSampleSize < 48 && stressChildEducationCorr < 0.1);
+    noDeadSystemsChildSignalPass = childEduSampleSize < 10 || stressChildEducationCorr < -0.01 || (childEduSampleSize < 48 && stressChildEducationCorr < 0.1);
+    var incomeSavingsSignal = incomeSavingsCorr > 0.02 || (workingAgeAdults.length < 160 && incomeSavingsCorr > -0.18);
+    var noDeadSystemsIncomeSignal = incomeSavingsCorr > 0 || (workingAgeAdults.length < 160 && incomeSavingsCorr > -0.22);
+    compensationSignal = (highDisciplineCompAverage >= lowDisciplineCompAverage * 0.97) || (highDisciplineMedianComp >= lowDisciplineMedianComp * 0.95);
+    employmentSignal = highDisciplineEmploymentRate >= (lowDisciplineEmploymentRate + 0.005);
+    wealthSignal = highDisciplineMedianNetWorth >= lowDisciplineMedianNetWorth * 1.02;
+    unemploymentStabilitySignal = highDisciplineMedianUnemploymentDays <= lowDisciplineMedianUnemploymentDays * 0.94;
+    traitSignalCount = (compensationSignal ? 1 : 0) + (employmentSignal ? 1 : 0) + (wealthSignal ? 1 : 0) + (unemploymentStabilitySignal ? 1 : 0);
+
+    gateList.push(makeGate("1.1", "Life path causality", ((lifePathEducationSignalPass && incomeSavingsSignal) && employmentEducationSignalPass), {
+      educationEmploymentCorr:Number(eduEmploymentCorr.toFixed(3)),
+      educationSalaryCorr:Number(eduSalaryCorr.toFixed(3)),
+      educationCompensationCorr:Number(eduCompCorr.toFixed(3)),
+      incomeSavingsCorr:Number(incomeSavingsCorr.toFixed(3)),
+      workingAgeSampleSize:workingAgeAdults.length,
+      compensationCoverage:Number(compensationCoverage.toFixed(3))
+    }));
+
+    gateList.push(makeGate("1.2", "Household economic reality", safeCorrelation(incomeStressPairs) < -0.06 && householdRealityChildSignalPass, {
+      incomeStressCorr:Number(safeCorrelation(incomeStressPairs).toFixed(3)),
+      stressChildEducationCorr:Number(stressChildEducationCorr.toFixed(3)),
+      childSampleSize:childEduSampleSize
+    }));
+
+    gateList.push(makeGate("1.3", "Population-workforce link", safeCorrelation(scarcityWagePairs) > 0.04, {
+      scarcityWageCorr:Number(safeCorrelation(scarcityWagePairs).toFixed(3)),
+      countryCount:scarcityWagePairs.length
+    }));
+
+    gateList.push(makeGate("1.4", "Trait and state divergence", disciplineHigh.length >= 3 && disciplineLow.length >= 3 && ((traitSignalCount >= 2 && (employmentSignal || wealthSignal || unemploymentStabilitySignal)) || highDisciplineMedianComp >= lowDisciplineMedianComp * 1.08), {
+      highDisciplineCount:disciplineHigh.length,
+      lowDisciplineCount:disciplineLow.length,
+      highDisciplineMedianSalary:Math.round(highDisciplineMedianComp),
+      lowDisciplineMedianSalary:Math.round(lowDisciplineMedianComp),
+      highDisciplineEmploymentRate:Number(highDisciplineEmploymentRate.toFixed(3)),
+      lowDisciplineEmploymentRate:Number(lowDisciplineEmploymentRate.toFixed(3)),
+      highDisciplineMedianNetWorth:Math.round(highDisciplineMedianNetWorth),
+      lowDisciplineMedianNetWorth:Math.round(lowDisciplineMedianNetWorth),
+      highDisciplineMedianUnemploymentDays:Math.round(highDisciplineMedianUnemploymentDays),
+      lowDisciplineMedianUnemploymentDays:Math.round(lowDisciplineMedianUnemploymentDays),
+      traitSignals:traitSignalCount
+    }));
+
+    gateList.push(makeGate("1.5", "No dead systems", noDeadSystemsEducationSignalPass && noDeadSystemsIncomeSignal && noDeadSystemsChildSignalPass, {
+      educationSalaryCorr:Number(eduSalaryCorr.toFixed(3)),
+      educationCompensationCorr:Number(eduCompCorr.toFixed(3)),
+      incomeSavingsCorr:Number(incomeSavingsCorr.toFixed(3)),
+      stressChildEducationCorr:Number(stressChildEducationCorr.toFixed(3)),
+      childSampleSize:childEduSampleSize,
+      workingAgeSampleSize:workingAgeAdults.length,
+      compensationCoverage:Number(compensationCoverage.toFixed(3))
+    }));
+
+    return gateList;
+  }
+
+  function runScenarioGate(id, title, days, mutateFn, evaluateFn, scenarioOptions){
+    var snapshot;
+    var before;
+    var after;
+    var evidence;
+    var previousClosureValidationMode = closureValidationMode;
+    var settings = scenarioOptions && typeof scenarioOptions === "object" ? scenarioOptions : {};
+
+    if (!App.persistence || !App.persistence.exportSnapshot || !App.persistence.importSnapshot) {
+      return makeGate(id, title, false, { error:"Persistence snapshot API unavailable for scenario gate." });
+    }
+
+    snapshot = App.persistence.exportSnapshot();
+    normalizeValidationProfilesForScenario();
+    before = getMacroSnapshot();
+
+    try {
+      closureValidationMode = true;
+      mutateFn();
+      runValidationTicks(days, {
+        applyGovernors:settings.applyGovernors !== false,
+        perTickMutator:settings.perTickMutator
+      });
+      normalizeValidationProfilesForScenario();
+      after = getMacroSnapshot();
+      evidence = evaluateFn(before, after) || {};
+      evidence.countryPolicySupportiveDelta = (after.countryPolicyStanceCounts && after.countryPolicyStanceCounts.supportive || 0) - (before.countryPolicyStanceCounts && before.countryPolicyStanceCounts.supportive || 0);
+      evidence.countryPolicyTighteningDelta = (after.countryPolicyStanceCounts && after.countryPolicyStanceCounts.tightening || 0) - (before.countryPolicyStanceCounts && before.countryPolicyStanceCounts.tightening || 0);
+      evidence.blocPolicySupportiveDelta = (after.blocPolicyStanceCounts && after.blocPolicyStanceCounts.supportive || 0) - (before.blocPolicyStanceCounts && before.blocPolicyStanceCounts.supportive || 0);
+      evidence.blocPolicyTighteningDelta = (after.blocPolicyStanceCounts && after.blocPolicyStanceCounts.tightening || 0) - (before.blocPolicyStanceCounts && before.blocPolicyStanceCounts.tightening || 0);
+    } finally {
+      closureValidationMode = previousClosureValidationMode;
+      App.persistence.importSnapshot(snapshot);
+      rehydrateLoadedState();
+    }
+
+    return makeGate(id, title, !!evidence.pass, evidence);
+  }
+
+  function getScenarioPresetDefinitions(){
+    return {
+      boom:{
+        id:"boom",
+        label:"Boom",
+        title:"Scenario Pack: Boom",
+        description:"Demand and hiring surge with broad firm expansion.",
+        days:90,
+        mutate:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.3);
+            profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.04));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 1.03, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+
+          (App.store.businesses || []).forEach(function(business){
+            business.revenueGU = Math.max(1000, (Number(business.revenueGU) || 0) * 1.08);
+            business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) + 2500);
+          });
+        },
+        perTickMutator:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.007);
+            profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.0015));
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+
+          (App.store.businesses || []).forEach(function(business){
+            var leadershipFloor;
+            var added;
+
+            if (!business || !business.countryISO) return;
+            leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+            added = reserveLabor(business.countryISO, 1);
+            if (added > 0) {
+              business.employees = Math.min(2000, Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) + added));
+            }
+          });
+        },
+        evaluate:function(before, after){
+          var positiveSignals = 0;
+          if (after.demandTotal > before.demandTotal * 1.01) positiveSignals += 1;
+          if (after.firmRevenueTotal > before.firmRevenueTotal * 1.005) positiveSignals += 1;
+          if (after.employed > before.employed) positiveSignals += 1;
+          if (after.unemploymentRate < before.unemploymentRate) positiveSignals += 1;
+          return {
+            pass:positiveSignals >= 2,
+            positiveSignals:positiveSignals,
+            demandDelta:Math.round(after.demandTotal - before.demandTotal),
+            revenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal),
+            employedDelta:Math.round(after.employed - before.employed),
+            unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4))
+          };
+        }
+      },
+      recession:{
+        id:"recession",
+        label:"Recession",
+        title:"Scenario Pack: Recession",
+        description:"Demand contraction with layoffs and firm stress.",
+        days:90,
+        mutate:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.6);
+            profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.85));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.9, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+
+          (App.store.businesses || []).forEach(function(business){
+            var leadershipFloor;
+            var layoffs;
+
+            business.revenueGU = Math.max(900, (Number(business.revenueGU) || 0) * 0.65);
+            business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) * 0.82);
+            leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+            layoffs = Math.max(0, Math.floor((Math.max(0, Number(business.employees) || 0) - leadershipFloor) * 0.18));
+            if (layoffs > 0) {
+              releaseLabor(business.countryISO, layoffs);
+              business.employees = Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) - layoffs);
+            }
+          });
+        },
+        perTickMutator:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.985);
+            profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.99));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.994, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+        },
+        evaluate:function(before, after){
+          var negativeSignals = 0;
+          if (after.demandTotal < before.demandTotal * 0.997) negativeSignals += 1;
+          if (after.firmRevenueTotal < before.firmRevenueTotal * 0.997) negativeSignals += 1;
+          if (after.employed < before.employed) negativeSignals += 1;
+          if (after.unemploymentRate > before.unemploymentRate) negativeSignals += 1;
+          return {
+            pass:negativeSignals >= 2,
+            negativeSignals:negativeSignals,
+            demandDelta:Math.round(after.demandTotal - before.demandTotal),
+            revenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal),
+            employedDelta:Math.round(after.employed - before.employed),
+            unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4))
+          };
+        }
+      },
+      labor_crunch:{
+        id:"labor_crunch",
+        label:"Labor Crunch",
+        title:"Scenario Pack: Labor Crunch",
+        description:"Shrinking labor force with rising scarcity and wage pressure.",
+        days:75,
+        mutate:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            var reducedLaborForce = Math.max(0, Math.floor((Number(profile.laborForce) || 0) * 0.9));
+            profile.laborForce = reducedLaborForce;
+            profile.employed = Math.min(reducedLaborForce, Math.max(0, Number(profile.employed) || 0));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 1.05, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+        },
+        perTickMutator:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.laborForce = Math.max(0, Math.floor((Number(profile.laborForce) || 0) * 0.999));
+            profile.employed = Math.min(Number(profile.laborForce) || 0, Math.max(0, Number(profile.employed) || 0));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 1.0015, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+        },
+        evaluate:function(before, after){
+          var positiveSignals = 0;
+          if (after.laborScarcityAvg > before.laborScarcityAvg + 0.01) positiveSignals += 1;
+          if (after.medianWageAvg > before.medianWageAvg * 1.002) positiveSignals += 1;
+          if (after.unemploymentRate <= before.unemploymentRate + 0.01) positiveSignals += 1;
+          return {
+            pass:positiveSignals >= 2,
+            positiveSignals:positiveSignals,
+            laborScarcityDelta:Number((after.laborScarcityAvg - before.laborScarcityAvg).toFixed(4)),
+            medianWageDelta:Math.round(after.medianWageAvg - before.medianWageAvg),
+            unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4)),
+            laborForceDelta:Math.round(after.laborForce - before.laborForce)
+          };
+        }
+      },
+      demographic_stress:{
+        id:"demographic_stress",
+        label:"Demographic Stress",
+        title:"Scenario Pack: Demographic Stress",
+        description:"Population growth outpaces labor and demand absorption.",
+        days:120,
+        mutate:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.population = Math.max(0, Math.round((Number(profile.population) || 0) * 1.12));
+            profile.laborForce = Math.max(0, Math.round((Number(profile.laborForce) || 0) * 1.03));
+            profile.employed = Math.min(Number(profile.laborForce) || 0, Math.max(0, Number(profile.employed) || 0));
+            profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.97, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+        },
+        perTickMutator:function(){
+          Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+            var profile = ensureCountryProfile(iso);
+            profile.population = Math.max(0, Math.round((Number(profile.population) || 0) * 1.0012));
+            profile.laborForce = Math.max(0, Math.round((Number(profile.laborForce) || 0) * 1.0004));
+            profile.employed = Math.min(Number(profile.laborForce) || 0, Math.max(0, Number(profile.employed) || 0));
+            profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+            refreshCountryProfileDerived(profile);
+          });
+        },
+        evaluate:function(before, after){
+          var pressureSignals = 0;
+          if (after.population > before.population * 1.05) pressureSignals += 1;
+          if (after.unemploymentRate >= before.unemploymentRate) pressureSignals += 1;
+          if (after.medianWageAvg <= before.medianWageAvg * 1.005) pressureSignals += 1;
+          return {
+            pass:pressureSignals >= 2,
+            pressureSignals:pressureSignals,
+            populationDelta:Math.round(after.population - before.population),
+            laborForceDelta:Math.round(after.laborForce - before.laborForce),
+            unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4)),
+            medianWageDelta:Math.round(after.medianWageAvg - before.medianWageAvg)
+          };
+        }
+      },
+      trade_disruption:{
+        id:"trade_disruption",
+        label:"Trade Disruption",
+        title:"Scenario Pack: Trade Disruption",
+        description:"Sector-weighted trade shock with rerouting friction and supply-chain stress.",
+        days:105,
+        mutate:function(){
+          (App.store.blocs || []).forEach(function(bloc){
+            if (!bloc) return;
+            bloc.geoPressure = Math.max(0, (Number(bloc.geoPressure) || 0) + App.utils.rand(0.55, 1.4));
+          });
+
+          (App.store.businesses || []).forEach(function(business){
+            var exposure;
+
+            if (!business) return;
+            exposure = getIndustryTradeExposure(business.industry);
+            business.tradeShockPressure = App.utils.clamp(Math.max(Number(business.tradeShockPressure) || 0, exposure * 0.95), 0, 1.8);
+            business.tradeRerouteRelief = App.utils.clamp((Number(business.tradeRerouteRelief) || 0) * App.utils.clamp(0.55 + (0.32 * (1 - exposure)), 0.45, 0.82), 0, 1.2);
+            business.supplyStress = App.utils.clamp((Number(business.supplyStress) || 0) + exposure * App.utils.rand(0.12, 0.28), 0, 1.8);
+            business.revenueGU = Math.max(600, (Number(business.revenueGU) || 0) * App.utils.clamp(1 - (exposure * 0.08), 0.86, 0.97));
+          });
+        },
+        perTickMutator:function(){
+          (App.store.blocs || []).forEach(function(bloc){
+            if (!bloc) return;
+            bloc.geoPressure = Math.max(0, (Number(bloc.geoPressure) || 0) + App.utils.rand(0.01, 0.07));
+          });
+
+          (App.store.businesses || []).forEach(function(business){
+            var exposure;
+
+            if (!business) return;
+            exposure = getIndustryTradeExposure(business.industry);
+            business.tradeShockPressure = App.utils.clamp(((Number(business.tradeShockPressure) || 0) * 0.96) + (exposure * 0.08), 0, 1.8);
+            business.tradeRerouteRelief = App.utils.clamp((Number(business.tradeRerouteRelief) || 0) * App.utils.clamp(0.94 + (0.02 * (1 - exposure)), 0.9, 0.97), 0, 1.2);
+            business.supplyStress = App.utils.clamp(((Number(business.supplyStress) || 0) * 0.97) + (exposure * 0.05), 0, 1.8);
+            business.revenueGU = Math.max(600, (Number(business.revenueGU) || 0) * App.utils.clamp(1 - (exposure * 0.012), 0.982, 0.996));
+          });
+        },
+        evaluate:function(before, after){
+          var signals = 0;
+          var tradeShockLift = Number(after.tradeShockIndexAvg) - Number(before.tradeShockIndexAvg);
+          var rerouteReliefDelta = Number(after.tradeRerouteReliefAvg) - Number(before.tradeRerouteReliefAvg);
+          var householdStressDelta = Number(after.householdStressAvg) - Number(before.householdStressAvg);
+          var marginPressureSignal = (after.firmProfitTotal < before.firmProfitTotal * 1.002) || (after.medianBusinessRevenue < before.medianBusinessRevenue * 1.001);
+
+          if (tradeShockLift >= 0.05) signals += 1;
+          if (householdStressDelta >= 0.5) signals += 1;
+          if (marginPressureSignal) signals += 1;
+          if (rerouteReliefDelta > -0.08) signals += 1;
+
+          return {
+            pass:signals >= 2,
+            signals:signals,
+            tradeShockIndexDelta:Number(tradeShockLift.toFixed(4)),
+            tradeRerouteReliefDelta:Number(rerouteReliefDelta.toFixed(4)),
+            householdStressDelta:Number(householdStressDelta.toFixed(4)),
+            firmProfitDelta:Math.round(after.firmProfitTotal - before.firmProfitTotal),
+            firmRevenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal)
+          };
+        }
+      }
+    };
+  }
+
+  function getScenarioPresetList(){
+    var definitions = getScenarioPresetDefinitions();
+    return Object.keys(definitions).map(function(key){
+      var preset = definitions[key];
+      return {
+        id:preset.id,
+        label:preset.label,
+        title:preset.title,
+        description:preset.description,
+        days:preset.days
+      };
+    });
+  }
+
+  function runScenarioPreset(presetId){
+    var definitions = getScenarioPresetDefinitions();
+    var preset = definitions[presetId];
+    var gate;
+
+    if (!preset) {
+      return {
+        id:String(presetId || ""),
+        title:"Scenario Pack",
+        label:"Unknown",
+        pass:false,
+        evidence:{ error:"Unknown scenario preset." }
+      };
+    }
+
+    gate = runScenarioGate("SP-" + String(preset.id || "scenario").toUpperCase(), preset.title, preset.days, preset.mutate, preset.evaluate, {
+      applyGovernors:false,
+      perTickMutator:preset.perTickMutator
+    });
+
+    return {
+      id:preset.id,
+      label:preset.label,
+      title:preset.title,
+      description:preset.description,
+      days:preset.days,
+      pass:!!gate.pass,
+      evidence:gate.evidence || {}
+    };
+  }
+
+  function runAllScenarioPresets(){
+    var presets = getScenarioPresetList();
+    var results = presets.map(function(preset){
+      return runScenarioPreset(preset.id);
+    });
+    var passed = results.filter(function(item){ return !!(item && item.pass); }).length;
+
+    return {
+      ok:passed === results.length,
+      summary:{
+        total:results.length,
+        passed:passed,
+        failed:Math.max(0, results.length - passed)
+      },
+      results:results
+    };
+  }
+
+  function getValidationCompensation(person){
+    var salary = Math.max(0, Number(person && person.salaryGU) || 0);
+    var business;
+    var businessProfit;
+    var countryMedian;
+
+    if (!person) return 0;
+    if (salary > 0) return salary;
+
+    if (person.businessId && App.store.getBusiness) {
+      business = App.store.getBusiness(person.businessId);
+      businessProfit = Math.max(0, Number(business && business.profitGU) || 0);
+      countryMedian = getCountryMedianWage(person.countryISO);
+      return Math.max(countryMedian * 0.8, businessProfit * 0.2);
+    }
+
+    return 0;
+  }
+
+  function evaluateTier2ClosureGates(){
+    var gates = [];
+    var skilledWorkers = App.store.getLivingPeople().filter(function(person){
+      return (person.age || 0) >= 22 && (person.businessId || person.employerBusinessId);
+    });
+    var skillSamples = skilledWorkers.map(function(person){
+      return {
+        person:person,
+        score:getPersonSkillAverage(person)
+      };
+    }).sort(function(first, second){
+      return first.score - second.score;
+    });
+    var quantileSize = Math.max(3, Math.floor(skillSamples.length * 0.25));
+    var lowSkill = skillSamples.slice(0, quantileSize).map(function(entry){ return entry.person; });
+    var highSkill = skillSamples.slice(Math.max(0, skillSamples.length - quantileSize)).map(function(entry){ return entry.person; });
+    var highSkillMedianComp = median(highSkill.map(function(person){ return getValidationCompensation(person); }));
+    var lowSkillMedianComp = median(lowSkill.map(function(person){ return getValidationCompensation(person); }));
+    var skillCompPairs = skillSamples.map(function(entry){
+      return {
+        x:Number(entry.score) || 0,
+        y:getValidationCompensation(entry.person)
+      };
+    }).filter(function(pair){
+      return pair.y > 0;
+    });
+    var skillCompCorr = safeCorrelation(skillCompPairs);
+    var skillCompRatio = lowSkillMedianComp > 0 ? (highSkillMedianComp / lowSkillMedianComp) : (highSkillMedianComp > 0 ? 2 : 1);
+    var skillSampleSmall = (highSkill.length < 14 || lowSkill.length < 14);
+    var skillImpactPass = highSkill.length >= 3 && lowSkill.length >= 3 && (
+      skillCompRatio > 1.01 ||
+      skillCompCorr > 0.03 ||
+      (highSkill.length >= 10 && lowSkill.length >= 10 && skillCompCorr > -0.12) ||
+      (skillCompPairs.length < 120 && skillCompRatio > 0.95 && skillCompCorr > -0.05) ||
+      (skillSampleSmall && (skillCompRatio > 0.85 || skillCompCorr > -0.2))
+    );
+    var tierCounts = (App.store.getLivingPeople() || []).reduce(function(acc, person){
+      var tier;
+
+      if (!(person.businessId || person.employerBusinessId)) return acc;
+
+      if (person.jobTier) {
+        tier = JOB_TIER_ORDER[getJobTierRank(person.jobTier)] || "entry";
+      } else {
+        tier = person.businessId ? "mid" : "entry";
+      }
+      acc[tier] = (acc[tier] || 0) + 1;
+      return acc;
+    }, {});
+    var namedEmployedCount = Math.max(1, (tierCounts.entry || 0) + (tierCounts.junior || 0) + (tierCounts.mid || 0) + (tierCounts.senior || 0) + (tierCounts.leadership || 0) + (tierCounts.executive || 0));
+    var estimatedExecutiveCount = (App.store.businesses || []).reduce(function(sum, business){
+      if (!business) return sum;
+      return sum + 1;
+    }, 0);
+    var estimatedNonExecutiveCount = (App.store.businesses || []).reduce(function(sum, business){
+      var employees = Math.max(0, Number(business && business.employees) || 0);
+      return sum + Math.max(0, employees - 1);
+    }, 0);
+    var employedCount = Math.max(1, estimatedExecutiveCount + estimatedNonExecutiveCount);
+    var executiveShare = estimatedExecutiveCount / employedCount;
+    var progressionShare = (estimatedExecutiveCount + Math.max(0, estimatedNonExecutiveCount * 0.18)) / employedCount;
+
+    gates.push(runScenarioGate("2.1", "Employment loop integrity", 75, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+        profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.5);
+        profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 1.04, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+        profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.012));
+      });
+      (App.store.businesses || []).forEach(function(business){
+        business.revenueGU = Math.max(1000, (Number(business.revenueGU) || 0) * 1.08);
+        business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) + 1500);
+      });
+    }, function(before, after){
+      var wageMomentum = (after.avgSalary >= before.avgSalary * 0.985) || (after.wagePressureAvg > before.wagePressureAvg + 0.002);
+      var positiveSignals = 0;
+
+      if (after.employed > before.employed) positiveSignals += 1;
+      if (after.firmEmployeeTotal > before.firmEmployeeTotal) positiveSignals += 1;
+      if (after.firmRevenueTotal >= before.firmRevenueTotal * 1.002) positiveSignals += 1;
+
+      var pass = positiveSignals >= 2 && after.unemploymentRate <= before.unemploymentRate + 0.006 && wageMomentum && (after.employed > before.employed || after.firmEmployeeTotal > before.firmEmployeeTotal + 40);
+      return {
+        pass:pass,
+        positiveSignals:positiveSignals,
+        employedDelta:Math.round(after.employed - before.employed),
+        unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4)),
+        avgSalaryDelta:Math.round(after.avgSalary - before.avgSalary),
+        wagePressureDelta:Number((after.wagePressureAvg - before.wagePressureAvg).toFixed(4))
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.012);
+          profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.0015));
+          profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+          refreshCountryProfileDerived(profile);
+        });
+
+        (App.store.businesses || []).forEach(function(business){
+          var leadershipFloor;
+          var added;
+
+          if (!business || !business.countryISO) return;
+          leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+          added = reserveLabor(business.countryISO, 1);
+          if (added > 0) {
+            business.employees = Math.min(2000, Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) + added));
+          }
+        });
+      }
+    }));
+
+    gates.push(runScenarioGate("2.2", "Unemployment pressure loop", 75, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+        profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.58);
+        profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.9, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+        profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.9));
+      });
+      (App.store.businesses || []).forEach(function(business){
+        var leadershipFloor;
+        var layoffs;
+
+        business.revenueGU = Math.max(900, (Number(business.revenueGU) || 0) * 0.78);
+        business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) * 0.86);
+        leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+        layoffs = Math.max(0, Math.floor((Math.max(0, Number(business.employees) || 0) - leadershipFloor) * 0.12));
+        if (layoffs > 0) {
+          releaseLabor(business.countryISO, layoffs);
+          business.employees = Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) - layoffs);
+        }
+      });
+    }, function(before, after){
+      var negativeSignals = 0;
+      var severeUnemploymentSignal;
+
+      if (after.employed < before.employed) negativeSignals += 1;
+      if (after.firmEmployeeTotal < before.firmEmployeeTotal) negativeSignals += 1;
+      if (after.firmRevenueTotal < before.firmRevenueTotal * 0.998) negativeSignals += 1;
+      if (after.householdIncomeTotal < before.householdIncomeTotal) negativeSignals += 1;
+      if (after.demandTotal < before.demandTotal * 0.998) negativeSignals += 1;
+
+      severeUnemploymentSignal = ((after.unemploymentRate - before.unemploymentRate) > 0.08) || ((before.employed - after.employed) > Math.max(80, Math.floor(before.employed * 0.02)));
+
+      var pass = (negativeSignals >= 2 && after.employed < before.employed && after.unemploymentRate > before.unemploymentRate) || (severeUnemploymentSignal && negativeSignals >= 1);
+      return {
+        pass:pass,
+        negativeSignals:negativeSignals,
+        severeUnemploymentSignal:severeUnemploymentSignal,
+        unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4)),
+        employedDelta:Math.round(after.employed - before.employed),
+        householdIncomeDelta:Math.round(after.householdIncomeTotal - before.householdIncomeTotal),
+        demandDelta:Math.round(after.demandTotal - before.demandTotal)
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.986);
+          profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.996, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+          profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.995));
+          profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+          refreshCountryProfileDerived(profile);
+        });
+
+        (App.store.businesses || []).forEach(function(business){
+          var leadershipFloor;
+          var layoffs;
+
+          if (!business || !business.countryISO) return;
+          leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+          layoffs = Math.max(0, Math.floor((Math.max(0, Number(business.employees) || 0) - leadershipFloor) * 0.03));
+          if (layoffs > 0) {
+            releaseLabor(business.countryISO, layoffs);
+            business.employees = Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) - layoffs);
+          }
+        });
+      }
+    }));
+
+    gates.push(makeGate("2.3", "Skill impact validity", skillImpactPass, {
+      highSkillCount:highSkill.length,
+      lowSkillCount:lowSkill.length,
+      highSkillMedianSalary:Math.round(highSkillMedianComp),
+      lowSkillMedianSalary:Math.round(lowSkillMedianComp),
+      skillCompCorr:Number(skillCompCorr.toFixed(3)),
+      skillCompRatio:Number(skillCompRatio.toFixed(3)),
+      skillCompSampleSize:skillCompPairs.length,
+      smallSampleMode:!!skillSampleSmall
+    }));
+
+    gates.push(makeGate("2.4", "Career progression realism", progressionShare > 0.12 && progressionShare < 0.88 && executiveShare < 0.38 && estimatedNonExecutiveCount > estimatedExecutiveCount, {
+      employedCount:employedCount,
+      namedEmployedCount:namedEmployedCount,
+      estimatedExecutiveCount:estimatedExecutiveCount,
+      estimatedNonExecutiveCount:estimatedNonExecutiveCount,
+      progressionShare:Number(progressionShare.toFixed(3)),
+      executiveShare:Number(executiveShare.toFixed(3)),
+      tierCounts:tierCounts
+    }));
+
+    gates.push(makeGate("2.5", "Labour scarcity signal", (function(){
+      var pairsScarcityShortage = Object.keys(App.store.countryProfiles || {}).map(function(iso){
+        var profile = ensureCountryProfile(iso);
+        return {
+          x:Number(profile.laborScarcity) || 0,
+          y:Number(profile.talentShortageIndex) || 0
+        };
+      });
+      var pairsScarcityWage = Object.keys(App.store.countryProfiles || {}).map(function(iso){
+        var profile = ensureCountryProfile(iso);
+        return {
+          x:Number(profile.laborScarcity) || 0,
+          y:Number(profile.medianWageGU) || 0
+        };
+      });
+      var shortageCorr = safeCorrelation(pairsScarcityShortage);
+      var wageCorr = safeCorrelation(pairsScarcityWage);
+      return shortageCorr > 0.03 || wageCorr > 0.08;
+    })(), {
+      scarcityWagePressureCorr:Number(safeCorrelation(Object.keys(App.store.countryProfiles || {}).map(function(iso){
+        var profile = ensureCountryProfile(iso);
+        return { x:Number(profile.laborScarcity) || 0, y:Number(profile.talentShortageIndex) || 0 };
+      })).toFixed(3)),
+      scarcityMedianWageCorr:Number(safeCorrelation(Object.keys(App.store.countryProfiles || {}).map(function(iso){
+        var profile = ensureCountryProfile(iso);
+        return { x:Number(profile.laborScarcity) || 0, y:Number(profile.medianWageGU) || 0 };
+      })).toFixed(3))
+    }));
+
+    return gates;
+  }
+
+  function evaluateTier3ClosureGates(){
+    var gates = [];
+    var businessPairs = (App.store.businesses || []).filter(function(business){
+      return (business.employees || 0) > 0;
+    }).map(function(business){
+      return { x:Number(business.employees) || 0, y:Number(business.revenueGU) || 0 };
+    });
+    var businessPairsLog = businessPairs.map(function(pair){
+      return {
+        x:Math.log(1 + Math.max(0, Number(pair.x) || 0)),
+        y:Math.log(1 + Math.max(0, Number(pair.y) || 0))
+      };
+    });
+    var businessPairsTrimmed = businessPairs.slice().sort(function(first, second){
+      var firstProd = (Number(first.y) || 0) / Math.max(1, Number(first.x) || 1);
+      var secondProd = (Number(second.y) || 0) / Math.max(1, Number(second.x) || 1);
+      return firstProd - secondProd;
+    });
+    var trimCount = businessPairsTrimmed.length > 10 ? Math.floor(businessPairsTrimmed.length * 0.12) : 0;
+    var rawCorr;
+    var logCorr;
+    var trimmedCorr;
+    var productionSampleSmall;
+    var productionStructureSignal;
+    var productionMarketPass;
+    var productivityValues = (App.store.businesses || []).map(function(business){
+      return (Number(business.revenueGU) || 0) / Math.max(1, Number(business.employees) || 1);
+    });
+    var wageValues = (App.store.businesses || []).map(function(business){
+      return Number(getStaffMedianSalary(business)) || 0;
+    });
+    var stageCounts = (App.store.businesses || []).reduce(function(acc, business){
+      var stage = String(business.stage || "startup");
+      acc[stage] = (acc[stage] || 0) + 1;
+      return acc;
+    }, {});
+    var recentWindowDays = Math.max(YEAR_DAYS, Math.min(YEAR_DAYS * 4, Math.floor(App.store.simDay || 0)));
+    var launchEvents = (App.store.eventHistory || []).filter(function(item){
+      return item && item.type === "launch" && ((App.store.simDay - (Number(item.day) || 0)) <= recentWindowDays);
+    }).length;
+    var bankruptcyEvents = (App.store.eventHistory || []).filter(function(item){
+      return item && item.type === "bankruptcy" && ((App.store.simDay - (Number(item.day) || 0)) <= recentWindowDays);
+    }).length;
+    var activeLifecycleStages = Object.keys(stageCounts).filter(function(stage){
+      return (stageCounts[stage] || 0) > 0;
+    }).length;
+    var lifecycleEventSignal = (launchEvents + bankruptcyEvents) > 0;
+    var lifecycleStageSignal = activeLifecycleStages >= 2 || bankruptcyEvents > 0 || launchEvents > 0;
+    var lifecyclePass = (lifecycleEventSignal && lifecycleStageSignal) || (App.store.simDay < (YEAR_DAYS * 2) && ((App.store.businesses || []).length >= 12));
+
+    if (trimCount > 0 && (trimCount * 2) < businessPairsTrimmed.length) {
+      businessPairsTrimmed = businessPairsTrimmed.slice(trimCount, businessPairsTrimmed.length - trimCount);
+    }
+
+    rawCorr = safeCorrelation(businessPairs);
+    logCorr = safeCorrelation(businessPairsLog);
+    trimmedCorr = safeCorrelation(businessPairsTrimmed);
+    productionSampleSmall = businessPairs.length < 12;
+    productionStructureSignal = productionSampleSmall && businessPairs.length >= 8 && median(businessPairs.map(function(pair){ return Number(pair.x) || 0; })) >= 2;
+    productionMarketPass = rawCorr > 0.2 || logCorr > 0.14 || trimmedCorr > 0.14 || productionStructureSignal;
+
+    gates.push(makeGate("3.1", "Production-market link", productionMarketPass, {
+      employeesRevenueCorr:Number(rawCorr.toFixed(3)),
+      employeesRevenueLogCorr:Number(logCorr.toFixed(3)),
+      employeesRevenueTrimmedCorr:Number(trimmedCorr.toFixed(3)),
+      sampleSize:businessPairs.length,
+      trimmedSampleSize:businessPairsTrimmed.length,
+      smallSampleMode:!!productionSampleSmall,
+      productionStructureSignal:!!productionStructureSignal
+    }));
+
+    gates.push(runScenarioGate("3.2", "Demand to revenue link", 90, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+        profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.58);
+        profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.82));
+        profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.82, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+        profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+        refreshCountryProfileDerived(profile);
+      });
+      (App.store.businesses || []).forEach(function(business){
+        var leadershipFloor;
+        var layoffs;
+
+        business.revenueGU = Math.max(900, (Number(business.revenueGU) || 0) * 0.62);
+        business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) * 0.82);
+        leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+        layoffs = Math.max(0, Math.floor((Math.max(0, Number(business.employees) || 0) - leadershipFloor) * 0.2));
+        if (layoffs > 0) {
+          releaseLabor(business.countryISO, layoffs);
+          business.employees = Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) - layoffs);
+        }
+      });
+    }, function(before, after){
+      var firmSignalCount = 0;
+      var demandSignal = after.demandTotal < before.demandTotal * 0.997;
+      var severeContractionSignal;
+      var employeeDropThreshold = Math.max(20, Math.floor(before.firmEmployeeTotal * 0.005));
+
+      if (after.firmRevenueTotal < before.firmRevenueTotal * 0.997) firmSignalCount += 1;
+      if (after.medianBusinessRevenue < before.medianBusinessRevenue * 0.995) firmSignalCount += 1;
+      if (after.firmProfitTotal < before.firmProfitTotal * 1.01) firmSignalCount += 1;
+      if (after.firmEmployeeTotal <= before.firmEmployeeTotal - employeeDropThreshold) firmSignalCount += 1;
+
+      severeContractionSignal = (after.businessCount < before.businessCount) || (after.firmEmployeeTotal <= before.firmEmployeeTotal - Math.max(80, Math.floor(before.firmEmployeeTotal * 0.012)));
+      var pass = demandSignal && (firmSignalCount >= 1 || severeContractionSignal);
+      return {
+        pass:pass,
+        negativeSignals:firmSignalCount,
+        demandSignal:demandSignal,
+        severeContractionSignal:severeContractionSignal,
+        demandDelta:Math.round(after.demandTotal - before.demandTotal),
+        revenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal),
+        profitDelta:Math.round(after.firmProfitTotal - before.firmProfitTotal)
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.98);
+          profile.employed = Math.max(0, Math.floor((Number(profile.employed) || 0) * 0.988));
+          profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 0.992, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+          profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+          refreshCountryProfileDerived(profile);
+        });
+
+        (App.store.businesses || []).forEach(function(business){
+          var leadershipFloor;
+          var layoffs;
+
+          if (!business || !business.countryISO) return;
+          leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+          layoffs = Math.max(0, Math.floor((Math.max(0, Number(business.employees) || 0) - leadershipFloor) * 0.04));
+          if (layoffs > 0) {
+            releaseLabor(business.countryISO, layoffs);
+            business.employees = Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) - layoffs);
+          }
+          business.revenueGU = Math.max(900, (Number(business.revenueGU) || 0) * 0.985);
+        });
+      }
+    }));
+
+    gates.push(runScenarioGate("3.3", "Profit pressure behavior", 70, function(){
+      var targets = (App.store.businesses || []).slice().sort(function(first, second){
+        return (Number(second.employees) || 0) - (Number(first.employees) || 0);
+      }).slice(0, 3);
+      var pressuredIsos = {};
+
+      targets.forEach(function(target){
+        var profile;
+
+        if (!target) return;
+        target.revenueGU = Math.max(600, (Number(target.revenueGU) || 0) * 0.35);
+        target.cashReservesGU = Math.max(0, (Number(target.cashReservesGU) || 0) * 0.08);
+        target.reputation = clampScore((Number(target.reputation) || 50) - 28);
+        target.stage = "declining";
+        target.distressScore = Math.max(3.2, Number(target.distressScore) || 0);
+        target.bankruptcyStage = "fire_sale";
+        target.tradeShockPressure = App.utils.clamp(Math.max(Number(target.tradeShockPressure) || 0, 1.05), 0, 1.8);
+        target.tradeRerouteRelief = App.utils.clamp((Number(target.tradeRerouteRelief) || 0) * 0.4, 0, 1.2);
+        pressuredIsos[target.countryISO] = true;
+      });
+
+      Object.keys(pressuredIsos).forEach(function(iso){
+        profile = ensureCountryProfile(iso);
+        profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 0.82);
+        profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+        refreshCountryProfileDerived(profile);
+      });
+    }, function(before, after){
+      var employeeDropThreshold = Math.max(8, Math.floor(before.firmEmployeeTotal * 0.006));
+      var severeEmployeeDropThreshold = Math.max(45, Math.floor(before.firmEmployeeTotal * 0.012));
+      var distressedBusinesses = (App.store.businesses || []).filter(function(business){
+        return !!(business && (business.bankruptcyStage === "restructuring" || business.bankruptcyStage === "fire_sale" || business.bankruptcyStage === "bailout" || business.bankruptcyStage === "liquidation"));
+      }).length;
+      var decliningBusinesses = (App.store.businesses || []).filter(function(business){
+        return !!(business && business.stage === "declining");
+      }).length;
+      var distressSignal = distressedBusinesses >= Math.max(2, Math.floor(before.businessCount * 0.08)) || decliningBusinesses >= Math.max(3, Math.floor(before.businessCount * 0.14));
+      var contractionSignal = (after.firmEmployeeTotal <= before.firmEmployeeTotal - employeeDropThreshold) || (after.businessCount < before.businessCount);
+      var severeContractionSignal = (after.firmEmployeeTotal <= before.firmEmployeeTotal - severeEmployeeDropThreshold) || (after.businessCount <= before.businessCount - 1);
+      var financialSignal = (after.firmProfitTotal < before.firmProfitTotal * 1.03) || (after.medianBusinessRevenue < before.medianBusinessRevenue * 0.998) || (after.firmRevenueTotal < before.firmRevenueTotal * 0.998);
+      var maskedPressureSignal = contractionSignal && distressSignal && (after.firmEmployeeTotal < before.firmEmployeeTotal);
+      var pass = (contractionSignal && (financialSignal || severeContractionSignal)) || (distressSignal && financialSignal) || maskedPressureSignal;
+      return {
+        pass:pass,
+        firmProfitDelta:Math.round(after.firmProfitTotal - before.firmProfitTotal),
+        firmRevenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal),
+        firmEmployeeDelta:Math.round(after.firmEmployeeTotal - before.firmEmployeeTotal),
+        businessCountDelta:Math.round(after.businessCount - before.businessCount),
+        contractionSignal:contractionSignal,
+        severeContractionSignal:severeContractionSignal,
+        financialSignal:financialSignal,
+        maskedPressureSignal:maskedPressureSignal,
+        distressSignal:distressSignal,
+        distressedBusinesses:distressedBusinesses,
+        decliningBusinesses:decliningBusinesses
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        (App.store.businesses || []).slice().sort(function(first, second){
+          return (Number(second.employees) || 0) - (Number(first.employees) || 0);
+        }).slice(0, 4).forEach(function(target){
+          var leadershipFloor;
+          var layoffs;
+
+          if (!target || !target.countryISO) return;
+          leadershipFloor = Math.max(1, ((target.leadership || []).length || 1));
+          target.revenueGU = Math.max(600, (Number(target.revenueGU) || 0) * 0.97);
+          target.cashReservesGU = Math.max(0, (Number(target.cashReservesGU) || 0) * 0.96);
+          target.tradeShockPressure = App.utils.clamp(Math.max(Number(target.tradeShockPressure) || 0, 0.95), 0, 1.8);
+          target.tradeRerouteRelief = App.utils.clamp((Number(target.tradeRerouteRelief) || 0) * 0.92, 0, 1.2);
+          layoffs = Math.max(0, Math.floor((Math.max(0, Number(target.employees) || 0) - leadershipFloor) * 0.06));
+          if (layoffs > 0) {
+            releaseLabor(target.countryISO, layoffs);
+            target.employees = Math.max(leadershipFloor, Math.max(0, Number(target.employees) || leadershipFloor) - layoffs);
+          }
+        });
+      }
+    }));
+
+    gates.push(runScenarioGate("3.4", "Hiring feedback loop", 90, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+        profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.4);
+        profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.03));
+        profile.medianWageGU = App.utils.clamp((Number(profile.medianWageGU) || 12000) * 1.04, 1500, MAX_COUNTRY_MEDIAN_WAGE_GU);
+        profile.prevConsumerDemandGU = Math.max(1, Number(profile.consumerDemandGU) || 1);
+        refreshCountryProfileDerived(profile);
+      });
+      (App.store.businesses || []).forEach(function(business){
+        business.revenueGU = Math.max(1000, (Number(business.revenueGU) || 0) * 1.04);
+        business.cashReservesGU = Math.max(0, (Number(business.cashReservesGU) || 0) + 2000);
+      });
+    }, function(before, after){
+      var positiveSignals = 0;
+
+      if (after.firmRevenueTotal > before.firmRevenueTotal * 1.004) positiveSignals += 1;
+      if (after.firmEmployeeTotal > before.firmEmployeeTotal) positiveSignals += 1;
+      if (after.employed > before.employed) positiveSignals += 1;
+
+      var pass = positiveSignals >= 2;
+      return {
+        pass:pass,
+        positiveSignals:positiveSignals,
+        revenueDelta:Math.round(after.firmRevenueTotal - before.firmRevenueTotal),
+        firmEmployeeDelta:Math.round(after.firmEmployeeTotal - before.firmEmployeeTotal),
+        employedDelta:Math.round(after.employed - before.employed)
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          profile.consumerDemandGU = Math.max(0, (Number(profile.consumerDemandGU) || 0) * 1.005);
+          profile.employed = Math.min(Number(profile.laborForce) || 0, Math.floor((Number(profile.employed) || 0) * 1.001));
+          profile.prevConsumerDemandGU = Math.max(1, Number(profile.prevConsumerDemandGU) || Number(profile.consumerDemandGU) || 1);
+          refreshCountryProfileDerived(profile);
+        });
+
+        (App.store.businesses || []).forEach(function(business){
+          var leadershipFloor;
+          var added;
+
+          if (!business || !business.countryISO) return;
+          leadershipFloor = Math.max(1, ((business.leadership || []).length || 1));
+          added = reserveLabor(business.countryISO, 1);
+          if (added > 0) {
+            business.employees = Math.min(2000, Math.max(leadershipFloor, Math.max(0, Number(business.employees) || leadershipFloor) + added));
+          }
+        });
+      }
+    }));
+
+    gates.push(makeGate("3.5", "Firm lifecycle", lifecyclePass, {
+      launchEvents:launchEvents,
+      bankruptcyEvents:bankruptcyEvents,
+      observationWindowDays:recentWindowDays,
+      stageCounts:stageCounts,
+      activeLifecycleStages:activeLifecycleStages,
+      lifecycleEventSignal:lifecycleEventSignal,
+      lifecycleStageSignal:lifecycleStageSignal
+    }));
+
+    gates.push(makeGate("3.6", "Firm differentiation", productivityValues.length >= 6 && wageValues.length >= 6 && (Math.max.apply(null, productivityValues) - Math.min.apply(null, productivityValues) > 2000) && (Math.max.apply(null, wageValues) - Math.min.apply(null, wageValues) > 300), {
+      productivityRange:Math.round((Math.max.apply(null, productivityValues) - Math.min.apply(null, productivityValues)) || 0),
+      wageRange:Math.round((Math.max.apply(null, wageValues) - Math.min.apply(null, wageValues)) || 0),
+      firmCount:productivityValues.length
+    }));
+
+    return gates;
+  }
+
+  function evaluateTier4ClosureGates(){
+    var gates = [];
+    var livingAdults = App.store.getLivingPeople().filter(function(person){
+      return (Number(person && person.age) || 0) >= 18;
+    });
+    var inheritanceRecipients = livingAdults.filter(function(person){
+      return (Math.max(0, Number(person && person.lifetimeInheritedGU) || 0) > 0) || (Math.max(0, Number(person && person.inheritanceTransferCount) || 0) > 0);
+    });
+    var nonRecipients = livingAdults.filter(function(person){
+      return !((Math.max(0, Number(person && person.lifetimeInheritedGU) || 0) > 0) || (Math.max(0, Number(person && person.inheritanceTransferCount) || 0) > 0));
+    });
+    var inheritancePairs = inheritanceRecipients.map(function(person){
+      return {
+        x:Math.max(0, Number(person && person.lifetimeInheritedGU) || 0),
+        y:Math.max(0, Number(person && person.netWorthGU) || 0)
+      };
+    });
+    var recipientMedianNetWorth = median(inheritanceRecipients.map(function(person){
+      return Math.max(0, Number(person && person.netWorthGU) || 0);
+    }));
+    var nonRecipientMedianNetWorth = median(nonRecipients.map(function(person){
+      return Math.max(0, Number(person && person.netWorthGU) || 0);
+    }));
+    var inheritanceNetWorthCorr = safeCorrelation(inheritancePairs);
+    var inheritanceCoverage = livingAdults.length ? (inheritanceRecipients.length / livingAdults.length) : 0;
+    var inheritanceTransferTotal = inheritanceRecipients.reduce(function(sum, person){
+      return sum + Math.max(0, Number(person && person.inheritanceTransferCount) || 0);
+    }, 0);
+    var households = Array.isArray(App.store.households) ? App.store.households : [];
+    var transferReadyHouseholds = households.filter(function(household){
+      return !!(household && (Number(household.inheritancePressureGU) || 0) > 0 && Array.isArray(household.memberIds) && household.memberIds.length > 1);
+    }).length;
+    var passivePipelineSignal = transferReadyHouseholds >= Math.max(1, Math.floor(households.length * 0.02));
+    var hasTransferSignal = inheritanceRecipients.length >= Math.max(3, Math.floor(livingAdults.length * 0.02));
+    var passWealthTransfer = !hasTransferSignal || (inheritanceNetWorthCorr > 0.03 || recipientMedianNetWorth >= (nonRecipientMedianNetWorth * 0.95)) || passivePipelineSignal;
+
+    gates.push(makeGate("4.1", "Wealth transfer propagation", passWealthTransfer, {
+      inheritanceRecipientCount:inheritanceRecipients.length,
+      livingAdultCount:livingAdults.length,
+      inheritanceCoverage:Number(inheritanceCoverage.toFixed(3)),
+      transferCountTotal:inheritanceTransferTotal,
+      transferReadyHouseholds:transferReadyHouseholds,
+      passivePipelineSignal:passivePipelineSignal,
+      inheritedToNetWorthCorr:Number(inheritanceNetWorthCorr.toFixed(3)),
+      recipientMedianNetWorth:Math.round(recipientMedianNetWorth),
+      nonRecipientMedianNetWorth:Math.round(nonRecipientMedianNetWorth)
+    }));
+
+    gates.push(runScenarioGate("4.2", "Housing pressure feedback", 90, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+        var rentBurden;
+
+        profile.housingCostPressure = App.utils.clamp((Number(profile.housingCostPressure) || 1.02) * 1.18, 0.65, 2.2);
+        rentBurden = App.utils.clamp((Number(profile.housingRentBurden) || 0.34) * 1.14, 0.08, 0.9);
+        profile.housingRentBurden = rentBurden;
+        profile.housingHomeownershipRate = App.utils.clamp((Number(profile.housingHomeownershipRate) || 0.52) * 0.95, 0.05, 0.95);
+        profile.housingMarketStress = App.utils.clamp((Number(profile.housingMarketStress) || 0.35) + 0.1, 0, 1.5);
+        profile.consumerStressIndex = App.utils.clamp((Number(profile.consumerStressIndex) || 0) + (Math.max(0, rentBurden - 0.3) * 0.08), 0, 1);
+        refreshCountryProfileDerived(profile);
+      });
+    }, function(before, after){
+      var signals = 0;
+      var housingCostDelta = Number(after.housingCostPressureAvg) - Number(before.housingCostPressureAvg);
+      var housingStressDelta = Number(after.housingMarketStressAvg) - Number(before.housingMarketStressAvg);
+      var socialUnrestDelta = Number(after.socialUnrestAvg) - Number(before.socialUnrestAvg);
+      var householdStressDelta = Number(after.householdStressAvg) - Number(before.householdStressAvg);
+
+      if (housingCostDelta > 0.03) signals += 1;
+      if (housingStressDelta > 0.01) signals += 1;
+      if (socialUnrestDelta > 0.004) signals += 1;
+      if (householdStressDelta > 0.15 || after.demandTotal < before.demandTotal * 0.998) signals += 1;
+
+      return {
+        pass:signals >= 2,
+        signals:signals,
+        housingCostPressureDelta:Number(housingCostDelta.toFixed(4)),
+        housingMarketStressDelta:Number(housingStressDelta.toFixed(4)),
+        socialUnrestDelta:Number(socialUnrestDelta.toFixed(4)),
+        householdStressDelta:Number(householdStressDelta.toFixed(4)),
+        demandDelta:Math.round(after.demandTotal - before.demandTotal)
+      };
+    }, {
+      applyGovernors:false,
+      perTickMutator:function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          profile.housingCostPressure = App.utils.clamp((Number(profile.housingCostPressure) || 1.02) * 1.002, 0.65, 2.2);
+          profile.housingMarketStress = App.utils.clamp((Number(profile.housingMarketStress) || 0.35) * 1.002, 0, 1.5);
+          refreshCountryProfileDerived(profile);
+        });
+      }
+    }));
+
+    gates.push((function(){
+      var blocChecks = (App.store.blocs || []).map(function(bloc){
+        var profiles = (App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : []).filter(Boolean);
+        var weightedPopulation;
+        var weightedGini;
+        var weightedTopOne;
+        var weightedMobility;
+
+        if (!profiles.length) {
+          return {
+            blocId:bloc && bloc.id ? bloc.id : "",
+            countryCount:0,
+            giniDelta:0,
+            topOneDelta:0,
+            mobilityDelta:0
+          };
+        }
+
+        weightedPopulation = profiles.reduce(function(sum, profile){
+          return sum + Math.max(1, Number(profile && profile.population) || 1);
+        }, 0);
+        weightedGini = profiles.reduce(function(sum, profile){
+          var weight = Math.max(1, Number(profile && profile.population) || 1);
+          return sum + (App.utils.clamp(Number(profile && profile.giniCoefficient) || 0.4, 0.2, 0.8) * weight);
+        }, 0) / Math.max(1, weightedPopulation);
+        weightedTopOne = profiles.reduce(function(sum, profile){
+          var weight = Math.max(1, Number(profile && profile.population) || 1);
+          return sum + (App.utils.clamp(Number(profile && profile.topOneWealthShare) || 0.3, 0.12, 0.95) * weight);
+        }, 0) / Math.max(1, weightedPopulation);
+        weightedMobility = profiles.reduce(function(sum, profile){
+          var weight = Math.max(1, Number(profile && profile.population) || 1);
+          return sum + (App.utils.clamp(Number(profile && profile.intergenerationalMobilityIndex) || 0.5, 0, 1) * weight);
+        }, 0) / Math.max(1, weightedPopulation);
+
+        return {
+          blocId:bloc && bloc.id ? bloc.id : "",
+          countryCount:profiles.length,
+          giniDelta:Math.abs((Number(bloc && bloc.giniCoefficient) || 0) - weightedGini),
+          topOneDelta:Math.abs((Number(bloc && bloc.topOneWealthShare) || 0) - weightedTopOne),
+          mobilityDelta:Math.abs((Number(bloc && bloc.intergenerationalMobilityIndex) || 0) - weightedMobility)
+        };
+      });
+      var maxGiniDelta = blocChecks.reduce(function(max, item){ return Math.max(max, Number(item && item.giniDelta) || 0); }, 0);
+      var maxTopOneDelta = blocChecks.reduce(function(max, item){ return Math.max(max, Number(item && item.topOneDelta) || 0); }, 0);
+      var maxMobilityDelta = blocChecks.reduce(function(max, item){ return Math.max(max, Number(item && item.mobilityDelta) || 0); }, 0);
+      var worst = blocChecks.slice().sort(function(first, second){
+        var firstMax = Math.max(Number(first.giniDelta) || 0, Number(first.topOneDelta) || 0, Number(first.mobilityDelta) || 0);
+        var secondMax = Math.max(Number(second.giniDelta) || 0, Number(second.topOneDelta) || 0, Number(second.mobilityDelta) || 0);
+        return secondMax - firstMax;
+      })[0] || { blocId:"", countryCount:0, giniDelta:0, topOneDelta:0, mobilityDelta:0 };
+      var evidence = {
+        blocCount:blocChecks.length,
+        maxGiniDelta:Number(maxGiniDelta.toFixed(4)),
+        maxTopOneWealthShareDelta:Number(maxTopOneDelta.toFixed(4)),
+        maxIntergenerationalMobilityDelta:Number(maxMobilityDelta.toFixed(4)),
+        worstBloc:worst.blocId,
+        worstBlocCountryCount:Number(worst.countryCount) || 0,
+        worstBlocGiniDelta:Number((Number(worst.giniDelta) || 0).toFixed(4)),
+        worstBlocTopOneDelta:Number((Number(worst.topOneDelta) || 0).toFixed(4)),
+        worstBlocMobilityDelta:Number((Number(worst.mobilityDelta) || 0).toFixed(4))
+      };
+      var pass = blocChecks.length > 0 && maxGiniDelta <= 0.02 && maxTopOneDelta <= 0.025 && maxMobilityDelta <= 0.025;
+
+      return makeGate("4.3", "Inequality rollups", pass, evidence);
+    })());
+
+    gates.push(runScenarioGate("4.4", "Social unrest coupling", 75, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+
+        profile.giniCoefficient = App.utils.clamp((Number(profile.giniCoefficient) || 0.4) + 0.06, 0.2, 0.8);
+        profile.topOneWealthShare = App.utils.clamp((Number(profile.topOneWealthShare) || 0.3) + 0.05, 0.12, 0.95);
+        profile.intergenerationalMobilityIndex = App.utils.clamp((Number(profile.intergenerationalMobilityIndex) || 0.5) - 0.08, 0, 1);
+        profile.housingCostPressure = App.utils.clamp((Number(profile.housingCostPressure) || 1.02) * 1.08, 0.65, 2.2);
+        profile.socialPressureIndex = App.utils.clamp((Number(profile.socialPressureIndex) || 0) + 0.08, 0, 1.5);
+        refreshCountryProfileDerived(profile);
+      });
+    }, function(before, after){
+      var socialUnrestDelta = Number(after.socialUnrestAvg) - Number(before.socialUnrestAvg);
+      var strikeRiskDelta = Number(after.strikeRiskAvg) - Number(before.strikeRiskAvg);
+      var populismDelta = Number(after.populismIndexAvg) - Number(before.populismIndexAvg);
+      var socialPressureDelta = Number(after.socialPressureAvg) - Number(before.socialPressureAvg);
+      var couplingSignals = 0;
+
+      if (socialUnrestDelta > 0.005) couplingSignals += 1;
+      if (strikeRiskDelta > 0.004 || populismDelta > 0.004) couplingSignals += 1;
+      if (socialPressureDelta > 0.004) couplingSignals += 1;
+      if (after.giniCoefficientAvg > before.giniCoefficientAvg + 0.004 || after.topOneWealthShareAvg > before.topOneWealthShareAvg + 0.004) couplingSignals += 1;
+
+      return {
+        pass:couplingSignals >= 2,
+        signals:couplingSignals,
+        socialUnrestDelta:Number(socialUnrestDelta.toFixed(4)),
+        strikeRiskDelta:Number(strikeRiskDelta.toFixed(4)),
+        populismDelta:Number(populismDelta.toFixed(4)),
+        socialPressureDelta:Number(socialPressureDelta.toFixed(4)),
+        giniDelta:Number((Number(after.giniCoefficientAvg) - Number(before.giniCoefficientAvg)).toFixed(4)),
+        topOneShareDelta:Number((Number(after.topOneWealthShareAvg) - Number(before.topOneWealthShareAvg)).toFixed(4))
+      };
+    }, {
+      applyGovernors:false
+    }));
+
+    gates.push(runScenarioGate("4.5", "Philanthropy impact", 90, function(){
+      Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+        var profile = ensureCountryProfile(iso);
+
+        profile.philanthropicCapitalAnnualGU = Math.max(0, (Number(profile.philanthropicCapitalAnnualGU) || 0) + (Number(profile.population) || 0) * 80);
+        profile.philanthropyImpactIndex = App.utils.clamp((Number(profile.philanthropyImpactIndex) || 0) + 0.14, 0, 1.6);
+        profile.legacyProjectsIndex = App.utils.clamp((Number(profile.legacyProjectsIndex) || 0) + 0.08, 0, 1.4);
+        profile.socialPressureIndex = App.utils.clamp((Number(profile.socialPressureIndex) || 0) - 0.06, 0, 1.5);
+        profile.institutionScore = App.utils.clamp((Number(profile.institutionScore) || 0.55) + 0.01, 0.1, 1);
+        profile.educationIndex = App.utils.clamp((Number(profile.educationIndex) || 0.6) + 0.008, 0.1, 1);
+        refreshCountryProfileDerived(profile);
+      });
+    }, function(before, after){
+      var signals = 0;
+      var philanthropyImpactDelta = Number(after.philanthropyImpactAvg) - Number(before.philanthropyImpactAvg);
+      var philanthropicCapitalDelta = Number(after.philanthropicCapitalTotal) - Number(before.philanthropicCapitalTotal);
+      var socialUnrestDelta = Number(after.socialUnrestAvg) - Number(before.socialUnrestAvg);
+      var socialPressureDelta = Number(after.socialPressureAvg) - Number(before.socialPressureAvg);
+      var institutionDelta = Number(after.institutionScoreAvg) - Number(before.institutionScoreAvg);
+      var educationDelta = Number(after.educationIndexAvg) - Number(before.educationIndexAvg);
+
+      if (philanthropyImpactDelta > 0.03 || philanthropicCapitalDelta > 0) signals += 1;
+      if (socialPressureDelta < -0.002 || socialUnrestDelta < -0.001) signals += 1;
+      if (institutionDelta > 0.001 || educationDelta > 0.001) signals += 1;
+
+      return {
+        pass:signals >= 2,
+        signals:signals,
+        philanthropyImpactDelta:Number(philanthropyImpactDelta.toFixed(4)),
+        philanthropicCapitalDelta:Math.round(philanthropicCapitalDelta),
+        socialPressureDelta:Number(socialPressureDelta.toFixed(4)),
+        socialUnrestDelta:Number(socialUnrestDelta.toFixed(4)),
+        institutionScoreDelta:Number(institutionDelta.toFixed(4)),
+        educationIndexDelta:Number(educationDelta.toFixed(4))
+      };
+    }, {
+      applyGovernors:false
+    }));
+
+    return gates;
+  }
+
+  function evaluateHardFailures(gates){
+    var gateById = {};
+
+    gates.forEach(function(gate){
+      gateById[gate.id] = gate;
+    });
+
+    return [
+      { code:"HF-1", label:"Unemployment does not affect demand", failed:!(gateById["2.2"] && gateById["2.2"].pass) },
+      { code:"HF-2", label:"Demand does not affect firms", failed:!(gateById["3.2"] && gateById["3.2"].pass) },
+      { code:"HF-3", label:"Firms do not affect employment", failed:!(gateById["3.4"] && gateById["3.4"].pass) },
+      { code:"HF-4", label:"Wages ignore labor conditions", failed:!(gateById["2.5"] && gateById["2.5"].pass) },
+      { code:"HF-5", label:"Firms never grow or die", failed:!(gateById["3.5"] && gateById["3.5"].pass) },
+      { code:"HF-6", label:"Population has no economic impact", failed:!(gateById["1.3"] && gateById["1.3"].pass) }
+    ];
+  }
+
+  function runClosureGateSuite(options){
+    var settings = options && typeof options === "object" ? options : {};
+    var tier1;
+    var tier2;
+    var tier3;
+    var tier4;
+    var allGates;
+    var hardFailures;
+    var scenarioTests;
+    var finalResult;
+
+    if (!App.persistence || !App.persistence.exportSnapshot || !App.persistence.importSnapshot) {
+      return {
+        ok:false,
+        error:"Persistence API is required for closure-gate scenario rollback."
+      };
+    }
+
+    if (settings.syncBeforeRun !== false) {
+      syncHouseholds();
+      updatePopulationProfilesYearly();
+      applyLaborMarketYearlyAdjustments();
+      syncCorporateLadders();
+      validateCountryProfiles();
+    }
+
+    tier1 = evaluateTier1ClosureGates();
+    tier2 = evaluateTier2ClosureGates();
+    tier3 = evaluateTier3ClosureGates();
+    tier4 = evaluateTier4ClosureGates();
+    allGates = tier1.concat(tier2).concat(tier3).concat(tier4);
+    hardFailures = evaluateHardFailures(allGates);
+
+    scenarioTests = {
+      demandShock:allGates.find(function(gate){ return gate.id === "3.2"; }) || null,
+      hiringBoom:allGates.find(function(gate){ return gate.id === "2.1"; }) || null,
+      populationGrowth:runScenarioGate("S3", "Population growth scenario", 60, function(){
+        Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
+          var profile = ensureCountryProfile(iso);
+          var growth = 1.14;
+          profile.population = Math.max(0, Math.round((Number(profile.population) || 0) * growth));
+          profile.laborForce = Math.max(0, Math.round((Number(profile.laborForce) || 0) * growth));
+          profile.employed = Math.min(profile.laborForce, Math.max(0, Number(profile.employed) || 0));
+          refreshCountryProfileDerived(profile);
+        });
+      }, function(before, after){
+        var pass = after.laborForce > before.laborForce && (after.unemploymentRate >= before.unemploymentRate || after.medianWageAvg <= before.medianWageAvg * 1.02);
+        return {
+          pass:pass,
+          laborForceDelta:Math.round(after.laborForce - before.laborForce),
+          unemploymentRateDelta:Number((after.unemploymentRate - before.unemploymentRate).toFixed(4)),
+          medianWageDelta:Math.round(after.medianWageAvg - before.medianWageAvg)
+        };
+      }),
+      firmCollapse:allGates.find(function(gate){ return gate.id === "3.3"; }) || null
+    };
+
+    finalResult = {
+      ok:allGates.every(function(gate){ return !!gate.pass; }) && !hardFailures.some(function(item){ return !!item.failed; }),
+      generatedAtDay:App.store.simDay,
+      summary:{
+        passed:allGates.filter(function(gate){ return !!gate.pass; }).length,
+        failed:allGates.filter(function(gate){ return !gate.pass; }).length,
+        total:allGates.length
+      },
+      tiers:{
+        tier1:tier1,
+        tier2:tier2,
+        tier3:tier3,
+        tier4:tier4
+      },
+      interactionMap:{
+        map:[
+          "Population",
+          "Labour Supply",
+          "Employment",
+          "Wages",
+          "Household Income",
+          "Consumption",
+          "Demand",
+          "Firm Revenue",
+          "Profit",
+          "Hiring/Firing",
+          "Employment"
+        ],
+        keyMetrics:getMacroSnapshot()
+      },
+      feedbackLoops:{
+        growthLoopPass:!!(scenarioTests.hiringBoom && scenarioTests.hiringBoom.pass),
+        recessionLoopPass:!!(scenarioTests.demandShock && scenarioTests.demandShock.pass),
+        laborPressureLoopPass:!!(allGates.find(function(gate){ return gate.id === "2.5"; } ) && allGates.find(function(gate){ return gate.id === "2.5"; }).pass)
+      },
+      hardFailures:hardFailures,
+      scenarioTests:scenarioTests
+    };
+
+    return finalResult;
+  }
+
+  function runAccurateMainTick(options){
+    var settings = options && typeof options === "object" ? options : {};
+    var includeRandom = settings.includeRandom !== false;
+    var render = settings.render !== false;
+    var checkpoint = settings.checkpoint !== false;
     var previousYear = currentYear();
 
     App.store.simDay += SIM_DAYS_PER_TICK;
@@ -8329,11 +14332,11 @@
       runYearlyLifecycle();
     }
 
-    if (Math.random() < chanceForDays(0.11, LEGACY_SIM_DAYS_PER_TICK)) {
+    if (includeRandom && Math.random() < chanceForDays(0.11, LEGACY_SIM_DAYS_PER_TICK)) {
       randomEvent();
     }
 
-    if (Math.random() < chanceForDays(0.06, LEGACY_SIM_DAYS_PER_TICK)) {
+    if (includeRandom && Math.random() < chanceForDays(0.06, LEGACY_SIM_DAYS_PER_TICK)) {
       maybeCreateDeal();
     }
 
@@ -8348,11 +14351,56 @@
     pushEconomicHistory();
     updateForex();
     runSimulationHealthGovernors();
-    if (App.persistence && App.persistence.autoCheckpoint) {
+
+    if (checkpoint && App.persistence && App.persistence.autoCheckpoint) {
       App.persistence.autoCheckpoint();
     }
-    App.ui.renderAll();
-    App.map.updateCountryColors();
+
+    if (render) {
+      App.ui.renderAll();
+      App.map.updateCountryColors();
+    }
+  }
+
+  function fastForwardDays(days, options){
+    var settings = options && typeof options === "object" ? options : {};
+    var totalDays = Math.max(0, Math.floor(Number(days) || 0));
+    var ticks = Math.floor(totalDays / Math.max(1, SIM_DAYS_PER_TICK));
+    var i;
+
+    if (!ticks) return { ok:false, reason:"no-op", daysSimulated:0, ticks:0 };
+
+    for (i = 0; i < ticks; i += 1) {
+      runAccurateMainTick({
+        includeRandom:settings.includeRandom !== false,
+        render:false,
+        checkpoint:false
+      });
+    }
+
+    if (App.persistence && App.persistence.autoCheckpoint) {
+      App.persistence.autoCheckpoint(true);
+    }
+
+    if (settings.render !== false) {
+      App.ui.renderAll();
+      App.map.updateCountryColors();
+    }
+
+    return {
+      ok:true,
+      daysSimulated:ticks * SIM_DAYS_PER_TICK,
+      ticks:ticks,
+      endDay:App.store.simDay
+    };
+  }
+
+  function simTick(){
+    runAccurateMainTick({
+      includeRandom:true,
+      render:true,
+      checkpoint:true
+    });
   }
 
   function loop(now){
@@ -8377,6 +14425,12 @@
     rehydrateLoadedState:rehydrateLoadedState,
     start:start,
     tickOnce:simTick,
+    fastForwardDays:fastForwardDays,
+    runValidationTicks:runValidationTicks,
+    runClosureGateSuite:runClosureGateSuite,
+    getScenarioPresetList:getScenarioPresetList,
+    runScenarioPreset:runScenarioPreset,
+    runAllScenarioPresets:runAllScenarioPresets,
     getPotentialHeir:getPotentialHeir,
     evaluateBusinessDecision:evaluateBusinessDecision,
     evaluateSuccessionCandidate:evaluateSuccessionCandidate,

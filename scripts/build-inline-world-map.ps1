@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$svg = Get-Content -Raw -Path $SourcePath
+$svg = Get-Content -Raw -Path $SourcePath -Encoding UTF8
 Add-Type -AssemblyName System.Web
 $json = '"' + [System.Web.HttpUtility]::JavaScriptStringEncode($svg) + '"'
 

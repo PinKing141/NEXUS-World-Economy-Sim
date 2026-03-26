@@ -575,6 +575,12 @@
           person.svgY = correctedSpawn.pos.y;
           if (person.countryISO === "US") {
             person.state = correctedSpawn.state || person.state || null;
+            if (App.data && typeof App.data.getWorldCitiesByCountryState === "function") {
+              var alignedCities = App.data.getWorldCitiesByCountryState("US", person.state, 48);
+              if (alignedCities.length && alignedCities.indexOf(person.city) === -1) {
+                person.city = App.utils.pick(alignedCities);
+              }
+            }
           }
         } else {
           return;

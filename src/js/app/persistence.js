@@ -1,6 +1,8 @@
 (function(global){
   var App = global.Nexus || (global.Nexus = {});
   var SAVE_KEY = "nexus.world.snapshot";
+  var SAVE_SLOT_KEY_PREFIX = "nexus.world.slot.v1.";
+  var SAVE_SLOT_COUNT = 5;
   var SCHEMA_VERSION = 11;
   var AUTOSAVE_INTERVAL_DAYS = 30;
   var MAX_NEWS_ITEMS = 100;
@@ -187,10 +189,18 @@
       lastIpoDay:Math.max(0, toInteger(source.lastIpoDay, 0)),
       tradeTape:tape.map(function(entry){
         var item = entry && typeof entry === "object" ? entry : {};
+        var close = Math.max(0, toFiniteNumber(item.closePriceGU != null ? item.closePriceGU : item.priceGU, 0));
+        var open = Math.max(0, toFiniteNumber(item.openPriceGU, close));
+        var high = Math.max(close, open, Math.max(0, toFiniteNumber(item.highPriceGU, Math.max(open, close))));
+        var low = Math.max(0, Math.min(open, close, toFiniteNumber(item.lowPriceGU, Math.min(open, close))));
         return {
           day:Math.max(0, toInteger(item.day, nowDay)),
           businessId:normalizeString(item.businessId, null),
-          priceGU:Math.max(0, toFiniteNumber(item.priceGU, 0)),
+          priceGU:close,
+          openPriceGU:open,
+          closePriceGU:close,
+          highPriceGU:high,
+          lowPriceGU:low,
           volumeShares:Math.max(0, toInteger(item.volumeShares, 0)),
           movePct:toFiniteNumber(item.movePct, 0)
         };
@@ -481,6 +491,40 @@
     return clamp((employmentRate * 0.5) + (demandScore * 0.25) + (institutionScore * 0.25), 0, 1);
   }
 
+  function normalizeConsumerIndustryDemandWeights(weights){
+    var baseline = {
+      Technology:0.11,
+      Finance:0.09,
+      Retail:0.18,
+      Manufacturing:0.1,
+      "Real Estate":0.08,
+      "F&B":0.16,
+      Healthcare:0.12,
+      Media:0.06,
+      Logistics:0.06,
+      Energy:0.04
+    };
+    var industries = (App.data && Array.isArray(App.data.INDUSTRIES)) ? App.data.INDUSTRIES : Object.keys(baseline);
+    var normalized = {};
+    var total = 0;
+
+    industries.forEach(function(industry){
+      var value = Math.max(0.001, toFiniteNumber(weights && weights[industry], baseline[industry] || 0.01));
+      normalized[industry] = value;
+      total += value;
+    });
+
+    if (total <= 0) {
+      return baseline;
+    }
+
+    industries.forEach(function(industry){
+      normalized[industry] = normalized[industry] / total;
+    });
+
+    return normalized;
+  }
+
   function normalizeCountryProfileRecord(iso, blocId, rawProfile){
     var source = rawProfile && typeof rawProfile === "object" ? rawProfile : {};
     var seed = (App.data && typeof App.data.createCountryProfile === "function") ? App.data.createCountryProfile(iso, blocId, source) : {
@@ -499,7 +543,29 @@
       giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, 0.4), 0.2, 0.7),
       educationIndex:clamp(toFiniteNumber(source.educationIndex, 0.6), 0.1, 1),
       institutionScore:clamp(toFiniteNumber(source.institutionScore, 0.55), 0.1, 1),
-      populationPressure:0.5
+      populationPressure:0.5,
+      consumerSpendMultiplier:clamp(toFiniteNumber(source.consumerSpendMultiplier, 0.94), 0.55, 1.25),
+      consumerCostOfLivingPressure:clamp(toFiniteNumber(source.consumerCostOfLivingPressure, 1.02), 0.65, 1.85),
+      consumerStressIndex:clamp(toFiniteNumber(source.consumerStressIndex, 0.4), 0, 1),
+      consumerIndustryDemandWeights:normalizeConsumerIndustryDemandWeights(source.consumerIndustryDemandWeights),
+      housingCostPressure:clamp(toFiniteNumber(source.housingCostPressure, 1.02), 0.65, 2.2),
+      housingRentBurden:clamp(toFiniteNumber(source.housingRentBurden, 0.34), 0.08, 0.9),
+      housingHomeownershipRate:clamp(toFiniteNumber(source.housingHomeownershipRate, 0.52), 0.05, 0.95),
+      housingAffordabilityIndex:clamp(toFiniteNumber(source.housingAffordabilityIndex, 0.52), 0.05, 1),
+      housingPriceGrowth:clamp(toFiniteNumber(source.housingPriceGrowth, 0.02), -0.18, 0.26),
+      housingMarketStress:clamp(toFiniteNumber(source.housingMarketStress, 0.35), 0, 1.5),
+      medianHouseholdWealthGU:Math.max(0, toFiniteNumber(source.medianHouseholdWealthGU, 0)),
+      topOneWealthShare:clamp(toFiniteNumber(source.topOneWealthShare, 0.3), 0.12, 0.95),
+      intergenerationalMobilityIndex:clamp(toFiniteNumber(source.intergenerationalMobilityIndex, 0.5), 0, 1),
+      socialUnrestIndex:clamp(toFiniteNumber(source.socialUnrestIndex, 0.28), 0, 1.8),
+      strikeRiskIndex:clamp(toFiniteNumber(source.strikeRiskIndex, 0.22), 0, 1.4),
+      populismIndex:clamp(toFiniteNumber(source.populismIndex, 0.24), 0, 1.6),
+      crimeProxyIndex:clamp(toFiniteNumber(source.crimeProxyIndex, 0.22), 0, 1.6),
+      emigrationPressureIndex:clamp(toFiniteNumber(source.emigrationPressureIndex, 0.24), 0, 1.6),
+      institutionalInstabilityIndex:clamp(toFiniteNumber(source.institutionalInstabilityIndex, 0.2), 0, 1.6),
+      philanthropicCapitalAnnualGU:Math.max(0, toFiniteNumber(source.philanthropicCapitalAnnualGU, 0)),
+      philanthropyImpactIndex:clamp(toFiniteNumber(source.philanthropyImpactIndex, 0), 0, 1.6),
+      legacyProjectsIndex:clamp(toFiniteNumber(source.legacyProjectsIndex, 0), 0, 1.4)
     };
     var laborForce;
     var employed;
@@ -541,6 +607,28 @@
       mobilityInflowAnnual:Math.max(0, toInteger(source.mobilityInflowAnnual, toInteger(seed.mobilityInflowAnnual, 0))),
       mobilityOutflowAnnual:Math.max(0, toInteger(source.mobilityOutflowAnnual, toInteger(seed.mobilityOutflowAnnual, 0))),
       prevConsumerDemandGU:Math.max(0, toFiniteNumber(source.prevConsumerDemandGU, toFiniteNumber(source.consumerDemandGU, consumerDemand))),
+      consumerSpendMultiplier:clamp(toFiniteNumber(source.consumerSpendMultiplier, toFiniteNumber(seed.consumerSpendMultiplier, 0.94)), 0.55, 1.25),
+      consumerCostOfLivingPressure:clamp(toFiniteNumber(source.consumerCostOfLivingPressure, toFiniteNumber(seed.consumerCostOfLivingPressure, 1.02)), 0.65, 1.85),
+      consumerStressIndex:clamp(toFiniteNumber(source.consumerStressIndex, toFiniteNumber(seed.consumerStressIndex, 0.4)), 0, 1),
+      consumerIndustryDemandWeights:normalizeConsumerIndustryDemandWeights(source.consumerIndustryDemandWeights || seed.consumerIndustryDemandWeights),
+      housingCostPressure:clamp(toFiniteNumber(source.housingCostPressure, toFiniteNumber(seed.housingCostPressure, 1.02)), 0.65, 2.2),
+      housingRentBurden:clamp(toFiniteNumber(source.housingRentBurden, toFiniteNumber(seed.housingRentBurden, 0.34)), 0.08, 0.9),
+      housingHomeownershipRate:clamp(toFiniteNumber(source.housingHomeownershipRate, toFiniteNumber(seed.housingHomeownershipRate, 0.52)), 0.05, 0.95),
+      housingAffordabilityIndex:clamp(toFiniteNumber(source.housingAffordabilityIndex, toFiniteNumber(seed.housingAffordabilityIndex, 0.52)), 0.05, 1),
+      housingPriceGrowth:clamp(toFiniteNumber(source.housingPriceGrowth, toFiniteNumber(seed.housingPriceGrowth, 0.02)), -0.18, 0.26),
+      housingMarketStress:clamp(toFiniteNumber(source.housingMarketStress, toFiniteNumber(seed.housingMarketStress, 0.35)), 0, 1.5),
+      medianHouseholdWealthGU:Math.max(0, toFiniteNumber(source.medianHouseholdWealthGU, toFiniteNumber(seed.medianHouseholdWealthGU, 0))),
+      topOneWealthShare:clamp(toFiniteNumber(source.topOneWealthShare, toFiniteNumber(seed.topOneWealthShare, 0.3)), 0.12, 0.95),
+      intergenerationalMobilityIndex:clamp(toFiniteNumber(source.intergenerationalMobilityIndex, toFiniteNumber(seed.intergenerationalMobilityIndex, 0.5)), 0, 1),
+      socialUnrestIndex:clamp(toFiniteNumber(source.socialUnrestIndex, toFiniteNumber(seed.socialUnrestIndex, 0.28)), 0, 1.8),
+      strikeRiskIndex:clamp(toFiniteNumber(source.strikeRiskIndex, toFiniteNumber(seed.strikeRiskIndex, 0.22)), 0, 1.4),
+      populismIndex:clamp(toFiniteNumber(source.populismIndex, toFiniteNumber(seed.populismIndex, 0.24)), 0, 1.6),
+      crimeProxyIndex:clamp(toFiniteNumber(source.crimeProxyIndex, toFiniteNumber(seed.crimeProxyIndex, 0.22)), 0, 1.6),
+      emigrationPressureIndex:clamp(toFiniteNumber(source.emigrationPressureIndex, toFiniteNumber(seed.emigrationPressureIndex, 0.24)), 0, 1.6),
+      institutionalInstabilityIndex:clamp(toFiniteNumber(source.institutionalInstabilityIndex, toFiniteNumber(seed.institutionalInstabilityIndex, 0.2)), 0, 1.6),
+      philanthropicCapitalAnnualGU:Math.max(0, toFiniteNumber(source.philanthropicCapitalAnnualGU, toFiniteNumber(seed.philanthropicCapitalAnnualGU, 0))),
+      philanthropyImpactIndex:clamp(toFiniteNumber(source.philanthropyImpactIndex, toFiniteNumber(seed.philanthropyImpactIndex, 0)), 0, 1.6),
+      legacyProjectsIndex:clamp(toFiniteNumber(source.legacyProjectsIndex, toFiniteNumber(seed.legacyProjectsIndex, 0)), 0, 1.4),
       populationPressure:0
     };
   }
@@ -620,11 +708,25 @@
       childcareCostGU:Math.max(0, toFiniteNumber(source.childcareCostGU, 0)),
       essentialsCostGU:Math.max(0, toFiniteNumber(source.essentialsCostGU, 0)),
       debtServiceGU:Math.max(0, toFiniteNumber(source.debtServiceGU, 0)),
+      housingBurdenRatio:clamp(toFiniteNumber(source.housingBurdenRatio, 0.34), 0.08, 1.9),
+      housingSavingsPressure:clamp(toFiniteNumber(source.housingSavingsPressure, 0.42), 0.08, 2.2),
+      housingOwnershipScore:clamp(toFiniteNumber(source.housingOwnershipScore, 0), 0, 1),
+      housingAffordabilityScore:clamp(toFiniteNumber(source.housingAffordabilityScore, 0.52), 0.05, 1),
       inheritancePressureGU:Math.max(0, toFiniteNumber(source.inheritancePressureGU, 0)),
       financialStress:clamp(toFiniteNumber(source.financialStress, 0), 0, 100),
       classTier:normalizeHouseholdTier(source.classTier),
       originClassTier:normalizeHouseholdTier(source.originClassTier || source.classTier),
-      mobilityScore:toFiniteNumber(source.mobilityScore, 0)
+      mobilityScore:toFiniteNumber(source.mobilityScore, 0),
+      assetCashGU:Math.max(0, toFiniteNumber(source.assetCashGU, toFiniteNumber(source.cashOnHandGU, 0))),
+      assetEquityGU:Math.max(0, toFiniteNumber(source.assetEquityGU, 0)),
+      assetBusinessOwnershipGU:Math.max(0, toFiniteNumber(source.assetBusinessOwnershipGU, 0)),
+      assetPropertyGU:Math.max(0, toFiniteNumber(source.assetPropertyGU, 0)),
+      assetTrustGU:Math.max(0, toFiniteNumber(source.assetTrustGU, 0)),
+      assetDebtObligationsGU:Math.max(0, toFiniteNumber(source.assetDebtObligationsGU, toFiniteNumber(source.debtGU, 0))),
+      assetTotalGU:Math.max(0, toFiniteNumber(source.assetTotalGU, 0)),
+      assetNetWorthGU:toFiniteNumber(source.assetNetWorthGU, 0),
+      assetYieldAnnualGU:toFiniteNumber(source.assetYieldAnnualGU, 0),
+      assetReturnRateAnnual:toFiniteNumber(source.assetReturnRateAnnual, 0)
     };
   }
 
@@ -994,6 +1096,9 @@
     person.blocId = normalizeString(person.blocId, "NA");
     person.countryISO = normalizeString(person.countryISO, "US");
     person.state = normalizeString(person.state, null);
+    person.subdivision = normalizeString(person.subdivision, person.state);
+    person.city = normalizeString(person.city, null);
+    person.birthCity = normalizeString(person.birthCity, person.city);
     person.birthDay = toInteger(person.birthDay, simDay - Math.round(estimatedAge * yearDays));
     person.age = toFiniteNumber(person.age, Math.max(0, (simDay - person.birthDay) / yearDays));
     person.alive = person.alive !== false;
@@ -1038,6 +1143,9 @@
     }
     person.groomedForBusinessById = normalizeString(person.groomedForBusinessById, null);
     person.inheritanceDilution = Math.max(1, toInteger(person.inheritanceDilution, 1));
+    person.lifetimeInheritedGU = Math.max(0, toFiniteNumber(person.lifetimeInheritedGU, 0));
+    person.inheritanceTransferCount = Math.max(0, toInteger(person.inheritanceTransferCount, 0));
+    person.lastInheritanceDay = person.lastInheritanceDay == null ? null : Math.max(0, toInteger(person.lastInheritanceDay, null));
     person.sharedPrivilege = clamp(toFiniteNumber(person.sharedPrivilege, 0), 0, 100);
     person.siblingRivalry = clamp(toFiniteNumber(person.siblingRivalry, 0), 0, 100);
     person.mentorId = normalizeString(person.mentorId, null);
@@ -1112,6 +1220,7 @@
     business.founderId = normalizeString(business.founderId, business.ownerId);
     business.blocId = normalizeString(business.blocId, "NA");
     business.countryISO = normalizeString(business.countryISO, "US");
+    business.hqCity = normalizeString(business.hqCity, null);
     business.lineageId = normalizeString(business.lineageId, null);
     business.revenueGU = Math.max(0, toFiniteNumber(business.revenueGU, 0));
     business.profitGU = toFiniteNumber(business.profitGU, 0);
@@ -1150,7 +1259,9 @@
     merged.symbol = normalizeString(merged.symbol, template ? template.symbol : "$");
     merged.color = normalizeString(merged.color, template ? template.color : "#1e3a5f");
     merged.label = normalizeString(merged.label, template ? template.label : "#4a9edd");
-    merged.members = normalizeStringArray(merged.members && merged.members.length ? merged.members : (template ? template.members : []));
+    merged.members = normalizeStringArray(
+      (merged.members && merged.members.length ? merged.members : []).concat(template ? template.members : [])
+    );
     merged.baseRate = Math.max(0.0001, toFiniteNumber(merged.baseRate, template ? template.baseRate : 1));
     merged.rate = Math.max(0.0001, toFiniteNumber(merged.rate, merged.baseRate));
     merged.prevRate = Math.max(0.0001, toFiniteNumber(merged.prevRate, merged.rate));
@@ -1783,6 +1894,141 @@
     }
   }
 
+  function isValidSlotIndex(slotIndex){
+    var normalized = toInteger(slotIndex, 0);
+    return normalized >= 1 && normalized <= SAVE_SLOT_COUNT;
+  }
+
+  function getSlotKey(slotIndex){
+    return SAVE_SLOT_KEY_PREFIX + String(toInteger(slotIndex, 0));
+  }
+
+  function sanitizeSlotName(name, fallback){
+    var clean = normalizeString(name, null);
+    if (!clean) return fallback;
+    return clean.slice(0, 64);
+  }
+
+  function saveToSlot(slotIndex, name){
+    var snapshot;
+    var normalizedSlot = toInteger(slotIndex, 0);
+
+    if (!canUseStorage()) {
+      return { ok:false, error:"localStorage is unavailable in this environment." };
+    }
+    if (!isValidSlotIndex(normalizedSlot)) {
+      return { ok:false, error:"Invalid slot index. Expected 1-" + SAVE_SLOT_COUNT + "." };
+    }
+
+    try {
+      snapshot = exportSnapshot();
+      snapshot.saveSlot = normalizedSlot;
+      snapshot.saveName = sanitizeSlotName(name, "Slot " + normalizedSlot);
+      snapshot.savedAtISO = new Date().toISOString();
+      global.localStorage.setItem(getSlotKey(normalizedSlot), JSON.stringify(snapshot));
+      return { ok:true, slotIndex:normalizedSlot, snapshot:snapshot };
+    } catch (error) {
+      return { ok:false, error:error && error.message ? error.message : "Failed to save slot snapshot." };
+    }
+  }
+
+  function loadFromSlot(slotIndex){
+    var normalizedSlot = toInteger(slotIndex, 0);
+    var raw;
+    var parsed;
+    var imported;
+
+    if (!canUseStorage()) {
+      return { ok:false, error:"localStorage is unavailable in this environment." };
+    }
+    if (!isValidSlotIndex(normalizedSlot)) {
+      return { ok:false, error:"Invalid slot index. Expected 1-" + SAVE_SLOT_COUNT + "." };
+    }
+
+    raw = global.localStorage.getItem(getSlotKey(normalizedSlot));
+    if (!raw) {
+      return { ok:false, reason:"empty" };
+    }
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return { ok:false, error:"Saved slot JSON is corrupted." };
+    }
+
+    imported = importSnapshot(parsed);
+    if (!imported.ok) {
+      return imported;
+    }
+
+    return {
+      ok:true,
+      slotIndex:normalizedSlot,
+      fromVersion:imported.fromVersion,
+      toVersion:imported.toVersion,
+      snapshot:imported.snapshot
+    };
+  }
+
+  function deleteSlot(slotIndex){
+    var normalizedSlot = toInteger(slotIndex, 0);
+
+    if (!canUseStorage()) {
+      return { ok:false, error:"localStorage is unavailable in this environment." };
+    }
+    if (!isValidSlotIndex(normalizedSlot)) {
+      return { ok:false, error:"Invalid slot index. Expected 1-" + SAVE_SLOT_COUNT + "." };
+    }
+
+    global.localStorage.removeItem(getSlotKey(normalizedSlot));
+    return { ok:true, slotIndex:normalizedSlot };
+  }
+
+  function listSlots(){
+    var slots = [];
+    var i;
+
+    for (i = 1; i <= SAVE_SLOT_COUNT; i += 1) {
+      var raw;
+      var parsed;
+      var savedAt;
+      var day;
+      var name;
+
+      if (!canUseStorage()) {
+        return [];
+      }
+
+      raw = global.localStorage.getItem(getSlotKey(i));
+      if (!raw) {
+        slots.push({ slotIndex:i, exists:false, name:"", savedAtISO:null, day:null });
+        continue;
+      }
+
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        slots.push({ slotIndex:i, exists:true, name:"Corrupted Slot", savedAtISO:null, day:null, corrupted:true });
+        continue;
+      }
+
+      savedAt = normalizeString(parsed && parsed.savedAtISO, null);
+      day = toInteger(parsed && parsed.state && parsed.state.simDay, null);
+      name = sanitizeSlotName(parsed && parsed.saveName, "Slot " + i);
+      slots.push({
+        slotIndex:i,
+        exists:true,
+        name:name,
+        savedAtISO:savedAt,
+        day:day,
+        schemaVersion:toInteger(parsed && parsed.schemaVersion, null),
+        corrupted:false
+      });
+    }
+
+    return slots;
+  }
+
   function restoreLatest(){
     var raw;
     var parsed;
@@ -1874,13 +2120,19 @@
 
   App.persistence = {
     SAVE_KEY:SAVE_KEY,
+    SAVE_SLOT_KEY_PREFIX:SAVE_SLOT_KEY_PREFIX,
+    SAVE_SLOT_COUNT:SAVE_SLOT_COUNT,
     SCHEMA_VERSION:SCHEMA_VERSION,
     AUTOSAVE_INTERVAL_DAYS:AUTOSAVE_INTERVAL_DAYS,
     exportSnapshot:exportSnapshot,
     importSnapshot:importSnapshot,
     saveNow:saveNow,
+    saveToSlot:saveToSlot,
     restoreLatest:restoreLatest,
+    loadFromSlot:loadFromSlot,
     clearLatest:clearLatest,
+    deleteSlot:deleteSlot,
+    listSlots:listSlots,
     hasSnapshot:hasSnapshot,
     autoCheckpoint:autoCheckpoint,
     migrateSnapshot:migrateSnapshot,

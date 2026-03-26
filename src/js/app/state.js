@@ -66,6 +66,19 @@
     return !!(person && person.alive);
   }
 
+  function normalizeCountryDisplayName(name){
+    var normalized = String(name || "");
+
+    if (!normalized) return normalized;
+
+    // Heal known mojibake names that may persist in older saves.
+    normalized = normalized
+      .replace(/CÃ´te d['’]Ivoire/g, "Côte d'Ivoire")
+      .replace(/Cote d['’]Ivoire/g, "Côte d'Ivoire");
+
+    return normalized;
+  }
+
   function isBusinessLeader(person){
     return !!(person && person.employerBusinessId && person.jobTitle);
   }
@@ -332,12 +345,16 @@
 
   store.setCountryName = function(iso, name){
     if (iso && name) {
-      store.countryNames[iso] = name;
+      store.countryNames[iso] = normalizeCountryDisplayName(name);
     }
   };
 
   store.getCountryName = function(iso){
-    return store.countryNames[iso] || iso;
+    var name = store.countryNames[iso];
+    if (!name) return iso;
+    name = normalizeCountryDisplayName(name);
+    store.countryNames[iso] = name;
+    return name;
   };
 
   store.setCountryData = function(iso, data){

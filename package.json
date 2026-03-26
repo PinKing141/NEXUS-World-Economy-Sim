@@ -7,7 +7,8 @@
     "dev": "http-server -c-1 -p 5173 .",
     "build:names": "powershell -ExecutionPolicy Bypass -File scripts/build-name-pools.ps1",
     "build:map": "powershell -ExecutionPolicy Bypass -File scripts/build-inline-world-map.ps1",
-    "build:assets": "npm run build:names && npm run build:map"
+    "build:assets": "npm run build:names && npm run build:map",
+    "test:closure": "node tests/closure-tier14-regression-check.js"
   },
   "devDependencies": {
     "http-server": "^14.1.1"

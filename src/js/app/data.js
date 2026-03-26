@@ -109,8 +109,14 @@
   });
   var MAP_VIEWBOX = { width:1000, height:507.209 };
   var COUNTRY_DATA_PATH = "./src/country-data.json";
+  var WORLD_CITIES_PATH = "./worldcities.csv";
   var countryDataPromise = null;
   var countryDataCache = null;
+  var worldCitiesPromise = null;
+  var worldCitiesByIso2Cache = null;
+  var worldCitiesByIso2StateCache = null;
+  var worldCityDetailsByIso2Cache = null;
+  var worldCitySubdivisionLookupByIso2Cache = null;
   var POP_PROFILE_HEURISTICS = {
     NA:{
       laborForceParticipation:0.63,
@@ -202,7 +208,7 @@
     {id:"EU",name:"Europe",flag:"🇪🇺",currency:"EUR",symbol:"€",baseRate:0.92,rate:0.92,prevRate:0.92,color:"#0f2a1a",label:"#4caf50",
       members:["DE","FR","GB","IT","ES","PL","RO","NL","BE","CZ","GR","PT","SE","HU","AT","CH","BY","UA","RS","BG","TR","DK","FI","SK","NO","HR","MD","BA","AL","LT","SI","MK","LV","EE","LU","ME","IS","IE","CY","GE","AM","AD","MT","SM","VA","LI","MC","XK","FO","AX","SJ","GI","IM","JE","GG"]},
     {id:"AF",name:"Africa & M.East",flag:"🇳🇬",currency:"NGN",symbol:"₦",baseRate:1580,rate:1580,prevRate:1580,color:"#1a2208",label:"#cddc39",
-      members:["NG","ZA","EG","ET","KE","GH","TZ","UG","RW","SN","CI","CM","ML","BF","NE","TD","SD","SS","SO","MZ","ZM","ZW","MW","MG","AO","GA","CG","CD","CF","GN","SL","LR","GM","GW","BJ","TG","GQ","ER","DJ","BW","NA","LS","SZ","MA","DZ","TN","LY","EH","MR","SA","AE","IQ","IR","SY","YE","OM","JO","IL","PS","LB","KW","QA","PK","AF","AZ","KM","MU","SC","RE","YT","SH","ST","CV"]},
+      members:["NG","ZA","EG","ET","KE","GH","TZ","UG","RW","BI","SN","CI","CM","ML","BF","NE","TD","SD","SS","SO","MZ","ZM","ZW","MW","MG","AO","GA","CG","CD","CF","GN","SL","LR","GM","GW","BJ","TG","GQ","ER","DJ","BW","NA","LS","SZ","MA","DZ","TN","LY","EH","MR","SA","AE","IQ","IR","SY","YE","OM","JO","IL","PS","LB","KW","QA","PK","AF","AZ","KM","MU","SC","RE","YT","SH","ST","CV"]},
     {id:"AS",name:"Asia-Pacific",flag:"🇨🇳",currency:"CNY",symbol:"¥",baseRate:7.1,rate:7.1,prevRate:7.1,color:"#2a0f0f",label:"#ef5350",
       members:["CN","JP","KR","IN","ID","PH","VN","TH","MY","BD","NP","LK","BT","MM","KH","LA","TW","KP","MN","AU","NZ","PG","FJ","SB","VU","WS","TO","KI","TV","NR","PW","FM","MH","GU","AS","CK","NU","TK","PN","WF","NC","PF","CX","CC","HK","MO","SG","BN","TL","MP","UM","MV"]},
     {id:"RU",name:"Russia & C.Asia",flag:"🇷🇺",currency:"RUB",symbol:"₽",baseRate:88,rate:88,prevRate:88,color:"#1a0f2a",label:"#ab47bc",
@@ -429,6 +435,194 @@
     return normalized;
   }
 
+  function parseCsvLine(line){
+    var values = [];
+    var current = "";
+    var inQuotes = false;
+    var i;
+    var ch;
+
+    for (i = 0; i < line.length; i += 1) {
+      ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === "," && !inQuotes) {
+        values.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+
+    values.push(current);
+    return values;
+  }
+
+  function normalizeIso2(value){
+    var code = String(value || "").trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(code) ? code : null;
+  }
+
+  function normalizeCityState(value){
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeCityStateKey(value){
+    return normalizeCityState(value).toLowerCase();
+  }
+
+  function parseWorldCitiesCsv(text){
+    var lines = String(text || "").split(/\r?\n/);
+    var header;
+    var cityIndex;
+    var cityAsciiIndex;
+    var iso2Index;
+    var populationIndex;
+    var byIso2 = {};
+    var byIso2State = {};
+    var detailsByIso2 = {};
+    var subdivisionLookupByIso2 = {};
+    var stateIndex;
+    var stateNameIndex;
+    var adminNameIndex;
+    var provinceIndex;
+    var regionIndex;
+
+    if (!lines.length) return byIso2;
+
+    header = parseCsvLine(lines[0]);
+    cityIndex = header.indexOf("city");
+    cityAsciiIndex = header.indexOf("city_ascii");
+    iso2Index = header.indexOf("iso2");
+    populationIndex = header.indexOf("population");
+    stateIndex = header.indexOf("state_id");
+    stateNameIndex = header.indexOf("state_name");
+    adminNameIndex = header.indexOf("admin_name");
+    provinceIndex = header.indexOf("province");
+    regionIndex = header.indexOf("region");
+
+    if (iso2Index < 0 || (cityIndex < 0 && cityAsciiIndex < 0)) {
+      return byIso2;
+    }
+
+    lines.slice(1).forEach(function(line){
+      var row;
+      var iso2;
+      var name;
+      var population;
+      var stateName;
+      var stateKey;
+
+      if (!line) return;
+      row = parseCsvLine(line);
+      iso2 = normalizeIso2(row[iso2Index]);
+      if (!iso2) return;
+
+      name = (cityIndex >= 0 ? row[cityIndex] : "") || (cityAsciiIndex >= 0 ? row[cityAsciiIndex] : "") || "";
+      name = String(name).trim();
+      if (!name) return;
+
+      population = Number(populationIndex >= 0 ? row[populationIndex] : 0);
+      if (!Array.isArray(byIso2[iso2])) byIso2[iso2] = [];
+      byIso2[iso2].push({
+        name:name,
+        population:Number.isFinite(population) ? population : 0
+      });
+
+      stateName = normalizeCityState(
+        (stateNameIndex >= 0 ? row[stateNameIndex] : "") ||
+        (adminNameIndex >= 0 ? row[adminNameIndex] : "") ||
+        (provinceIndex >= 0 ? row[provinceIndex] : "") ||
+        (regionIndex >= 0 ? row[regionIndex] : "") ||
+        (stateIndex >= 0 ? row[stateIndex] : "")
+      );
+      stateKey = normalizeCityStateKey(stateName);
+
+      if (stateKey) {
+        if (!byIso2State[iso2]) byIso2State[iso2] = {};
+        if (!Array.isArray(byIso2State[iso2][stateKey])) byIso2State[iso2][stateKey] = [];
+        byIso2State[iso2][stateKey].push({
+          name:name,
+          population:Number.isFinite(population) ? population : 0
+        });
+      }
+
+      if (!Array.isArray(detailsByIso2[iso2])) detailsByIso2[iso2] = [];
+      detailsByIso2[iso2].push({
+        name:name,
+        population:Number.isFinite(population) ? population : 0,
+        state:stateName || null,
+        stateKey:stateKey || null
+      });
+
+      if (stateKey) {
+        var cityKey = String(name || "").trim().toLowerCase();
+        var bestForCity;
+
+        if (!subdivisionLookupByIso2[iso2]) subdivisionLookupByIso2[iso2] = {};
+        bestForCity = subdivisionLookupByIso2[iso2][cityKey];
+        if (!bestForCity || (Number.isFinite(population) ? population : 0) > (bestForCity.population || 0)) {
+          subdivisionLookupByIso2[iso2][cityKey] = {
+            subdivision:stateName,
+            population:Number.isFinite(population) ? population : 0
+          };
+        }
+      }
+    });
+
+    Object.keys(byIso2).forEach(function(iso2){
+      var seen = Object.create(null);
+      byIso2[iso2] = byIso2[iso2].sort(function(first, second){
+        if (second.population !== first.population) return second.population - first.population;
+        return String(first.name).localeCompare(String(second.name));
+      }).map(function(city){
+        return city && city.name ? String(city.name).trim() : "";
+      }).filter(function(name){
+        var key = String(name || "").toLowerCase();
+        if (!key || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+    });
+
+    Object.keys(byIso2State).forEach(function(iso2){
+      var stateMap = byIso2State[iso2] || {};
+
+      Object.keys(stateMap).forEach(function(stateKey){
+        var seen = Object.create(null);
+        stateMap[stateKey] = stateMap[stateKey].sort(function(first, second){
+          if (second.population !== first.population) return second.population - first.population;
+          return String(first.name).localeCompare(String(second.name));
+        }).map(function(city){
+          return city && city.name ? String(city.name).trim() : "";
+        }).filter(function(cityName){
+          var key = String(cityName || "").toLowerCase();
+          if (!key || seen[key]) return false;
+          seen[key] = true;
+          return true;
+        });
+      });
+    });
+
+    Object.keys(detailsByIso2).forEach(function(iso2){
+      detailsByIso2[iso2] = detailsByIso2[iso2].sort(function(first, second){
+        if (second.population !== first.population) return second.population - first.population;
+        return String(first.name).localeCompare(String(second.name));
+      });
+    });
+
+    worldCitiesByIso2StateCache = byIso2State;
+    worldCityDetailsByIso2Cache = detailsByIso2;
+    worldCitySubdivisionLookupByIso2Cache = subdivisionLookupByIso2;
+
+    return byIso2;
+  }
+
   function loadCountryData(){
     if (countryDataPromise) return countryDataPromise;
 
@@ -453,8 +647,152 @@
     return countryDataPromise;
   }
 
+  function loadWorldCitiesData(){
+    if (worldCitiesPromise) return worldCitiesPromise;
+
+    if (typeof fetch !== "function") {
+      worldCitiesByIso2Cache = worldCitiesByIso2Cache || {};
+      worldCitiesByIso2StateCache = worldCitiesByIso2StateCache || {};
+      worldCityDetailsByIso2Cache = worldCityDetailsByIso2Cache || {};
+      worldCitySubdivisionLookupByIso2Cache = worldCitySubdivisionLookupByIso2Cache || {};
+      worldCitiesPromise = Promise.resolve(worldCitiesByIso2Cache);
+      return worldCitiesPromise;
+    }
+
+    worldCitiesPromise = fetch(WORLD_CITIES_PATH, { cache:"no-store" }).then(function(response){
+      if (!response.ok) throw new Error("World cities request failed with status " + response.status + ".");
+      return response.text();
+    }).then(function(csvText){
+      worldCitiesByIso2Cache = parseWorldCitiesCsv(csvText);
+      return worldCitiesByIso2Cache;
+    }).catch(function(error){
+      console.warn("World cities load failed, using fallback city pools.", error);
+      worldCitiesByIso2Cache = worldCitiesByIso2Cache || {};
+      worldCitiesByIso2StateCache = worldCitiesByIso2StateCache || {};
+      worldCityDetailsByIso2Cache = worldCityDetailsByIso2Cache || {};
+      worldCitySubdivisionLookupByIso2Cache = worldCitySubdivisionLookupByIso2Cache || {};
+      return worldCitiesByIso2Cache;
+    });
+
+    return worldCitiesPromise;
+  }
+
   function getCountryDataCache(){
     return countryDataCache || {};
+  }
+
+  function getWorldCitiesCache(){
+    return worldCitiesByIso2Cache || {};
+  }
+
+  function getWorldCitiesStateCache(){
+    return worldCitiesByIso2StateCache || {};
+  }
+
+  function getWorldCityDetailsCache(){
+    return worldCityDetailsByIso2Cache || {};
+  }
+
+  function getWorldCitySubdivisionLookupCache(){
+    return worldCitySubdivisionLookupByIso2Cache || {};
+  }
+
+  function getWorldCitiesByCountry(iso, limit){
+    var iso2 = normalizeIso2(iso);
+    var list;
+    var cap;
+
+    if (!iso2) return [];
+    list = getWorldCitiesCache()[iso2] || [];
+    if (!Number.isFinite(limit)) return list.slice();
+
+    cap = Math.max(1, Math.floor(limit));
+    return list.slice(0, cap);
+  }
+
+  function getWorldCitiesByCountryState(iso, state, limit){
+    var iso2 = normalizeIso2(iso);
+    var stateKey = normalizeCityStateKey(state);
+    var stateMap;
+    var list;
+    var cap;
+
+    if (!iso2 || !stateKey) return [];
+    stateMap = getWorldCitiesStateCache()[iso2] || {};
+    list = stateMap[stateKey] || [];
+    if (!Number.isFinite(limit)) return list.slice();
+
+    cap = Math.max(1, Math.floor(limit));
+    return list.slice(0, cap);
+  }
+
+  function getWorldCityDetailsByCountry(iso, limit){
+    var iso2 = normalizeIso2(iso);
+    var list;
+    var cap;
+
+    if (!iso2) return [];
+    list = getWorldCityDetailsCache()[iso2] || [];
+    if (!Number.isFinite(limit)) return list.slice();
+
+    cap = Math.max(1, Math.floor(limit));
+    return list.slice(0, cap);
+  }
+
+  function getWorldCitySubdivision(iso, city, fallbackSubdivision){
+    var iso2 = normalizeIso2(iso);
+    var cityKey;
+    var lookup;
+    var match;
+
+    if (!iso2) return normalizeCityState(fallbackSubdivision) || null;
+    cityKey = String(city || "").trim().toLowerCase();
+    if (!cityKey) return normalizeCityState(fallbackSubdivision) || null;
+
+    lookup = getWorldCitySubdivisionLookupCache()[iso2] || {};
+    match = lookup[cityKey];
+    if (match && match.subdivision) return normalizeCityState(match.subdivision) || null;
+    return normalizeCityState(fallbackSubdivision) || null;
+  }
+
+  function getWorldCitySubdivisionsByCountry(iso, limitPerSubdivision){
+    var iso2 = normalizeIso2(iso);
+    var details;
+    var grouped = {};
+    var cap = Number.isFinite(limitPerSubdivision) ? Math.max(1, Math.floor(limitPerSubdivision)) : 8;
+
+    if (!iso2) return [];
+    details = getWorldCityDetailsCache()[iso2] || [];
+    if (!details.length) return [];
+
+    details.forEach(function(entry){
+      var subdivisionName = normalizeCityState(entry && entry.state);
+      if (!subdivisionName) return;
+      if (!grouped[subdivisionName]) {
+        grouped[subdivisionName] = {
+          name:subdivisionName,
+          count:0,
+          sampleCities:[]
+        };
+      }
+      grouped[subdivisionName].count += 1;
+      if (grouped[subdivisionName].sampleCities.length < cap && entry && entry.name) {
+        grouped[subdivisionName].sampleCities.push(String(entry.name));
+      }
+    });
+
+    return Object.keys(grouped).map(function(name){
+      return grouped[name];
+    }).sort(function(first, second){
+      if (second.count !== first.count) return second.count - first.count;
+      return String(first.name).localeCompare(String(second.name));
+    });
+  }
+
+  function getCountryInstitutionNameParts(iso, fallback){
+    var dynamicCities = getWorldCitiesByCountry(iso, 8);
+    if (dynamicCities.length) return dynamicCities;
+    return Array.isArray(fallback) ? fallback : [];
   }
 
   function getCountryPopulation(iso){
@@ -508,6 +846,18 @@
     var employed;
     var unemployed;
     var medianWageGU;
+    var defaultIndustryDemandWeights = {
+      Technology:0.11,
+      Finance:0.09,
+      Retail:0.18,
+      Manufacturing:0.1,
+      "Real Estate":0.08,
+      "F&B":0.16,
+      Healthcare:0.12,
+      Media:0.06,
+      Logistics:0.06,
+      Energy:0.04
+    };
 
     if (!Number.isFinite(population) || population <= 0) {
       population = getBlocMedianPopulation(blocId);
@@ -541,7 +891,42 @@
       giniCoefficient:clampNumber(Number(givenOverrides.giniCoefficient != null ? givenOverrides.giniCoefficient : baseline.giniCoefficient), 0.2, 0.7),
       educationIndex:clampNumber(Number(givenOverrides.educationIndex != null ? givenOverrides.educationIndex : baseline.educationIndex), 0.1, 1),
       institutionScore:clampNumber(Number(givenOverrides.institutionScore != null ? givenOverrides.institutionScore : baseline.institutionScore), 0.1, 1),
-      populationPressure:clampNumber(Number(givenOverrides.populationPressure != null ? givenOverrides.populationPressure : 0.5), 0, 1)
+      populationPressure:clampNumber(Number(givenOverrides.populationPressure != null ? givenOverrides.populationPressure : 0.5), 0, 1),
+      consumerSpendMultiplier:clampNumber(Number(givenOverrides.consumerSpendMultiplier != null ? givenOverrides.consumerSpendMultiplier : 0.94), 0.55, 1.25),
+      consumerCostOfLivingPressure:clampNumber(Number(givenOverrides.consumerCostOfLivingPressure != null ? givenOverrides.consumerCostOfLivingPressure : 1.02), 0.65, 1.85),
+      consumerStressIndex:clampNumber(Number(givenOverrides.consumerStressIndex != null ? givenOverrides.consumerStressIndex : 0.4), 0, 1),
+      consumerIndustryDemandWeights:Object.assign({}, defaultIndustryDemandWeights, givenOverrides.consumerIndustryDemandWeights && typeof givenOverrides.consumerIndustryDemandWeights === "object" ? givenOverrides.consumerIndustryDemandWeights : {}),
+      housingCostPressure:clampNumber(Number(givenOverrides.housingCostPressure != null ? givenOverrides.housingCostPressure : 1.02), 0.65, 2.2),
+      housingRentBurden:clampNumber(Number(givenOverrides.housingRentBurden != null ? givenOverrides.housingRentBurden : 0.34), 0.08, 0.9),
+      housingHomeownershipRate:clampNumber(Number(givenOverrides.housingHomeownershipRate != null ? givenOverrides.housingHomeownershipRate : 0.52), 0.05, 0.95),
+      housingAffordabilityIndex:clampNumber(Number(givenOverrides.housingAffordabilityIndex != null ? givenOverrides.housingAffordabilityIndex : 0.52), 0.05, 1),
+      housingPriceGrowth:clampNumber(Number(givenOverrides.housingPriceGrowth != null ? givenOverrides.housingPriceGrowth : 0.02), -0.18, 0.26),
+      housingMarketStress:clampNumber(Number(givenOverrides.housingMarketStress != null ? givenOverrides.housingMarketStress : 0.35), 0, 1.5),
+      medianHouseholdWealthGU:Math.max(0, Number(givenOverrides.medianHouseholdWealthGU != null ? givenOverrides.medianHouseholdWealthGU : (medianWageGU * 2.1))),
+      topOneWealthShare:clampNumber(Number(givenOverrides.topOneWealthShare != null ? givenOverrides.topOneWealthShare : 0.3), 0.12, 0.95),
+      intergenerationalMobilityIndex:clampNumber(Number(givenOverrides.intergenerationalMobilityIndex != null ? givenOverrides.intergenerationalMobilityIndex : 0.5), 0, 1),
+      socialUnrestIndex:clampNumber(Number(givenOverrides.socialUnrestIndex != null ? givenOverrides.socialUnrestIndex : 0.28), 0, 1.8),
+      strikeRiskIndex:clampNumber(Number(givenOverrides.strikeRiskIndex != null ? givenOverrides.strikeRiskIndex : 0.22), 0, 1.4),
+      populismIndex:clampNumber(Number(givenOverrides.populismIndex != null ? givenOverrides.populismIndex : 0.24), 0, 1.6),
+      crimeProxyIndex:clampNumber(Number(givenOverrides.crimeProxyIndex != null ? givenOverrides.crimeProxyIndex : 0.22), 0, 1.6),
+      emigrationPressureIndex:clampNumber(Number(givenOverrides.emigrationPressureIndex != null ? givenOverrides.emigrationPressureIndex : 0.24), 0, 1.6),
+      institutionalInstabilityIndex:clampNumber(Number(givenOverrides.institutionalInstabilityIndex != null ? givenOverrides.institutionalInstabilityIndex : 0.2), 0, 1.6),
+      philanthropicCapitalAnnualGU:Math.max(0, Number(givenOverrides.philanthropicCapitalAnnualGU != null ? givenOverrides.philanthropicCapitalAnnualGU : 0)),
+      philanthropyImpactIndex:clampNumber(Number(givenOverrides.philanthropyImpactIndex != null ? givenOverrides.philanthropyImpactIndex : 0), 0, 1.6),
+      legacyProjectsIndex:clampNumber(Number(givenOverrides.legacyProjectsIndex != null ? givenOverrides.legacyProjectsIndex : 0), 0, 1.4),
+      developmentEducationQuality:clampNumber(Number(givenOverrides.developmentEducationQuality != null ? givenOverrides.developmentEducationQuality : baseline.educationIndex), 0, 1),
+      developmentCorruptionIndex:clampNumber(Number(givenOverrides.developmentCorruptionIndex != null ? givenOverrides.developmentCorruptionIndex : (1 - baseline.institutionScore)), 0, 1),
+      developmentInfrastructureIndex:clampNumber(Number(givenOverrides.developmentInfrastructureIndex != null ? givenOverrides.developmentInfrastructureIndex : (baseline.institutionScore * 0.78)), 0, 1),
+      developmentLaborCostIndex:clampNumber(Number(givenOverrides.developmentLaborCostIndex != null ? givenOverrides.developmentLaborCostIndex : clampNumber(baseline.medianWageGU / 42000, 0, 1)), 0, 1.6),
+      developmentSocialMobilityIndex:clampNumber(Number(givenOverrides.developmentSocialMobilityIndex != null ? givenOverrides.developmentSocialMobilityIndex : 0.5), 0, 1),
+      developmentFertilityNormIndex:clampNumber(Number(givenOverrides.developmentFertilityNormIndex != null ? givenOverrides.developmentFertilityNormIndex : clampNumber((baseline.birthRatePer1000 - 8) / 20, 0, 1)), 0, 1),
+      developmentBusinessFriendlinessIndex:clampNumber(Number(givenOverrides.developmentBusinessFriendlinessIndex != null ? givenOverrides.developmentBusinessFriendlinessIndex : baseline.institutionScore), 0, 1),
+      demographicAgingIndex:clampNumber(Number(givenOverrides.demographicAgingIndex != null ? givenOverrides.demographicAgingIndex : 0.4), 0, 1),
+      demographicYouthBulgeIndex:clampNumber(Number(givenOverrides.demographicYouthBulgeIndex != null ? givenOverrides.demographicYouthBulgeIndex : 0.35), 0, 1),
+      demographicLaborForcePressureIndex:clampNumber(Number(givenOverrides.demographicLaborForcePressureIndex != null ? givenOverrides.demographicLaborForcePressureIndex : 0.5), 0, 1.8),
+      demographicFertilityDeclineIndex:clampNumber(Number(givenOverrides.demographicFertilityDeclineIndex != null ? givenOverrides.demographicFertilityDeclineIndex : clampNumber((18 - baseline.birthRatePer1000) / 14, 0, 1)), 0, 1),
+      naturalResourceEndowmentIndex:clampNumber(Number(givenOverrides.naturalResourceEndowmentIndex != null ? givenOverrides.naturalResourceEndowmentIndex : 0.35), 0, 1),
+      resourceRentSeekingRiskIndex:clampNumber(Number(givenOverrides.resourceRentSeekingRiskIndex != null ? givenOverrides.resourceRentSeekingRiskIndex : 0.3), 0, 1.6)
     };
   }
 
@@ -577,7 +962,15 @@
     STATUS_COLOR:STATUS_COLOR,
     TICK_MS:3000,
     loadCountryData:loadCountryData,
+    loadWorldCitiesData:loadWorldCitiesData,
     getCountryDataCache:getCountryDataCache,
+    getWorldCitiesCache:getWorldCitiesCache,
+    getWorldCitiesByCountry:getWorldCitiesByCountry,
+    getWorldCitiesByCountryState:getWorldCitiesByCountryState,
+    getWorldCityDetailsByCountry:getWorldCityDetailsByCountry,
+    getWorldCitySubdivision:getWorldCitySubdivision,
+    getWorldCitySubdivisionsByCountry:getWorldCitySubdivisionsByCountry,
+    getCountryInstitutionNameParts:getCountryInstitutionNameParts,
     getCountryPopulation:getCountryPopulation,
     createCountryProfile:createCountryProfile,
     createCountryProfiles:createCountryProfiles,

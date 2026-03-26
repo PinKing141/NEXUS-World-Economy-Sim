@@ -29,9 +29,424 @@
   var lastNewsRenderSignature = "";
   var tickerRenderSlots = [];
   var tickerIdentitySignature = "";
+  var closureGateResult = null;
+  var closureGateRunning = false;
+  var closureGateFastForwardRunning = false;
+  var closureGateLastRunDay = null;
+  var closureScenarioRunning = false;
+  var closureScenarioSelectedId = "";
+  var closureScenarioResult = null;
+  var closureScenarioSuiteResult = null;
+  var STOCK_CHART_VIEW_MODE_STORAGE_KEY = "nexus.stockChartViewMode.v1";
+  var CLOSURE_BASELINE_STORAGE_KEY = "nexus.closureBaseline.v1";
+  var CLOSURE_TELEMETRY_STORAGE_KEY = "nexus.closureTelemetry.v1";
+  var CLOSURE_TELEMETRY_MAX_ITEMS = 12;
+  var closureGateBaseline = null;
+  var closureGateBaselineDiff = null;
+  var closureTelemetryHistory = [];
+  var stockChartViewMode = "line";
+  var settingsMenuOpen = false;
+  var slotsMenuOpen = false;
+  var slotsModalMode = "save";
+
+  function normalizeStockChartViewMode(value){
+    var mode = String(value || "").toLowerCase();
+    return mode === "candles" ? "candles" : "line";
+  }
+
+  function safeLocalStorageGet(key){
+    try {
+      if (!global.localStorage) return null;
+      return global.localStorage.getItem(key);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function safeLocalStorageSet(key, value){
+    try {
+      if (!global.localStorage) return false;
+      global.localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function safeLocalStorageRemove(key){
+    try {
+      if (!global.localStorage) return false;
+      global.localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function gateListFromResult(result){
+    var tiers = result && result.tiers ? result.tiers : {};
+    return []
+      .concat(Array.isArray(tiers.tier1) ? tiers.tier1 : [])
+      .concat(Array.isArray(tiers.tier2) ? tiers.tier2 : [])
+      .concat(Array.isArray(tiers.tier3) ? tiers.tier3 : [])
+      .concat(Array.isArray(tiers.tier4) ? tiers.tier4 : []);
+  }
+
+  function pickClosureKeyMetrics(result){
+    var metrics = result && result.interactionMap && result.interactionMap.keyMetrics ? result.interactionMap.keyMetrics : null;
+    if (!metrics || typeof metrics !== "object") return null;
+
+    return {
+      unemploymentRate:Number(metrics.unemploymentRate) || 0,
+      medianWageAvg:Number(metrics.medianWageAvg) || 0,
+      demandTotal:Number(metrics.demandTotal) || 0,
+      firmRevenueTotal:Number(metrics.firmRevenueTotal) || 0,
+      firmProfitTotal:Number(metrics.firmProfitTotal) || 0,
+      householdStressAvg:Number(metrics.householdStressAvg) || 0,
+      laborScarcityAvg:Number(metrics.laborScarcityAvg) || 0,
+      tradeShockIndexAvg:Number(metrics.tradeShockIndexAvg) || 0
+    };
+  }
+
+  function createClosureTelemetryEntry(result){
+    var summary = result && result.summary ? result.summary : {};
+    var loops = result && result.feedbackLoops ? result.feedbackLoops : {};
+    var hardFailures = Array.isArray(result && result.hardFailures) ? result.hardFailures : [];
+
+    return {
+      day:Number(App.store.simDay) || 0,
+      savedAtIso:(new Date()).toISOString(),
+      ok:!!(result && result.ok),
+      summary:{
+        passed:Number(summary.passed) || 0,
+        failed:Number(summary.failed) || 0,
+        total:Number(summary.total) || 0
+      },
+      hardFailureCount:hardFailures.filter(function(item){ return !!(item && item.failed); }).length,
+      loops:{
+        growth:!!loops.growthLoopPass,
+        recession:!!loops.recessionLoopPass,
+        labour:!!loops.laborPressureLoopPass
+      },
+      keyMetrics:pickClosureKeyMetrics(result)
+    };
+  }
+
+  function loadClosureTelemetryHistory(){
+    var raw = safeLocalStorageGet(CLOSURE_TELEMETRY_STORAGE_KEY);
+    var parsed;
+
+    if (!raw) return [];
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return [];
+    }
+
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(function(entry){
+      return !!(entry && entry.keyMetrics && typeof entry.keyMetrics === "object");
+    }).slice(0, CLOSURE_TELEMETRY_MAX_ITEMS);
+  }
+
+  function persistClosureTelemetryHistory(){
+    return safeLocalStorageSet(CLOSURE_TELEMETRY_STORAGE_KEY, JSON.stringify(closureTelemetryHistory.slice(0, CLOSURE_TELEMETRY_MAX_ITEMS)));
+  }
+
+  function appendClosureTelemetryEntry(result){
+    if (!result) return;
+    closureTelemetryHistory.unshift(createClosureTelemetryEntry(result));
+    closureTelemetryHistory = closureTelemetryHistory.slice(0, CLOSURE_TELEMETRY_MAX_ITEMS);
+    persistClosureTelemetryHistory();
+  }
+
+  function formatTelemetryWholeNumber(value){
+    var num = Number(value);
+
+    if (!Number.isFinite(num)) return "0";
+    return Math.round(num).toLocaleString("en-US");
+  }
+
+  function formatTelemetryMetricValue(key, value){
+    var num = Number(value) || 0;
+
+    if (key === "unemploymentRate" || key === "laborScarcityAvg" || key === "tradeShockIndexAvg") {
+      return (num * 100).toFixed(2) + "%";
+    }
+    if (key === "householdStressAvg") {
+      return num.toFixed(1);
+    }
+    return formatTelemetryWholeNumber(num);
+  }
+
+  function formatTelemetryDelta(key, currentValue, referenceValue){
+    var current = Number(currentValue);
+    var reference = Number(referenceValue);
+    var delta;
+
+    if (!Number.isFinite(current) || !Number.isFinite(reference)) {
+      return { text:"n/a", className:"neutral" };
+    }
+
+    delta = current - reference;
+    if (Math.abs(delta) < 0.0000001) {
+      return { text:"0", className:"neutral" };
+    }
+
+    if (key === "unemploymentRate" || key === "laborScarcityAvg" || key === "tradeShockIndexAvg") {
+      return {
+        text:(delta >= 0 ? "+" : "") + (delta * 100).toFixed(2) + "pp",
+        className:delta > 0 ? "up" : "down"
+      };
+    }
+
+    if (key === "householdStressAvg") {
+      return {
+        text:(delta >= 0 ? "+" : "") + delta.toFixed(1),
+        className:delta > 0 ? "up" : "down"
+      };
+    }
+
+    return {
+      text:(delta >= 0 ? "+" : "") + formatTelemetryWholeNumber(delta),
+      className:delta > 0 ? "up" : "down"
+    };
+  }
+
+  function renderClosureTelemetryDashboard(result, baseline, history){
+    var currentMetrics = pickClosureKeyMetrics(result);
+    var baselineMetrics = baseline && baseline.keyMetrics ? baseline.keyMetrics : null;
+    var previousMetrics = history && history.length > 1 && history[1] && history[1].keyMetrics ? history[1].keyMetrics : null;
+    var metricRows = [
+      { key:"unemploymentRate", label:"Unemployment" },
+      { key:"laborScarcityAvg", label:"Labour Scarcity" },
+      { key:"householdStressAvg", label:"Household Stress" },
+      { key:"tradeShockIndexAvg", label:"Trade Shock Index" },
+      { key:"medianWageAvg", label:"Median Wage" },
+      { key:"demandTotal", label:"Consumer Demand" },
+      { key:"firmRevenueTotal", label:"Firm Revenue" },
+      { key:"firmProfitTotal", label:"Firm Profit" }
+    ];
+
+    if (!currentMetrics) {
+      return "<div class='mc'><div class='mcl'>Balancing Telemetry</div><div class='country-note'>Run closure gates to generate macro telemetry.</div></div>";
+    }
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Balancing Telemetry</div>",
+      "<div class='country-note'>Current macro state with drift from previous closure run and saved baseline.</div>",
+      "<div class='closure-telemetry-head'><span>Metric</span><span>Current</span><span>Prev Drift</span><span>Baseline Drift</span></div>",
+      "<div class='closure-telemetry-list'>",
+      metricRows.map(function(row){
+        var key = row.key;
+        var previousDelta = formatTelemetryDelta(key, currentMetrics[key], previousMetrics ? previousMetrics[key] : NaN);
+        var baselineDelta = formatTelemetryDelta(key, currentMetrics[key], baselineMetrics ? baselineMetrics[key] : NaN);
+        return [
+          "<div class='closure-telemetry-row'>",
+          "<span>" + row.label + "</span>",
+          "<span>" + formatTelemetryMetricValue(key, currentMetrics[key]) + "</span>",
+          "<span class='delta-" + previousDelta.className + "'>" + previousDelta.text + "</span>",
+          "<span class='delta-" + baselineDelta.className + "'>" + baselineDelta.text + "</span>",
+          "</div>"
+        ].join("");
+      }).join(""),
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderClosureRunHistory(history){
+    var items = Array.isArray(history) ? history.slice(0, 6) : [];
+
+    if (!items.length) return "";
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Run History</div>",
+      "<div class='closure-history-list'>",
+      items.map(function(item){
+        var summary = item && item.summary ? item.summary : {};
+        var loopText = (item && item.loops && item.loops.growth ? "G" : "g") + "/" + (item && item.loops && item.loops.recession ? "R" : "r") + "/" + (item && item.loops && item.loops.labour ? "L" : "l");
+        return [
+          "<div class='closure-history-row'>",
+          "<span>Day " + (Number(item && item.day) || 0) + "</span>",
+          "<span class='" + (item && item.ok ? "delta-down" : "delta-up") + "'>" + (item && item.ok ? "PASS" : "FAIL") + "</span>",
+          "<span>P" + (Number(summary.passed) || 0) + "/F" + (Number(summary.failed) || 0) + "</span>",
+          "<span>HF " + (Number(item && item.hardFailureCount) || 0) + "</span>",
+          "<span>" + loopText + "</span>",
+          "</div>"
+        ].join("");
+      }).join(""),
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function createClosureBaselineSnapshot(result){
+    var gates = gateListFromResult(result).map(function(gate){
+      return {
+        id:String(gate && gate.id || ""),
+        pass:!!(gate && gate.pass)
+      };
+    }).filter(function(gate){ return !!gate.id; });
+    var hardFailures = (result && Array.isArray(result.hardFailures) ? result.hardFailures : []).map(function(item){
+      return {
+        code:String(item && item.code || ""),
+        failed:!!(item && item.failed)
+      };
+    }).filter(function(item){ return !!item.code; });
+    var loops = result && result.feedbackLoops ? result.feedbackLoops : {};
+
+    return {
+      version:1,
+      savedAtDay:App.store.simDay,
+      savedAtIso:(new Date()).toISOString(),
+      ok:!!(result && result.ok),
+      summary:{
+        total:Number(result && result.summary && result.summary.total) || gates.length,
+        passed:Number(result && result.summary && result.summary.passed) || gates.filter(function(g){ return g.pass; }).length,
+        failed:Number(result && result.summary && result.summary.failed) || gates.filter(function(g){ return !g.pass; }).length
+      },
+      loops:{
+        growth:!!loops.growthLoopPass,
+        recession:!!loops.recessionLoopPass,
+        labour:!!loops.laborPressureLoopPass
+      },
+      keyMetrics:pickClosureKeyMetrics(result),
+      gates:gates,
+      hardFailures:hardFailures
+    };
+  }
+
+  function loadClosureBaselineSnapshot(){
+    var raw = safeLocalStorageGet(CLOSURE_BASELINE_STORAGE_KEY);
+    var parsed;
+
+    if (!raw) return null;
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.gates)) return null;
+    return parsed;
+  }
+
+  function compareClosureResultToBaseline(result, baseline){
+    var messages = [];
+    var gateById = {};
+    var hardFailureByCode = {};
+    var loops = result && result.feedbackLoops ? result.feedbackLoops : {};
+    var currentMetrics = pickClosureKeyMetrics(result);
+    var baselineMetrics = baseline && baseline.keyMetrics ? baseline.keyMetrics : null;
+    var daysPerYear = (App.data && App.data.CALENDAR && App.data.CALENDAR.daysPerYear) ? Number(App.data.CALENDAR.daysPerYear) : 360;
+    var baselineDay = Number(baseline && baseline.savedAtDay);
+    var currentDay = Number(App.store && App.store.simDay);
+    var yearsSinceBaseline = 0;
+    var staleMetricBaseline;
+    var resetDetected;
+
+    if (!result || !baseline) {
+      return { hasBaseline:!!baseline, hasResult:!!result, match:false, changedCount:0, messages:[] };
+    }
+
+    if (Number.isFinite(baselineDay) && Number.isFinite(currentDay) && currentDay > baselineDay) {
+      yearsSinceBaseline = (currentDay - baselineDay) / Math.max(1, daysPerYear);
+    }
+    resetDetected = Number.isFinite(baselineDay) && Number.isFinite(currentDay) && baselineDay > (currentDay + Math.max(10, Math.floor(daysPerYear * 0.25)));
+    if (resetDetected) {
+      return {
+        hasBaseline:true,
+        hasResult:true,
+        match:false,
+        changedCount:1,
+        messages:["Baseline belongs to an older run state than the current world (reset detected). Save a new baseline to compare accurately."],
+        staleMetricBaseline:false,
+        resetDetected:true,
+        yearsSinceBaseline:0
+      };
+    }
+    staleMetricBaseline = yearsSinceBaseline >= 3;
+
+    gateListFromResult(result).forEach(function(gate){
+      if (!gate || !gate.id) return;
+      gateById[String(gate.id)] = !!gate.pass;
+    });
+
+    (Array.isArray(result.hardFailures) ? result.hardFailures : []).forEach(function(item){
+      if (!item || !item.code) return;
+      hardFailureByCode[String(item.code)] = !!item.failed;
+    });
+
+    if (!!result.ok !== !!baseline.ok) {
+      messages.push("System status changed (baseline: " + (baseline.ok ? "PASS" : "FAIL") + ", current: " + (result.ok ? "PASS" : "FAIL") + ").");
+    }
+
+    if (!!loops.growthLoopPass !== !!(baseline.loops && baseline.loops.growth)) {
+      messages.push("Growth loop changed.");
+    }
+    if (!!loops.recessionLoopPass !== !!(baseline.loops && baseline.loops.recession)) {
+      messages.push("Recession loop changed.");
+    }
+    if (!!loops.laborPressureLoopPass !== !!(baseline.loops && baseline.loops.labour)) {
+      messages.push("Labour pressure loop changed.");
+    }
+
+    (baseline.gates || []).forEach(function(gate){
+      var id = String(gate && gate.id || "");
+      if (!id) return;
+      if (gateById[id] !== !!gate.pass) {
+        messages.push("Gate " + id + " changed from " + (gate.pass ? "PASS" : "FAIL") + " to " + (gateById[id] ? "PASS" : "FAIL") + ".");
+      }
+    });
+
+    (baseline.hardFailures || []).forEach(function(item){
+      var code = String(item && item.code || "");
+      if (!code) return;
+      if (hardFailureByCode[code] !== !!item.failed) {
+        messages.push(code + " changed from " + (item.failed ? "TRIGGERED" : "CLEAR") + " to " + (hardFailureByCode[code] ? "TRIGGERED" : "CLEAR") + ".");
+      }
+    });
+
+    if (baselineMetrics && currentMetrics && !staleMetricBaseline) {
+      if (Math.abs((Number(currentMetrics.unemploymentRate) || 0) - (Number(baselineMetrics.unemploymentRate) || 0)) > 0.012) {
+        messages.push("Unemployment drift exceeded tolerance.");
+      }
+      if (Math.abs((Number(currentMetrics.tradeShockIndexAvg) || 0) - (Number(baselineMetrics.tradeShockIndexAvg) || 0)) > 0.1) {
+        messages.push("Trade shock index drift exceeded tolerance.");
+      }
+      if (Math.abs((Number(currentMetrics.householdStressAvg) || 0) - (Number(baselineMetrics.householdStressAvg) || 0)) > 25) {
+        messages.push("Household stress drift exceeded tolerance.");
+      }
+      if (Math.abs((Number(currentMetrics.demandTotal) || 0) - (Number(baselineMetrics.demandTotal) || 0)) > Math.max(1, (Number(baselineMetrics.demandTotal) || 0) * 0.12)) {
+        messages.push("Consumer demand drift exceeded tolerance.");
+      }
+      if (Math.abs((Number(currentMetrics.firmRevenueTotal) || 0) - (Number(baselineMetrics.firmRevenueTotal) || 0)) > Math.max(1, (Number(baselineMetrics.firmRevenueTotal) || 0) * 0.14)) {
+        messages.push("Firm revenue drift exceeded tolerance.");
+      }
+    }
+
+    return {
+      hasBaseline:true,
+      hasResult:true,
+      match:messages.length === 0,
+      changedCount:messages.length,
+      messages:messages,
+      staleMetricBaseline:staleMetricBaseline,
+      resetDetected:false,
+      yearsSinceBaseline:Number(yearsSinceBaseline.toFixed(2))
+    };
+  }
+
+  closureGateBaseline = loadClosureBaselineSnapshot();
+  closureTelemetryHistory = loadClosureTelemetryHistory();
 
   function setInspectorTab(tab){
-    activeInspectorTab = tab === "governor" ? "governor" : "inspector";
+    activeInspectorTab = tab === "governor" || tab === "closure" ? tab : "inspector";
   }
 
   function setPeopleTab(tab){
@@ -96,6 +511,177 @@
         ].join("");
       }).join(""),
       "</div>"
+    ].join("");
+  }
+
+  function formatGateStatusBadge(pass){
+    return "<span class='closure-pill " + (pass ? "ok" : "fail") + "'>" + (pass ? "PASS" : "FAIL") + "</span>";
+  }
+
+  function renderGateRows(gates){
+    if (!gates || !gates.length) {
+      return "<div class='country-note'>No gate results yet.</div>";
+    }
+
+    return "<div class='closure-gate-list'>" + gates.map(function(gate){
+      var evidence = gate && gate.evidence && typeof gate.evidence === "object" ? gate.evidence : {};
+      var evidenceText = Object.keys(evidence).slice(0, 4).map(function(key){
+        return key + ": " + evidence[key];
+      }).join(" | ");
+
+      return [
+        "<div class='closure-gate-row " + (gate.pass ? "ok" : "fail") + "'>",
+        "<div class='closure-gate-head'><span class='closure-gate-id'>" + (gate.id || "?") + "</span><span class='closure-gate-title'>" + (gate.title || "Gate") + "</span>" + formatGateStatusBadge(!!gate.pass) + "</div>",
+        evidenceText ? ("<div class='country-note'>" + evidenceText + "</div>") : "",
+        "</div>"
+      ].join("");
+    }).join("") + "</div>";
+  }
+
+  function renderHardFailureRows(items){
+    if (!items || !items.length) return "";
+
+    return "<div class='closure-failure-list'>" + items.map(function(item){
+      return "<div class='closure-failure-row " + (item.failed ? "failed" : "ok") + "'><span>" + (item.code || "HF") + "</span><span>" + (item.label || "Failure check") + "</span><span>" + (item.failed ? "TRIGGERED" : "CLEAR") + "</span></div>";
+    }).join("") + "</div>";
+  }
+
+  function renderScenarioResultCard(result){
+    var evidence;
+    var evidenceText;
+
+    if (!result) return "";
+
+    evidence = result && result.evidence && typeof result.evidence === "object" ? result.evidence : {};
+    evidenceText = Object.keys(evidence).slice(0, 6).map(function(key){
+      return key + ": " + evidence[key];
+    }).join(" | ");
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Scenario Pack Result</div>",
+      "<div class='closure-gate-row " + (result.pass ? "ok" : "fail") + "'>",
+      "<div class='closure-gate-head'><span class='closure-gate-id'>SP</span><span class='closure-gate-title'>" + (result.title || result.label || "Scenario") + "</span>" + formatGateStatusBadge(!!result.pass) + "</div>",
+      "<div class='country-note'>Duration: " + (result.days || 0) + " days.</div>",
+      evidenceText ? ("<div class='country-note'>" + evidenceText + "</div>") : "",
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderScenarioSuiteResultCard(suite){
+    var items;
+
+    if (!suite || !Array.isArray(suite.results)) return "";
+
+    items = suite.results.map(function(item){
+      return "<div class='closure-failure-row " + (item && item.pass ? "ok" : "failed") + "'><span>" + ((item && item.label) || "Scenario") + "</span><span>" + (item && item.pass ? "PASS" : "FAIL") + "</span><span>" + ((item && item.days) || 0) + "d</span></div>";
+    }).join("");
+
+    return [
+      "<div class='mc'>",
+      "<div class='mcl'>Scenario Suite Summary</div>",
+      "<div class='country-note'>Passed " + (suite.summary && suite.summary.passed || 0) + " / " + (suite.summary && suite.summary.total || 0) + " scenario presets.</div>",
+      "<div class='closure-failure-list'>" + items + "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderClosureGates(){
+    var el = document.getElementById("dc");
+    var result = closureGateResult;
+    var summary = result && result.summary ? result.summary : null;
+    var tier1 = result && result.tiers ? result.tiers.tier1 : null;
+    var tier2 = result && result.tiers ? result.tiers.tier2 : null;
+    var tier3 = result && result.tiers ? result.tiers.tier3 : null;
+    var tier4 = result && result.tiers ? result.tiers.tier4 : null;
+    var failures = result && Array.isArray(result.hardFailures) ? result.hardFailures : [];
+    var scenarioPresets = (App.sim && typeof App.sim.getScenarioPresetList === "function") ? (App.sim.getScenarioPresetList() || []) : [];
+    var scenarioSelected = scenarioPresets.find(function(item){ return item.id === closureScenarioSelectedId; }) || null;
+    var scenarioRunLabel = closureScenarioRunning ? "Running Scenario..." : "Run Scenario";
+    var scenarioSuiteLabel = closureScenarioRunning ? "Running All..." : "Run All Scenarios";
+    var actionsBusy = closureGateRunning || closureGateFastForwardRunning || closureScenarioRunning;
+    var scenarioOptions = "";
+    var triggeredFailures = failures.filter(function(item){ return !!item.failed; }).length;
+    var runLabel = closureGateRunning ? "Running..." : "Run Closure Gates";
+    var simYearLabel = closureGateFastForwardRunning ? "Simulating..." : "Sim +1Y";
+    var saveBaselineDisabled = actionsBusy || !result;
+    var compareBaselineDisabled = actionsBusy || !result || !closureGateBaseline;
+    var clearBaselineDisabled = !closureGateBaseline;
+    var baselineText = closureGateBaseline ? ("Baseline saved at day " + (closureGateBaseline.savedAtDay || 0) + ".") : "No baseline saved.";
+    var baselineAgeYears = 0;
+    var baselineDiffText = "";
+    var daysPerYear = (App.data && App.data.CALENDAR && App.data.CALENDAR.daysPerYear) ? Number(App.data.CALENDAR.daysPerYear) : 360;
+    var statusBadge = result ? (result.ok ? "<span class='closure-pill ok'>SYSTEM PASS</span>" : "<span class='closure-pill fail'>SYSTEM FAIL</span>") : "<span class='closure-pill'>Not Run</span>";
+
+    if (!closureScenarioSelectedId && scenarioPresets.length) {
+      closureScenarioSelectedId = scenarioPresets[0].id;
+      scenarioSelected = scenarioPresets[0];
+    }
+
+    scenarioOptions = scenarioPresets.map(function(preset){
+      var selected = preset.id === closureScenarioSelectedId ? " selected" : "";
+      return "<option value='" + escapeAttrText(preset.id) + "'" + selected + ">" + preset.label + "</option>";
+    }).join("");
+
+    if (closureGateBaseline) {
+      baselineAgeYears = Math.max(0, ((Number(App.store.simDay) || 0) - (Number(closureGateBaseline.savedAtDay) || 0)) / Math.max(1, daysPerYear));
+      baselineText += " Baseline age: " + baselineAgeYears.toFixed(1) + " years.";
+      if ((Number(closureGateBaseline.savedAtDay) || 0) > ((Number(App.store.simDay) || 0) + Math.max(10, Math.floor(daysPerYear * 0.25)))) {
+        baselineText += " Current world appears newer-reset than this baseline.";
+      }
+    }
+
+    if (closureGateBaselineDiff) {
+      if (closureGateBaselineDiff.hasBaseline && closureGateBaselineDiff.hasResult) {
+        if (closureGateBaselineDiff.resetDetected) {
+          baselineDiffText = "<div class='country-note'><strong>BASELINE INVALID FOR CURRENT WORLD:</strong> reset detected. Save a new baseline and compare again.</div>";
+        } else if (closureGateBaselineDiff.match) {
+          if (closureGateBaselineDiff.staleMetricBaseline) {
+            baselineDiffText = "<div class='country-note'><strong>BASELINE MATCH (STRUCTURAL):</strong> no gate/loop/hard-failure deltas. Metric drift checks were skipped because baseline age is " + (Number(closureGateBaselineDiff.yearsSinceBaseline) || 0).toFixed(1) + " years. Save a new baseline for strict metric compare.</div>";
+          } else {
+            baselineDiffText = "<div class='country-note'><strong>BASELINE MATCH CONFIRMED:</strong> current closure output matches saved baseline with zero deltas.</div>";
+          }
+        } else {
+          baselineDiffText = "<div class='country-note'><strong>BASELINE MISMATCH:</strong> " + closureGateBaselineDiff.changedCount + " delta(s). " + closureGateBaselineDiff.messages.slice(0, 3).join(" | ") + "</div>";
+        }
+      } else if (closureGateBaselineDiff.messages && closureGateBaselineDiff.messages.length) {
+        baselineDiffText = "<div class='country-note'><strong>BASELINE COMPARE:</strong> " + closureGateBaselineDiff.messages[0] + "</div>";
+      }
+    }
+
+    el.innerHTML = [
+      "<div class='mc'>",
+      "<div class='mcl'>Tier 1-4 Closure Validation</div>",
+      "<div class='country-note'>Runs causal gate checks + scenario shocks with rollback. Use this as hard completion criteria for foundations.</div>",
+      "<div class='closure-actions'>",
+      "<button id='run-closure-gates-btn' class='sb" + (closureGateRunning ? " act" : "") + "' type='button'" + (actionsBusy ? " disabled" : "") + ">" + runLabel + "</button>",
+      "<button id='sim-forward-year-btn' class='sb" + (closureGateFastForwardRunning ? " act" : "") + "' type='button'" + (actionsBusy ? " disabled" : "") + ">" + simYearLabel + "</button>",
+      "<select id='closure-scenario-select' class='sb'" + (actionsBusy || !scenarioPresets.length ? " disabled" : "") + ">" + scenarioOptions + "</select>",
+      "<button id='run-closure-scenario-btn' class='sb" + (closureScenarioRunning ? " act" : "") + "' type='button'" + (actionsBusy || !scenarioSelected ? " disabled" : "") + ">" + scenarioRunLabel + "</button>",
+      "<button id='run-closure-scenario-suite-btn' class='sb" + (closureScenarioRunning ? " act" : "") + "' type='button'" + (actionsBusy || !scenarioPresets.length ? " disabled" : "") + ">" + scenarioSuiteLabel + "</button>",
+      "<button id='save-closure-baseline-btn' class='sb' type='button'" + (saveBaselineDisabled ? " disabled" : "") + ">Save Baseline</button>",
+      "<button id='compare-closure-baseline-btn' class='sb' type='button'" + (compareBaselineDisabled ? " disabled" : "") + ">Compare Baseline</button>",
+      "<button id='clear-closure-baseline-btn' class='sb' type='button'" + (clearBaselineDisabled ? " disabled" : "") + ">Clear Baseline</button>",
+      statusBadge,
+      "</div>",
+      "<div class='country-note'>Fast-forward uses accurate live tick logic for " + daysPerYear + " days.</div>",
+      (scenarioSelected ? ("<div class='country-note'>Selected scenario: " + scenarioSelected.label + " (" + scenarioSelected.days + " days). " + (scenarioSelected.description || "") + "</div>") : ""),
+      "<div class='country-note'>" + baselineText + "</div>",
+      baselineDiffText,
+      "</div>",
+      summary ? ("<div class='sg sg3'><div class='sbox'><div class='sl'>Passed</div><div class='sv g'>" + summary.passed + "</div></div><div class='sbox'><div class='sl'>Failed</div><div class='sv r'>" + summary.failed + "</div></div><div class='sbox'><div class='sl'>Triggered Hard Failures</div><div class='sv " + (triggeredFailures ? "r" : "g") + "'>" + triggeredFailures + "</div></div></div>") : "",
+      renderClosureTelemetryDashboard(result, closureGateBaseline, closureTelemetryHistory),
+      renderClosureRunHistory(closureTelemetryHistory),
+      renderScenarioResultCard(closureScenarioResult),
+      renderScenarioSuiteResultCard(closureScenarioSuiteResult),
+      result && result.feedbackLoops ? ("<div class='sg sg3'><div class='sbox'><div class='sl'>Growth Loop</div><div class='sv " + (result.feedbackLoops.growthLoopPass ? "g" : "r") + "'>" + (result.feedbackLoops.growthLoopPass ? "Pass" : "Fail") + "</div></div><div class='sbox'><div class='sl'>Recession Loop</div><div class='sv " + (result.feedbackLoops.recessionLoopPass ? "g" : "r") + "'>" + (result.feedbackLoops.recessionLoopPass ? "Pass" : "Fail") + "</div></div><div class='sbox'><div class='sl'>Labour Pressure Loop</div><div class='sv " + (result.feedbackLoops.laborPressureLoopPass ? "g" : "r") + "'>" + (result.feedbackLoops.laborPressureLoopPass ? "Pass" : "Fail") + "</div></div></div>") : "",
+      "<div class='mc'><div class='mcl'>Tier 1 Gates</div>" + renderGateRows(tier1) + "</div>",
+      "<div class='mc'><div class='mcl'>Tier 2 Gates</div>" + renderGateRows(tier2) + "</div>",
+      "<div class='mc'><div class='mcl'>Tier 3 Gates</div>" + renderGateRows(tier3) + "</div>",
+      "<div class='mc'><div class='mcl'>Tier 4 Gates</div>" + renderGateRows(tier4) + "</div>",
+      "<div class='mc'><div class='mcl'>Hard Failure Conditions</div>" + renderHardFailureRows(failures) + "</div>",
+      (closureGateLastRunDay != null ? ("<div class='country-note'>Last run: " + App.utils.fmtDay(closureGateLastRunDay) + "</div>") : "")
     ].join("");
   }
 
@@ -680,13 +1266,14 @@
         var bloc = App.store.getBloc(business.blocId);
         var countryFlag = App.utils.getCountryFlag(business.countryISO) || (bloc ? bloc.flag : "");
         var owner = App.store.getPerson(business.ownerId);
+        var hqLabel = business.hqCity ? (business.hqCity + ", " + App.store.getCountryName(business.countryISO)) : App.store.getCountryName(business.countryISO);
         var selected = App.store.selection.type === "business" && App.store.selection.id === business.id;
         var valuationClass = (Number(business.profitGU) || 0) >= 0 ? "wp" : "wn";
 
         return [
           "<div class='pr " + (selected ? "sel" : "") + "' data-business-id='" + business.id + "'>",
           "<div class='prn'><span>" + countryFlag + " " + business.name + "</span><span class='st s-" + (business.stage || "growing") + "'>" + (business.stage || "growth") + "</span></div>",
-          "<div class='prb'>" + (business.industry || "Business") + " - " + App.store.getCountryName(business.countryISO) + "</div>",
+          "<div class='prb'>" + (business.industry || "Business") + " - " + hqLabel + "</div>",
           "<div class='prm'>Owner: " + (owner ? owner.name : "Unknown") + " | Employees: " + (business.employees || 0) + "</div>",
           "<div class='prw " + valuationClass + "'>" + App.utils.fmtCountry(business.valuationGU, business.countryISO) + "</div>",
           "</div>"
@@ -704,10 +1291,12 @@
       var currency = App.utils.getCurrency(person.countryISO);
       var selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
       var roles = App.utils.getPersonRoles(person);
+      var birthplace = person.birthCity ? (person.birthCity + (person.countryISO ? ", " + person.countryISO : "")) : "Unknown";
       return [
         "<div class='pr " + (selected ? "sel" : "") + "' data-person-id='" + person.id + "'>",
         "<div class='prn'><span>" + countryFlag + " " + person.name + "</span><span class='st s-" + person.status + "'>" + person.status + "</span></div>",
         "<div class='prb'>" + App.utils.locationLabel(person, true) + " - " + currency.sym + " " + currency.code + (business ? " - " + business.name : " - independent") + "</div>",
+        "<div class='prb'>Birthplace: " + birthplace + "</div>",
         "<div class='prbadges'>" + renderBadgeRow([App.utils.getLifeStageLabel(person)], "lbadge") + renderBadgeRow(roles, "rbadge") + "</div>",
         "<div class='prw " + (person.netWorthGU >= 0 ? "wp" : "wn") + "'>" + App.utils.fmtCountry(person.netWorthGU, person.countryISO) + "</div>",
         "</div>"
@@ -814,6 +1403,8 @@
     var owner = App.store.getPerson(business.ownerId);
     var ceo = App.store.getBusinessLeader(business, "ceo");
     var leadership = App.store.getBusinessLeadership(business);
+    var listing = App.store.getListingForBusiness ? App.store.getListingForBusiness(business.id) : null;
+    var dividendYield = listing && listing.sharePriceGU > 0 ? ((listing.annualDividendPerShareGU || 0) / listing.sharePriceGU) * 100 : 0;
     var subtitle = "<div class='bci'>" + business.industry + " - " + business.stage.toUpperCase() + " - " + currency.sym + " " + currency.code + "</div>";
 
     return [
@@ -838,8 +1429,20 @@
       "<div class='brow'>Owner<span>" + renderPersonLink(owner) + "</span></div>",
       "<div class='brow'>CEO<span>" + renderPersonLink(ceo && ceo.person ? ceo.person : owner) + "</span></div>",
       "<div class='brow'>Founded<span>" + App.utils.fmtDay(business.foundedDay != null ? business.foundedDay : App.store.simDay) + "</span></div>",
+      (listing ? "<div class='brow'>Listing<span>" + listing.symbol + "</span></div>" : ""),
+      (listing ? "<div class='brow'>Share Price<span>" + App.utils.fmtCountry(listing.sharePriceGU || 0, business.countryISO) + "</span></div>" : ""),
+      (listing ? "<div class='brow'>Dividend Yield<span>" + dividendYield.toFixed(1) + "%</span></div>" : ""),
       "<div class='brow'>Succession Count<span>" + business.successionCount + "</span></div>",
       "</div>",
+      (listing ? [
+        "<div class='mc'>",
+        "<div class='mcl mcl-row'><span>Share Price History</span><div class='chart-mode-toggle' role='group' aria-label='Stock chart mode'>" +
+          "<button type='button' class='chart-mode-btn " + (stockChartViewMode === "line" ? "act" : "") + "' data-stock-chart-mode='line'>Line</button>" +
+          "<button type='button' class='chart-mode-btn " + (stockChartViewMode === "candles" ? "act" : "") + "' data-stock-chart-mode='candles'>Candles</button>" +
+        "</div></div>",
+        "<canvas id='sch' class='stock-chart-canvas' height='64'></canvas>",
+        "</div>"
+      ].join("") : "<div class='country-note'>Business is not publicly listed yet.</div>"),
       "<div class='mc'><div class='mcl'>Revenue History</div><canvas id='rch' height='50'></canvas></div>",
       "<div class='mc'><div class='mcl'>" + bloc.currency + " Strength</div><canvas id='fch' height='50'></canvas></div>"
     ].join("");
@@ -854,6 +1457,9 @@
     var mobilityLabel;
     var stressClass;
     var pressureLabel = "balanced";
+    var assetTotal;
+    var assetNetWorth;
+    var assetReturnPct;
 
     if (!household) {
       return "<div class='mc'><div class='mcl'>Household Economy</div><div class='country-note'>Household data is still being assembled.</div></div>";
@@ -864,6 +1470,15 @@
     childcareBurden = household.monthlyExpensesGU > 0 ? Math.round(((household.childcareCostGU || 0) / household.monthlyExpensesGU) * 100) : 0;
     mobilityLabel = household.mobilityScore > 8 ? "upward" : (household.mobilityScore < -8 ? "downward" : "stable");
     stressClass = household.financialStress >= 72 ? "r" : (household.financialStress >= 48 ? "a" : "g");
+    assetTotal = Math.max(0,
+      (Number(household.assetCashGU) || Number(household.cashOnHandGU) || 0) +
+      (Number(household.assetEquityGU) || 0) +
+      (Number(household.assetBusinessOwnershipGU) || 0) +
+      (Number(household.assetPropertyGU) || 0) +
+      (Number(household.assetTrustGU) || 0)
+    );
+    assetNetWorth = assetTotal - (Number(household.assetDebtObligationsGU) || Number(household.debtGU) || 0);
+    assetReturnPct = (Number(household.assetReturnRateAnnual) || 0) * 100;
 
     if (profile) {
       if ((profile.populationPressure || 0.5) >= 0.62) {
@@ -890,6 +1505,21 @@
       "<div class='sbox'><div class='sl'>Cash</div><div class='sv c'>" + App.utils.fmtCountry(household.cashOnHandGU || 0, person.countryISO) + "</div></div>",
       "<div class='sbox'><div class='sl'>Debt</div><div class='sv " + ((household.debtGU || 0) > 0 ? "r" : "g") + "'>" + App.utils.fmtCountry(household.debtGU || 0, person.countryISO) + "</div></div>",
       "<div class='sbox'><div class='sl'>Inheritance Pressure</div><div class='sv a'>" + App.utils.fmtCountry(household.inheritancePressureGU || 0, person.countryISO) + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Asset Cash</div><div class='sv c'>" + App.utils.fmtCountry(household.assetCashGU || household.cashOnHandGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Equity</div><div class='sv b'>" + App.utils.fmtCountry(household.assetEquityGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Property</div><div class='sv a'>" + App.utils.fmtCountry(household.assetPropertyGU || 0, person.countryISO) + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Business Ownership</div><div class='sv g'>" + App.utils.fmtCountry(household.assetBusinessOwnershipGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Inherited Trusts</div><div class='sv a'>" + App.utils.fmtCountry(household.assetTrustGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Asset Debt</div><div class='sv " + ((household.assetDebtObligationsGU || household.debtGU || 0) > 0 ? "r" : "g") + "'>" + App.utils.fmtCountry(household.assetDebtObligationsGU || household.debtGU || 0, person.countryISO) + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Total Assets</div><div class='sv c'>" + App.utils.fmtCountry(assetTotal, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Net Assets</div><div class='sv " + (assetNetWorth >= 0 ? "g" : "r") + "'>" + App.utils.fmtCountry(assetNetWorth, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Annual Carry</div><div class='sv " + ((household.assetYieldAnnualGU || 0) >= 0 ? "g" : "r") + "'>" + App.utils.fmtCountry(household.assetYieldAnnualGU || 0, person.countryISO) + " (" + assetReturnPct.toFixed(1) + "%)</div></div>",
       "</div>",
       "<div class='country-note'>Housing burden: <strong>" + housingBurden + "%</strong> of monthly costs. Childcare burden: <strong>" + childcareBurden + "%</strong>.</div>",
       (profile ? "<div class='country-note'>Median wage in " + App.store.getCountryName(person.countryISO) + ": <strong>" + App.utils.fmtCountry(profile.medianWageGU || 0, person.countryISO) + "</strong>. Household context currently reads as <strong>" + pressureLabel + "</strong>.</div>" : ""),
@@ -960,6 +1590,10 @@
     var retirementTypeLabel = person.retirementType ? String(person.retirementType).replace(/_/g, " ").toUpperCase() : "UNSPECIFIED";
     var lifecycleStageLabel = String(person.workerLifecycleStage || "dependent").replace(/_/g, " ").toUpperCase();
     var occupationLabel = String(person.occupationCategory || "dependent").replace(/_/g, " ").toUpperCase();
+    var birthplaceCity = person.birthCity || person.city || "Unknown";
+    var birthplaceCountryIso = person.birthCountryISO || person.countryISO;
+    var birthplaceCountryName = birthplaceCountryIso ? App.store.getCountryName(birthplaceCountryIso) : "Unknown";
+    var birthplaceLabel = birthplaceCity + ", " + birthplaceCountryName;
     var heir = ownedBusiness && App.sim.getPotentialHeir ? App.sim.getPotentialHeir(person) : null;
     var traitSnapshot = (person.lastTraitEffects && person.lastTraitEffects.length) ? person.lastTraitEffects : ((business && business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
     var skills = person.skills || {};
@@ -1008,6 +1642,7 @@
       "<div class='dname'>" + person.name + "</div>",
       "<div class='dtitle'>" + notes.join(" - ") + "</div>",
       "<div class='country-note'>Born: <strong>" + App.utils.fmtDay(birthDay) + "</strong></div>",
+      "<div class='country-note'>Birthplace: <strong>" + birthplaceLabel + "</strong></div>",
       (person.nativeDisplayName ? "<div class='country-note'>Other name: <strong>" + person.nativeDisplayName + "</strong></div>" : ""),
       (employmentBusiness && person.jobTitle ? "<div class='country-note'>Current role: <strong>" + person.jobTitle + "</strong> at " + renderBusinessLink(employmentBusiness) + ".</div>" : ""),
       "<div class='prbadges detail-badges'>" + renderBadgeRow(App.utils.getPersonRoles(person), "rbadge") + "</div>",
@@ -1016,6 +1651,11 @@
       "<div class='sbox'><div class='sl'>Net Worth (Home)</div><div class='sv " + (person.netWorthGU > 30000 ? "g" : person.netWorthGU > 0 ? "a" : "r") + "'>" + App.utils.fmtCountry(person.netWorthGU, person.countryISO) + "</div></div>",
       "<div class='sbox'><div class='sl'>Net Worth (GU)</div><div class='sv c'>" + App.utils.fmtGU(person.netWorthGU) + "</div></div>",
       "<div class='sbox'><div class='sl'>Net Worth (USD)</div><div class='sv b'>" + App.utils.fmtUSD(person.netWorthGU) + "</div></div>",
+      "</div>",
+      "<div class='sg sg3'>",
+      "<div class='sbox'><div class='sl'>Inherited Wealth</div><div class='sv a'>" + App.utils.fmtCountry(person.lifetimeInheritedGU || 0, person.countryISO) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Inheritance Events</div><div class='sv c'>" + Math.max(0, Number(person.inheritanceTransferCount) || 0) + "</div></div>",
+      "<div class='sbox'><div class='sl'>Last Inheritance</div><div class='sv b'>" + (person.lastInheritanceDay == null ? "N/A" : App.utils.fmtDay(person.lastInheritanceDay)) + "</div></div>",
       "</div>",
       "<div class='sg sg3'>",
       "<div class='sbox'><div class='sl'>Family Size</div><div class='sv b'>" + ((spouse ? 1 : 0) + children.length) + "</div></div>",
@@ -1074,6 +1714,12 @@
     if (bloc.rateHistory.length > 1) {
       drawLine(document.getElementById("fch"), bloc.rateHistory.map(function(rate){ return 1 / rate; }), bloc.label);
     }
+    if (business) {
+      var listing = App.store.getListingForBusiness ? App.store.getListingForBusiness(business.id) : null;
+      if (listing) {
+        drawStockPriceChart(document.getElementById("sch"), getBusinessStockCandles(business.id, listing), stockChartViewMode);
+      }
+    }
     bindInspectorRichTooltips(el);
   }
 
@@ -1085,7 +1731,12 @@
     var founder = App.store.getPerson(business.founderId);
     var owner = App.store.getPerson(business.ownerId);
     var listing = App.store.getListingForBusiness ? App.store.getListingForBusiness(business.id) : null;
+    var locationLabel = business.hqCity ? (business.hqCity + ", " + App.store.getCountryName(business.countryISO)) : App.store.getCountryName(business.countryISO);
     var ceo = App.store.getBusinessLeader(business, "ceo");
+    var ceoPerson = ceo && ceo.person ? ceo.person : owner;
+    var founderBirthplace = founder ? ((founder.birthCity || founder.city || "Unknown") + ", " + App.store.getCountryName(founder.countryISO)) : "Unknown";
+    var ownerBirthplace = owner ? ((owner.birthCity || owner.city || "Unknown") + ", " + App.store.getCountryName(owner.countryISO)) : "Unknown";
+    var ceoBirthplace = ceoPerson ? ((ceoPerson.birthCity || ceoPerson.city || "Unknown") + ", " + App.store.getCountryName(ceoPerson.countryISO)) : "Unknown";
     var leadership = App.store.getBusinessLeadership(business);
     var otherEmployees = Math.max(0, business.employees - leadership.length);
     var businessTraitEffects = (business.lastTraitEffects && business.lastTraitEffects.length) ? business.lastTraitEffects : ((business.currentDecision && business.currentDecision.traitEffects) ? business.currentDecision.traitEffects : []);
@@ -1097,7 +1748,7 @@
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
       "<div class='cflag'>" + countryFlag + "</div>",
       "<div class='cinfo'>",
-      "<div class='cname2' style='color:" + bloc.label + "'>" + App.store.getCountryName(business.countryISO) + "</div>",
+      "<div class='cname2' style='color:" + bloc.label + "'>" + locationLabel + "</div>",
       "<div class='cfx'>" + currency.sym + " " + currency.code + " - " + currency.name + " - " + business.industry + "</div>",
       "</div></div>",
       renderBusinessLockup(
@@ -1134,15 +1785,25 @@
         "<div class='sbox'><div class='sl'>Shares</div><div class='sv a'>" + (listing.totalShares || 0).toLocaleString() + "</div></div>",
         "<div class='sbox'><div class='sl'>Public Float</div><div class='sv c'>" + floatShares.toLocaleString() + "</div></div>",
         "<div class='sbox'><div class='sl'>Holders</div><div class='sv b'>" + holderCount + "</div></div>",
+        "</div>",
+        "<div class='mc'>",
+        "<div class='mcl mcl-row'><span>Share Price History</span><div class='chart-mode-toggle' role='group' aria-label='Stock chart mode'>" +
+          "<button type='button' class='chart-mode-btn " + (stockChartViewMode === "line" ? "act" : "") + "' data-stock-chart-mode='line'>Line</button>" +
+          "<button type='button' class='chart-mode-btn " + (stockChartViewMode === "candles" ? "act" : "") + "' data-stock-chart-mode='candles'>Candles</button>" +
+        "</div></div>",
+        "<canvas id='sch' class='stock-chart-canvas' height='64'></canvas>",
         "</div>"
       ].join("") : "<div class='country-note'>Not listed yet. Eligible firms can list once scale and reputation stabilize.</div>"),
       "<div class='bc'>",
       "<div class='bcn'>" + business.name + "</div>",
       "<div class='bci'>" + business.industry + " - " + business.stage.toUpperCase() + " - " + bloc.flag + " " + bloc.name + "</div>",
       "<div class='brow'>Founder<span>" + renderPersonLink(founder) + "</span></div>",
+      "<div class='brow'>Founder Birthplace<span>" + founderBirthplace + "</span></div>",
       "<div class='brow'>Owner<span>" + renderPersonLink(owner) + "</span></div>",
+      "<div class='brow'>Owner Birthplace<span>" + ownerBirthplace + "</span></div>",
       "<div class='brow'>Current CEO<span>" + renderPersonLink(ceo && ceo.person ? ceo.person : owner) + "</span></div>",
-      "<div class='brow'>Country<span>" + App.store.getCountryName(business.countryISO) + "</span></div>",
+      "<div class='brow'>CEO Birthplace<span>" + ceoBirthplace + "</span></div>",
+      "<div class='brow'>HQ<span>" + locationLabel + "</span></div>",
       "<div class='brow'>Revenue (GU)<span>" + App.utils.fmtGU(business.revenueGU) + "</span></div>",
       "<div class='brow'>Valuation (GU)<span>" + App.utils.fmtGU(business.valuationGU) + "</span></div>",
       "<div class='brow'>Succession Count<span>" + business.successionCount + "</span></div>",
@@ -1160,6 +1821,9 @@
     }
     if (bloc.rateHistory.length > 1) {
       drawLine(document.getElementById("fch"), bloc.rateHistory.map(function(rate){ return 1 / rate; }), bloc.label);
+    }
+    if (listing) {
+      drawStockPriceChart(document.getElementById("sch"), getBusinessStockCandles(business.id, listing), stockChartViewMode);
     }
   }
 
@@ -1188,6 +1852,7 @@
       return dynasties[lineageId] > 1;
     }).length;
     var stateDirectory = "";
+    var cityDirectory = "";
     var employmentRate = profile && profile.laborForce > 0 ? (profile.employed / profile.laborForce) : null;
     var pressureLabel = "stable pressure";
     var countryEducationScore = profile ? Math.round((Number(profile.educationIndex) || 0) * 100) : 0;
@@ -1251,6 +1916,68 @@
       ].join("");
     }
 
+    if (App.data && typeof App.data.getWorldCityDetailsByCountry === "function") {
+      var cityDetails = App.data.getWorldCityDetailsByCountry(iso);
+      var subdivisionGroups = App.data.getWorldCitySubdivisionsByCountry ? App.data.getWorldCitySubdivisionsByCountry(iso, 8) : [];
+
+      if (cityDetails.length) {
+        if (iso === "US") {
+          var groupedByState = {};
+
+          cityDetails.forEach(function(city){
+            var stateName = city.state || "Unknown State";
+            if (!Array.isArray(groupedByState[stateName])) groupedByState[stateName] = [];
+            groupedByState[stateName].push(city.name);
+          });
+
+          cityDirectory = [
+            "<div class='mc'>",
+            "<div class='mcl'>City Directory (" + cityDetails.length + " loaded)</div>",
+            "<div class='country-note'>Cities grouped by state from worldcities.csv.</div>",
+            "<div class='state-list'>",
+            Object.keys(groupedByState).sort(function(first, second){
+              return first.localeCompare(second);
+            }).map(function(stateName){
+              var names = groupedByState[stateName];
+              return "<div class='state-row active'><span class='state-name'>" + stateName + "</span><span class='state-meta'>" + names.length + " cities | " + names.slice(0, 8).join(", ") + (names.length > 8 ? " ..." : "") + "</span></div>";
+            }).join(""),
+            "</div>",
+            "</div>"
+          ].join("");
+        } else if (subdivisionGroups.length >= 2) {
+          cityDirectory = [
+            "<div class='mc'>",
+            "<div class='mcl'>City Directory (" + cityDetails.length + " loaded)</div>",
+            "<div class='country-note'>Cities grouped by subdivision from worldcities.csv.</div>",
+            "<div class='state-list'>",
+            subdivisionGroups.map(function(group){
+              var names = group.sampleCities || [];
+              return "<div class='state-row active'><span class='state-name'>" + group.name + "</span><span class='state-meta'>" + group.count + " cities | " + names.join(", ") + (group.count > names.length ? " ..." : "") + "</span></div>";
+            }).join(""),
+            "</div>",
+            "</div>"
+          ].join("");
+        } else {
+          cityDirectory = [
+            "<div class='mc'>",
+            "<div class='mcl'>City Directory (" + cityDetails.length + " loaded)</div>",
+            "<div class='country-note'>" + cityDetails.map(function(city){ return city.name; }).join(", ") + "</div>",
+            "</div>"
+          ].join("");
+        }
+      } else if (App.data && typeof App.data.getWorldCitiesByCountry === "function") {
+        var fallbackCities = App.data.getWorldCitiesByCountry(iso) || [];
+        if (fallbackCities.length) {
+          cityDirectory = [
+            "<div class='mc'>",
+            "<div class='mcl'>City Directory (" + fallbackCities.length + " loaded)</div>",
+            "<div class='country-note'>" + fallbackCities.join(", ") + "</div>",
+            "</div>"
+          ].join("");
+        }
+      }
+    }
+
     el.innerHTML = [
       "<div class='cban' style='background:" + bloc.color + ";border:1px solid " + bloc.label + "40'>",
       "<div class='cflag'>" + countryFlag + "</div>",
@@ -1277,6 +2004,7 @@
       "<div class='country-note'>" + (topBusiness ? ("Top business: " + renderBusinessLink(topBusiness, "<strong>" + topBusiness.name + "</strong>") + " (" + App.utils.fmtCountry(topBusiness.valuationGU, iso) + ")") : "No businesses are currently operating from this country.") + "</div>",
       "<div class='country-note'>Historical family members recorded: <strong>" + allPeople.length + "</strong></div>",
       "</div>",
+      cityDirectory,
       renderCountryBusinessList(businesses),
       stateDirectory
     ].join("");
@@ -1292,6 +2020,11 @@
 
     if (activeInspectorTab === "governor") {
       renderGovernorLog();
+      return;
+    }
+
+    if (activeInspectorTab === "closure") {
+      renderClosureGates();
       return;
     }
 
@@ -1324,6 +2057,22 @@
 
     if (App.store.selection.type === "country") {
       renderCountryDetail(App.store.selection.id);
+    }
+  }
+
+  function renderInspectorSafe(){
+    try {
+      renderInspector();
+    } catch (error) {
+      var panel = document.getElementById("dc");
+      if (panel) {
+        panel.innerHTML = [
+          "<div class='mc'>",
+          "<div class='mcl'>Inspector Render Error</div>",
+          "<div class='country-note'>" + escapeAttrText(error && error.message ? error.message : "Unknown UI error.") + "</div>",
+          "</div>"
+        ].join("");
+      }
     }
   }
 
@@ -1645,6 +2394,196 @@
     context.fill();
   }
 
+  function getBusinessStockCandles(businessId, listing){
+    var stockMarket = App.store.stockMarket || {};
+    var tape = Array.isArray(stockMarket.tradeTape) ? stockMarket.tradeTape : [];
+    var groupedByDay = {};
+    var WINDOW_DAYS = 40;
+    var latestDay = Math.max(0, Number(App.store.simDay) || 0);
+    var startDay = Math.max(0, latestDay - (WINDOW_DAYS - 1));
+    var fallbackPrice = Math.max(0.05, Number(listing && listing.sharePriceGU) || 0.05);
+    var prevClose = null;
+    var candles = [];
+
+    tape.forEach(function(entry){
+      var item = entry && typeof entry === "object" ? entry : null;
+      var day;
+      var close;
+      var movePct;
+      var open;
+      var high;
+      var low;
+      var volume;
+      var bucket;
+
+      if (!item || item.businessId !== businessId) return;
+
+      day = Math.max(0, Number(item.day) || 0);
+      if (day < startDay || day > latestDay) return;
+
+      close = Math.max(0.05, Number(item.closePriceGU != null ? item.closePriceGU : item.priceGU) || 0.05);
+      movePct = Number(item.movePct) || 0;
+      open = Number(item.openPriceGU);
+      if (!Number.isFinite(open) || open <= 0) {
+        open = close / Math.max(0.05, 1 + movePct / 100);
+      }
+      open = Math.max(0.05, Number.isFinite(open) ? open : close);
+      high = Math.max(open, close, Math.max(0.05, Number(item.highPriceGU) || 0));
+      low = Math.min(open, close, Math.max(0.05, Number(item.lowPriceGU) || Math.min(open, close)));
+      volume = Math.max(0, Math.floor(Number(item.volumeShares) || 0));
+      bucket = groupedByDay[day];
+
+      if (!bucket) {
+        groupedByDay[day] = {
+          day:day,
+          open:open,
+          high:high,
+          low:low,
+          close:close,
+          volume:volume
+        };
+        return;
+      }
+
+      bucket.high = Math.max(bucket.high, high);
+      bucket.low = Math.min(bucket.low, low);
+      bucket.close = close;
+      bucket.volume += volume;
+    });
+
+    for (var dayCursor = startDay; dayCursor <= latestDay; dayCursor += 1) {
+      var bucket = groupedByDay[dayCursor];
+      var basePrice;
+
+      if (bucket) {
+        candles.push(bucket);
+        prevClose = Math.max(0.05, Number(bucket.close) || fallbackPrice);
+        continue;
+      }
+
+      basePrice = prevClose != null ? prevClose : fallbackPrice;
+      candles.push({
+        day:dayCursor,
+        open:basePrice,
+        high:basePrice,
+        low:basePrice,
+        close:basePrice,
+        volume:0
+      });
+      prevClose = basePrice;
+    }
+
+    return candles;
+  }
+
+  function drawStockPriceChart(canvas, candles, mode){
+    var width;
+    var height;
+    var context;
+    var padding;
+    var chartWidth;
+    var chartHeight;
+    var lows;
+    var highs;
+    var min;
+    var max;
+    var valueRange;
+    var slotWidth;
+    var yFor;
+
+    if (!canvas || !Array.isArray(candles) || !candles.length) return;
+
+    width = canvas.offsetWidth || 240;
+    height = canvas.offsetHeight || 64;
+    canvas.width = width;
+    canvas.height = height;
+
+    context = canvas.getContext("2d");
+    context.clearRect(0, 0, width, height);
+
+    padding = { t:6, b:8, l:4, r:4 };
+    chartWidth = width - padding.l - padding.r;
+    chartHeight = height - padding.t - padding.b;
+    lows = candles.map(function(candle){ return Math.max(0.05, Number(candle.low) || 0.05); });
+    highs = candles.map(function(candle){ return Math.max(0.05, Number(candle.high) || 0.05); });
+    min = Math.min.apply(null, lows);
+    max = Math.max.apply(null, highs);
+    valueRange = max - min;
+
+    if (valueRange < 0.0001) {
+      min *= 0.98;
+      max *= 1.02;
+      valueRange = max - min;
+    }
+
+    slotWidth = chartWidth / Math.max(1, candles.length);
+    yFor = function(value){
+      return padding.t + chartHeight - ((value - min) / (valueRange || 1)) * chartHeight;
+    };
+
+    context.strokeStyle = "rgba(120, 160, 192, 0.18)";
+    context.lineWidth = 1;
+    [0.5].forEach(function(tick){
+      var y = padding.t + chartHeight * tick;
+      context.beginPath();
+      context.moveTo(padding.l, y);
+      context.lineTo(padding.l + chartWidth, y);
+      context.stroke();
+    });
+
+    if (normalizeStockChartViewMode(mode) === "candles") {
+      var bodyWidth = Math.max(2, Math.min(10, Math.floor(slotWidth * 0.64)));
+
+      candles.forEach(function(candle, index){
+        var x = padding.l + index * slotWidth + slotWidth / 2;
+        var openY = yFor(candle.open);
+        var closeY = yFor(candle.close);
+        var highY = yFor(candle.high);
+        var lowY = yFor(candle.low);
+        var up = candle.close >= candle.open;
+        var color = up ? "#5ad8b1" : "#f18c8c";
+        var topY = Math.min(openY, closeY);
+        var bodyHeight = Math.max(2, Math.abs(closeY - openY));
+        var isFlat = Math.abs((Number(candle.close) || 0) - (Number(candle.open) || 0)) < 0.000001;
+        var wickTop = isFlat ? topY - 1 : highY;
+        var wickBottom = isFlat ? topY + bodyHeight + 1 : lowY;
+
+        context.strokeStyle = color;
+        context.lineWidth = 1.6;
+        context.lineCap = "round";
+        context.beginPath();
+        context.moveTo(x, wickTop);
+        context.lineTo(x, wickBottom);
+        context.stroke();
+
+        context.fillStyle = up ? "rgba(90, 216, 177, 0.55)" : "rgba(241, 140, 140, 0.55)";
+        context.strokeStyle = color;
+        context.lineWidth = 1.1;
+        context.fillRect(x - bodyWidth / 2, topY, bodyWidth, bodyHeight);
+        context.strokeRect(x - bodyWidth / 2, topY, bodyWidth, bodyHeight);
+      });
+      return;
+    }
+
+    context.beginPath();
+    context.strokeStyle = "#7fc9df";
+    context.lineWidth = 2;
+    context.shadowColor = "rgba(127, 201, 223, 0.35)";
+    context.shadowBlur = 3;
+
+    candles.forEach(function(candle, index){
+      var x = padding.l + index * slotWidth + slotWidth / 2;
+      var y = yFor(candle.close);
+      if (index === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    });
+    context.stroke();
+    context.shadowBlur = 0;
+  }
+
   function renderTabs(){
     document.getElementById("ctabs").innerHTML = App.store.blocs.map(function(bloc){
       return "<button class='ctab " + (App.store.selectedBlocId === bloc.id ? "act" : "") + "' data-bloc-id='" + bloc.id + "'>" + bloc.flag + " " + bloc.currency + "</button>";
@@ -1738,8 +2677,135 @@
     renderSelection();
   }
 
+  function setSettingsStatus(message, status){
+    var statusNode = document.getElementById("settings-status");
+
+    if (!statusNode) return;
+    statusNode.textContent = message || "";
+    statusNode.classList.remove("ok", "err");
+    if (status === "ok" || status === "err") {
+      statusNode.classList.add(status);
+    }
+  }
+
+  function setSlotsStatus(message, status){
+    var statusNode = document.getElementById("slots-status");
+
+    if (!statusNode) return;
+    statusNode.textContent = message || "";
+    statusNode.classList.remove("ok", "err");
+    if (status === "ok" || status === "err") {
+      statusNode.classList.add(status);
+    }
+  }
+
+  function setSettingsMenuOpen(open){
+    var modal = document.getElementById("settings-modal");
+
+    if (!modal) return;
+    settingsMenuOpen = !!open;
+    modal.classList.toggle("open", settingsMenuOpen);
+    modal.setAttribute("aria-hidden", settingsMenuOpen ? "false" : "true");
+    if (!settingsMenuOpen) {
+      setSettingsStatus("", null);
+    }
+  }
+
+  function formatSlotSavedAt(savedAtISO){
+    var date;
+
+    if (!savedAtISO) return "Unknown time";
+    date = new Date(savedAtISO);
+    if (Number.isNaN(date.getTime())) return "Unknown time";
+    return date.toLocaleString();
+  }
+
+  function renderSlotsModal(){
+    var titleNode = document.getElementById("slots-title");
+    var noteNode = document.getElementById("slots-note");
+    var listNode = document.getElementById("slots-list");
+    var slots = (App.persistence && typeof App.persistence.listSlots === "function") ? App.persistence.listSlots() : [];
+    var saveMode = slotsModalMode === "save";
+
+    if (!titleNode || !noteNode || !listNode) return;
+
+    titleNode.textContent = saveMode ? "Save World Slots" : "Load World Slots";
+    noteNode.textContent = saveMode
+      ? "Choose one of 5 persistent slots, set a name, and save. Slots are not deleted on reset."
+      : "Load any existing slot or delete it permanently. Empty slots cannot be loaded.";
+
+    listNode.innerHTML = slots.map(function(slot){
+      var slotIndex = Number(slot && slot.slotIndex) || 0;
+      var exists = !!(slot && slot.exists);
+      var name = String(slot && slot.name || ("Slot " + slotIndex));
+      var dayText = slot && Number.isFinite(slot.day) ? ("Day " + slot.day) : "No day";
+      var savedAtText = exists ? formatSlotSavedAt(slot.savedAtISO) : "Empty slot";
+      var inputId = "save-slot-name-" + slotIndex;
+      var input = saveMode
+        ? ("<input id='" + inputId + "' class='save-slot-name' type='text' maxlength='64' value='" + escapeAttrText(name) + "' placeholder='Enter slot name'>")
+        : "";
+      var saveButton = saveMode
+        ? ("<button class='sb' type='button' data-slot-save='" + slotIndex + "'>" + (exists ? "Overwrite Slot" : "Save To Slot") + "</button>")
+        : "";
+      var loadButton = !saveMode
+        ? ("<button class='sb' type='button' data-slot-load='" + slotIndex + "'" + (exists ? "" : " disabled") + ">Load Slot</button>")
+        : "";
+      var deleteButton = !saveMode
+        ? ("<button class='sb settings-danger' type='button' data-slot-delete='" + slotIndex + "'" + (exists ? "" : " disabled") + ">Delete Slot</button>")
+        : "";
+
+      return [
+        "<div class='save-slot-row'>",
+        "<div class='save-slot-head'><div class='save-slot-title'>Slot " + slotIndex + "</div><div class='save-slot-meta'>" + dayText + " | " + escapeAttrText(savedAtText) + "</div></div>",
+        "<div class='save-slot-meta'>Name: " + escapeAttrText(name) + "</div>",
+        "<div class='save-slot-controls'>",
+        input,
+        saveButton,
+        loadButton,
+        deleteButton,
+        "</div>",
+        (!exists && !saveMode ? "<div class='save-slot-empty'>This slot is empty.</div>" : ""),
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function setSlotsMenuOpen(open, mode){
+    var modal = document.getElementById("slots-modal");
+
+    if (!modal) return;
+    if (mode === "save" || mode === "load") {
+      slotsModalMode = mode;
+    }
+    slotsMenuOpen = !!open;
+    modal.classList.toggle("open", slotsMenuOpen);
+    modal.setAttribute("aria-hidden", slotsMenuOpen ? "false" : "true");
+    if (slotsMenuOpen) {
+      renderSlotsModal();
+      setSlotsStatus("", null);
+    } else {
+      setSlotsStatus("", null);
+    }
+  }
+
+  function saveWorldFromSettings(){
+    if (!App.persistence || typeof App.persistence.saveToSlot !== "function") {
+      setSettingsStatus("Save slots are unavailable.", "err");
+      return;
+    }
+    setSlotsMenuOpen(true, "save");
+  }
+
+  function loadWorldFromSettings(){
+    if (!App.persistence || typeof App.persistence.loadFromSlot !== "function") {
+      setSettingsStatus("Load slots are unavailable.", "err");
+      return;
+    }
+    setSlotsMenuOpen(true, "load");
+  }
+
   function resetWorldFromStart(){
-    var approved = global.confirm("Reset world to day zero? This clears your saved snapshot and reloads the simulation.");
+    var approved = global.confirm("Reset world to day zero? This clears auto-restore state and reloads the simulation. Named save slots are kept.");
 
     if (!approved) return;
 
@@ -1751,6 +2817,8 @@
   }
 
   function initUI(){
+    stockChartViewMode = normalizeStockChartViewMode(safeLocalStorageGet(STOCK_CHART_VIEW_MODE_STORAGE_KEY));
+
     document.getElementById("plist").addEventListener("click", function(event){
       var personRow = event.target.closest(".pr[data-person-id]");
       var businessRow = event.target.closest(".pr[data-business-id]");
@@ -1776,8 +2844,183 @@
     });
 
     document.getElementById("dc").addEventListener("click", function(event){
+      var runClosure = event.target.closest("#run-closure-gates-btn");
+      var runFastForwardYear = event.target.closest("#sim-forward-year-btn");
+      var runClosureScenario = event.target.closest("#run-closure-scenario-btn");
+      var runClosureScenarioSuite = event.target.closest("#run-closure-scenario-suite-btn");
+      var saveClosureBaseline = event.target.closest("#save-closure-baseline-btn");
+      var compareClosureBaseline = event.target.closest("#compare-closure-baseline-btn");
+      var clearClosureBaseline = event.target.closest("#clear-closure-baseline-btn");
+      var stockChartModeTarget = event.target.closest("[data-stock-chart-mode]");
       var businessTarget = event.target.closest(".rrow[data-business-id], .entity-link[data-business-id]");
       var personTarget;
+
+      if (runClosure) {
+        if (!closureGateRunning && App.sim && typeof App.sim.runClosureGateSuite === "function") {
+          closureGateRunning = true;
+          renderInspectorSafe();
+          global.setTimeout(function(){
+            try {
+              closureGateResult = App.sim.runClosureGateSuite();
+              closureGateLastRunDay = App.store.simDay;
+              appendClosureTelemetryEntry(closureGateResult);
+              if (closureGateBaseline) {
+                closureGateBaselineDiff = compareClosureResultToBaseline(closureGateResult, closureGateBaseline);
+              }
+            } catch (error) {
+              closureGateResult = {
+                ok:false,
+                summary:{ passed:0, failed:0, total:0 },
+                tiers:{ tier1:[], tier2:[], tier3:[], tier4:[] },
+                feedbackLoops:{ growthLoopPass:false, recessionLoopPass:false, laborPressureLoopPass:false },
+                hardFailures:[{ code:"ERR", label:error && error.message ? error.message : "Closure gate execution error.", failed:true }]
+              };
+              closureGateLastRunDay = App.store.simDay;
+              closureGateBaselineDiff = null;
+            } finally {
+              closureGateRunning = false;
+              renderInspectorSafe();
+            }
+          }, 20);
+        }
+        return;
+      }
+
+      if (runClosureScenario) {
+        if (!closureScenarioRunning && App.sim && typeof App.sim.runScenarioPreset === "function" && closureScenarioSelectedId) {
+          closureScenarioRunning = true;
+          renderInspectorSafe();
+          global.setTimeout(function(){
+            try {
+              closureScenarioResult = App.sim.runScenarioPreset(closureScenarioSelectedId);
+              closureGateLastRunDay = App.store.simDay;
+            } catch (error) {
+              closureScenarioResult = {
+                id:closureScenarioSelectedId,
+                label:"Scenario",
+                title:"Scenario Pack",
+                pass:false,
+                evidence:{ error:error && error.message ? error.message : "Scenario execution error." }
+              };
+            } finally {
+              closureScenarioRunning = false;
+              renderInspectorSafe();
+            }
+          }, 20);
+        }
+        return;
+      }
+
+      if (runClosureScenarioSuite) {
+        if (!closureScenarioRunning && App.sim && typeof App.sim.runAllScenarioPresets === "function") {
+          closureScenarioRunning = true;
+          renderInspectorSafe();
+          global.setTimeout(function(){
+            try {
+              closureScenarioSuiteResult = App.sim.runAllScenarioPresets();
+              closureGateLastRunDay = App.store.simDay;
+            } catch (error) {
+              closureScenarioSuiteResult = {
+                ok:false,
+                summary:{ total:0, passed:0, failed:0 },
+                results:[{ label:"Scenario Suite", pass:false, days:0, evidence:{ error:error && error.message ? error.message : "Scenario suite execution error." } }]
+              };
+            } finally {
+              closureScenarioRunning = false;
+              renderInspectorSafe();
+            }
+          }, 20);
+        }
+        return;
+      }
+
+      if (runFastForwardYear) {
+        if (!closureGateFastForwardRunning && App.sim && typeof App.sim.fastForwardDays === "function") {
+          var fastForwardDays = (App.data && App.data.CALENDAR && App.data.CALENDAR.daysPerYear) ? Number(App.data.CALENDAR.daysPerYear) : 360;
+
+          closureGateFastForwardRunning = true;
+          renderInspectorSafe();
+          global.setTimeout(function(){
+            try {
+              App.sim.fastForwardDays(fastForwardDays, { render:true, includeRandom:true });
+              closureGateLastRunDay = App.store.simDay;
+            } catch (error) {
+              closureGateResult = {
+                ok:false,
+                summary:{ passed:0, failed:0, total:0 },
+                tiers:{ tier1:[], tier2:[], tier3:[], tier4:[] },
+                feedbackLoops:{ growthLoopPass:false, recessionLoopPass:false, laborPressureLoopPass:false },
+                hardFailures:[{ code:"ERR", label:error && error.message ? error.message : "Fast-forward simulation error.", failed:true }]
+              };
+              closureGateLastRunDay = App.store.simDay;
+            } finally {
+              closureGateFastForwardRunning = false;
+              renderInspectorSafe();
+            }
+          }, 20);
+        }
+        return;
+      }
+
+      if (saveClosureBaseline) {
+        if (closureGateResult) {
+          var snapshot = createClosureBaselineSnapshot(closureGateResult);
+          var saved = safeLocalStorageSet(CLOSURE_BASELINE_STORAGE_KEY, JSON.stringify(snapshot));
+          if (saved) {
+            closureGateBaseline = snapshot;
+            closureGateBaselineDiff = compareClosureResultToBaseline(closureGateResult, closureGateBaseline);
+          } else {
+            closureGateBaselineDiff = {
+              hasBaseline:false,
+              hasResult:true,
+              match:false,
+              changedCount:1,
+              messages:["Failed to persist baseline snapshot in local storage."]
+            };
+          }
+          renderInspector();
+        }
+        return;
+      }
+
+      if (compareClosureBaseline) {
+        if (closureGateResult && closureGateBaseline) {
+          closureGateBaselineDiff = compareClosureResultToBaseline(closureGateResult, closureGateBaseline);
+        } else if (!closureGateBaseline) {
+          closureGateBaselineDiff = {
+            hasBaseline:false,
+            hasResult:!!closureGateResult,
+            match:false,
+            changedCount:0,
+            messages:["No saved baseline found. Run gates and click Save Baseline first."]
+          };
+        } else {
+          closureGateBaselineDiff = {
+            hasBaseline:true,
+            hasResult:false,
+            match:false,
+            changedCount:0,
+            messages:["No closure result available. Run Closure Gates first."]
+          };
+        }
+        renderInspector();
+        return;
+      }
+
+      if (clearClosureBaseline) {
+        safeLocalStorageRemove(CLOSURE_BASELINE_STORAGE_KEY);
+        closureGateBaseline = null;
+        closureGateBaselineDiff = null;
+        renderInspector();
+        return;
+      }
+
+      if (stockChartModeTarget) {
+        stockChartViewMode = normalizeStockChartViewMode(stockChartModeTarget.getAttribute("data-stock-chart-mode"));
+        safeLocalStorageSet(STOCK_CHART_VIEW_MODE_STORAGE_KEY, stockChartViewMode);
+        renderInspector();
+        return;
+      }
 
       if (businessTarget) {
         setInspectorTab("inspector");
@@ -1797,6 +3040,13 @@
       var button = event.target.closest(".dtab[data-inspector-tab]");
       if (!button) return;
       setInspectorTab(button.getAttribute("data-inspector-tab"));
+      renderInspector();
+    });
+
+    document.getElementById("dc").addEventListener("change", function(event){
+      var scenarioSelect = event.target.closest("#closure-scenario-select");
+      if (!scenarioSelect) return;
+      closureScenarioSelectedId = String(scenarioSelect.value || "");
       renderInspector();
     });
 
@@ -1833,8 +3083,136 @@
       syncSpeedButtons();
     });
 
-    document.getElementById("reset-world-btn").addEventListener("click", function(){
+    document.getElementById("settings-btn").addEventListener("click", function(){
+      setSettingsMenuOpen(true);
+    });
+
+    document.getElementById("settings-close-btn").addEventListener("click", function(){
+      setSettingsMenuOpen(false);
+    });
+
+    document.getElementById("settings-modal").addEventListener("click", function(event){
+      var closeTarget = event.target.closest("[data-settings-close]");
+
+      if (!closeTarget) return;
+      setSettingsMenuOpen(false);
+    });
+
+    document.getElementById("slots-close-btn").addEventListener("click", function(){
+      setSlotsMenuOpen(false);
+    });
+
+    document.getElementById("slots-modal").addEventListener("click", function(event){
+      var closeTarget = event.target.closest("[data-slots-close]");
+      var saveTarget = event.target.closest("[data-slot-save]");
+      var loadTarget = event.target.closest("[data-slot-load]");
+      var deleteTarget = event.target.closest("[data-slot-delete]");
+      var slotIndex;
+      var result;
+      var input;
+      var slotName;
+      var approved;
+
+      if (closeTarget) {
+        setSlotsMenuOpen(false);
+        return;
+      }
+
+      if (saveTarget) {
+        slotIndex = Number(saveTarget.getAttribute("data-slot-save")) || 0;
+        input = document.getElementById("save-slot-name-" + slotIndex);
+        slotName = input ? String(input.value || "") : ("Slot " + slotIndex);
+
+        if (!App.persistence || typeof App.persistence.saveToSlot !== "function") {
+          setSlotsStatus("Save slots are unavailable.", "err");
+          return;
+        }
+
+        result = App.persistence.saveToSlot(slotIndex, slotName);
+        if (result && result.ok) {
+          setSlotsStatus("Saved to slot " + slotIndex + ".", "ok");
+          setSettingsStatus("Saved to slot " + slotIndex + ".", "ok");
+          renderSlotsModal();
+        } else {
+          setSlotsStatus("Save failed: " + ((result && result.error) || "Unknown error."), "err");
+        }
+        return;
+      }
+
+      if (loadTarget) {
+        slotIndex = Number(loadTarget.getAttribute("data-slot-load")) || 0;
+
+        if (!App.persistence || typeof App.persistence.loadFromSlot !== "function") {
+          setSlotsStatus("Load slots are unavailable.", "err");
+          return;
+        }
+
+        result = App.persistence.loadFromSlot(slotIndex);
+        if (result && result.ok) {
+          if (App.sim && typeof App.sim.rehydrateLoadedState === "function") {
+            App.sim.rehydrateLoadedState();
+          }
+          setSettingsStatus("Loaded slot " + slotIndex + ".", "ok");
+          setSlotsStatus("Loaded slot " + slotIndex + ".", "ok");
+          setSlotsMenuOpen(false);
+          setSettingsMenuOpen(false);
+          renderAll();
+          if (App.map && typeof App.map.updateCountryColors === "function") {
+            App.map.updateCountryColors();
+          }
+          return;
+        }
+
+        if (result && result.reason === "empty") {
+          setSlotsStatus("Slot " + slotIndex + " is empty.", "err");
+          return;
+        }
+
+        setSlotsStatus("Load failed: " + ((result && result.error) || "Unknown error."), "err");
+        return;
+      }
+
+      if (deleteTarget) {
+        slotIndex = Number(deleteTarget.getAttribute("data-slot-delete")) || 0;
+        approved = global.confirm("Delete slot " + slotIndex + "? This cannot be undone.");
+        if (!approved) return;
+
+        if (!App.persistence || typeof App.persistence.deleteSlot !== "function") {
+          setSlotsStatus("Delete action is unavailable.", "err");
+          return;
+        }
+
+        result = App.persistence.deleteSlot(slotIndex);
+        if (result && result.ok) {
+          setSlotsStatus("Deleted slot " + slotIndex + ".", "ok");
+          setSettingsStatus("Deleted slot " + slotIndex + ".", "ok");
+          renderSlotsModal();
+        } else {
+          setSlotsStatus("Delete failed: " + ((result && result.error) || "Unknown error."), "err");
+        }
+      }
+    });
+
+    document.getElementById("settings-save-btn").addEventListener("click", function(){
+      saveWorldFromSettings();
+    });
+
+    document.getElementById("settings-load-btn").addEventListener("click", function(){
+      loadWorldFromSettings();
+    });
+
+    document.getElementById("settings-reset-btn").addEventListener("click", function(){
       resetWorldFromStart();
+    });
+
+    document.addEventListener("keydown", function(event){
+      if (event.key !== "Escape") return;
+      if (slotsMenuOpen) {
+        setSlotsMenuOpen(false);
+        return;
+      }
+      if (!settingsMenuOpen) return;
+      setSettingsMenuOpen(false);
     });
 
     syncSpeedButtons();
