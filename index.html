@@ -7,7 +7,7 @@
 <link rel="icon" href="./favicon.ico" type="image/x-icon">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;500;600;700;800;900&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./src/styles/app.css">
 </head>
 <body>
@@ -15,9 +15,15 @@
 <div id="topbar">
   <div id="logo">NEXUS <span>WORLD</span></div>
   <div id="ticker-wrap"><div id="ticker-inner"></div></div>
-  <div id="macros">GDP <span class="v" id="gv">-</span> | FIRMS <span class="v" id="fv">0</span> | PEOPLE <span class="v" id="pv">0</span></div>
+  <div id="macros">
+    <span class="macro-item macro-item-gdp"><span class="macro-label">GDP</span><span class="v macro-value" id="gv">-</span></span>
+    <span class="macro-divider" aria-hidden="true">|</span>
+    <span class="macro-item macro-item-count"><span class="macro-label">FIRMS</span><span class="v macro-value" id="fv">0</span></span>
+    <span class="macro-divider" aria-hidden="true">|</span>
+    <span class="macro-item macro-item-count"><span class="macro-label">PEOPLE</span><span class="v macro-value" id="pv">0</span></span>
+  </div>
   <button id="settings-btn" type="button" aria-label="Open settings" title="Open save/load settings">⚙</button>
-  <div id="clock"><div id="ct">Y1 Q1</div><div class="yr" id="cy">DAY 0</div><div id="pause-indicator" class="pause-indicator" aria-live="polite"></div></div>
+  <div id="clock"><div id="ct">DAY 0</div><div class="yr" id="cy">YEAR 0</div><div id="pause-indicator" class="pause-indicator" aria-live="polite"></div></div>
 </div>
 <div id="settings-modal" class="settings-modal" aria-hidden="true">
   <div class="settings-backdrop" data-settings-close="true"></div>
@@ -28,9 +34,15 @@
     </div>
     <div class="settings-body">
       <div class="settings-note">Manage snapshot state for this world. Save and Load now use persistent named slots that survive resets unless you delete them.</div>
+      <div class="settings-note">Fresh world start preset applies when generating or resetting a world. Loaded saves keep their own epoch.</div>
+      <div id="settings-yearly-export-note" class="settings-note">Yearly tuning CSV captures completed years only.</div>
+      <div class="settings-actions">
+        <select id="settings-start-preset-select" class="sb" aria-label="Fresh world start preset"></select>
+      </div>
       <div class="settings-actions">
         <button id="settings-save-btn" class="sb" type="button">Open Save Slots</button>
         <button id="settings-load-btn" class="sb" type="button">Open Load Slots</button>
+        <button id="settings-export-yearly-btn" class="sb" type="button">Export Yearly CSV</button>
         <button id="settings-reset-btn" class="sb settings-danger" type="button">Reset World</button>
       </div>
       <div id="settings-status" class="settings-status" aria-live="polite"></div>
@@ -126,6 +138,13 @@
 <script src="./src/js/app/persistence.js" defer></script>
 <script src="./src/js/app/map.js" defer></script>
 <script src="./src/js/app/ui.js" defer></script>
+<script src="./src/js/app/sim-core.js" defer></script>
+<script src="./src/js/app/sim-business.js" defer></script>
+<script src="./src/js/app/sim-labour.js" defer></script>
+<script src="./src/js/app/sim-finance.js" defer></script>
+<script src="./src/js/app/sim-demographics.js" defer></script>
+<script src="./src/js/app/sim-society.js" defer></script>
+<script src="./src/js/app/sim-geopolitics.js" defer></script>
 <script src="./src/js/app/sim.js" defer></script>
 <script src="./src/js/main.js" defer></script>
 </body>

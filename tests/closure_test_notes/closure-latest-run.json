@@ -1,17 +1,14 @@
 {
-  "generatedAt": "2026-03-26T00:14:40.313Z",
+  "generatedAt": "2026-03-29T20:57:53.060Z",
   "seed": 20260325,
   "daysPerYear": 360,
   "baseline": {
     "day": 0,
     "ok": false,
-    "passed": 17,
-    "failed": 4,
+    "passed": 20,
+    "failed": 1,
     "failedGateIds": [
-      "1.3",
-      "3.1",
-      "3.2",
-      "3.4"
+      "1.4"
     ]
   },
   "sequential": [
@@ -19,17 +16,13 @@
       "run": 1,
       "day": 360,
       "ok": false,
-      "passed": 18,
-      "failed": 3,
+      "passed": 20,
+      "failed": 1,
       "failedGateIds": [
-        "1.3",
-        "3.1",
-        "3.2"
+        "1.4"
       ],
-      "baselineDeltaCount": 3,
+      "baselineDeltaCount": 1,
       "baselineDeltas": [
-        "gate 3.4 changed",
-        "HF-3 changed",
         "firm revenue drift exceeded tolerance"
       ]
     },
@@ -37,42 +30,30 @@
       "run": 2,
       "day": 720,
       "ok": false,
-      "passed": 16,
-      "failed": 5,
+      "passed": 20,
+      "failed": 1,
       "failedGateIds": [
-        "1.2",
-        "1.5",
-        "2.1",
-        "3.1",
-        "3.2"
+        "1.4"
       ],
-      "baselineDeltaCount": 9,
+      "baselineDeltaCount": 2,
       "baselineDeltas": [
-        "growth loop changed",
-        "gate 1.2 changed",
-        "gate 1.3 changed",
-        "gate 1.5 changed",
-        "gate 2.1 changed",
-        "gate 3.4 changed",
-        "HF-3 changed",
-        "HF-6 changed"
+        "demand drift exceeded tolerance",
+        "firm revenue drift exceeded tolerance"
       ]
     },
     {
       "run": 3,
       "day": 1080,
       "ok": false,
-      "passed": 19,
-      "failed": 2,
+      "passed": 20,
+      "failed": 1,
       "failedGateIds": [
-        "1.3",
-        "3.2"
+        "1.4"
       ],
-      "baselineDeltaCount": 4,
+      "baselineDeltaCount": 3,
       "baselineDeltas": [
-        "gate 3.1 changed",
-        "gate 3.4 changed",
-        "HF-3 changed",
+        "unemployment drift exceeded tolerance",
+        "demand drift exceeded tolerance",
         "firm revenue drift exceeded tolerance"
       ]
     }

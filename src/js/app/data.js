@@ -29,7 +29,7 @@
     LV:{code:"EUR",name:"Euro",sym:"€"},LB:{code:"LBP",name:"Pound",sym:"ل.ل"},LS:{code:"LSL",name:"Loti",sym:"L"},LR:{code:"LRD",name:"LRD",sym:"$"},
     LY:{code:"LYD",name:"Dinar",sym:"LD"},LT:{code:"EUR",name:"Euro",sym:"€"},LU:{code:"EUR",name:"Euro",sym:"€"},MK:{code:"MKD",name:"Denar",sym:"ден"},
     MG:{code:"MGA",name:"Ariary",sym:"Ar"},MW:{code:"MWK",name:"Kwacha",sym:"MK"},MY:{code:"MYR",name:"Ringgit",sym:"RM"},MV:{code:"MVR",name:"Rufiyaa",sym:"Rf"},
-    ML:{code:"XOF",name:"CFA",sym:"Fr"},MT:{code:"EUR",name:"Euro",sym:"€"},MR:{code:"MRO",name:"Ouguiya",sym:"UM"},MU:{code:"MUR",name:"Rupee",sym:"₨"},
+    ML:{code:"XOF",name:"CFA",sym:"Fr"},MT:{code:"EUR",name:"Euro",sym:"€"},MR:{code:"MRU",name:"Ouguiya",sym:"UM"},MU:{code:"MUR",name:"Rupee",sym:"₨"},
     MX:{code:"MXN",name:"Peso",sym:"$"},MD:{code:"MDL",name:"Leu",sym:"L"},MN:{code:"MNT",name:"Tugrik",sym:"₮"},ME:{code:"EUR",name:"Euro",sym:"€"},
     MA:{code:"MAD",name:"Dirham",sym:"MAD"},MZ:{code:"MZN",name:"Metical",sym:"MT"},MM:{code:"MMK",name:"Kyat",sym:"K"},NA:{code:"NAD",name:"NAD",sym:"$"},
     NP:{code:"NPR",name:"Rupee",sym:"₨"},NL:{code:"EUR",name:"Euro",sym:"€"},NZ:{code:"NZD",name:"NZD",sym:"$"},NI:{code:"NIO",name:"Cordoba",sym:"C$"},
@@ -37,7 +37,7 @@
     PK:{code:"PKR",name:"Rupee",sym:"₨"},PA:{code:"PAB",name:"Balboa",sym:"B/."},PG:{code:"PGK",name:"Kina",sym:"K"},PY:{code:"PYG",name:"Guarani",sym:"₲"},
     PE:{code:"PEN",name:"Sol",sym:"S/"},PH:{code:"PHP",name:"Peso",sym:"₱"},PL:{code:"PLN",name:"Zloty",sym:"zł"},PT:{code:"EUR",name:"Euro",sym:"€"},
     QA:{code:"QAR",name:"Rial",sym:"﷼"},RO:{code:"RON",name:"Leu",sym:"lei"},RU:{code:"RUB",name:"Ruble",sym:"₽"},RW:{code:"RWF",name:"Franc",sym:"Fr"},
-    SA:{code:"SAR",name:"Riyal",sym:"﷼"},SN:{code:"XOF",name:"CFA",sym:"Fr"},RS:{code:"RSD",name:"Dinar",sym:"din"},SL:{code:"SLL",name:"Leone",sym:"Le"},
+    SA:{code:"SAR",name:"Riyal",sym:"﷼"},SN:{code:"XOF",name:"CFA",sym:"Fr"},RS:{code:"RSD",name:"Dinar",sym:"din"},SL:{code:"SLE",name:"Leone",sym:"Le"},
     SG:{code:"SGD",name:"SGD",sym:"$"},SK:{code:"EUR",name:"Euro",sym:"€"},SI:{code:"EUR",name:"Euro",sym:"€"},SB:{code:"SBD",name:"SBD",sym:"$"},
     SO:{code:"SOS",name:"Shilling",sym:"Sh"},ZA:{code:"ZAR",name:"Rand",sym:"R"},SS:{code:"SSP",name:"Pound",sym:"£"},ES:{code:"EUR",name:"Euro",sym:"€"},
     LK:{code:"LKR",name:"Rupee",sym:"₨"},SD:{code:"SDG",name:"Pound",sym:"£"},SR:{code:"SRD",name:"SRD",sym:"$"},SE:{code:"SEK",name:"Krona",sym:"kr"},
@@ -45,7 +45,7 @@
     TH:{code:"THB",name:"Baht",sym:"฿"},TG:{code:"XOF",name:"CFA",sym:"Fr"},TN:{code:"TND",name:"Dinar",sym:"DT"},TR:{code:"TRY",name:"Lira",sym:"₺"},
     TM:{code:"TMT",name:"Manat",sym:"T"},UG:{code:"UGX",name:"Shilling",sym:"Sh"},UA:{code:"UAH",name:"Hryvnia",sym:"₴"},AE:{code:"AED",name:"Dirham",sym:"د.إ"},
     GB:{code:"GBP",name:"Pound",sym:"£"},US:{code:"USD",name:"USD",sym:"$"},UY:{code:"UYU",name:"Peso",sym:"$"},UZ:{code:"UZS",name:"Sum",sym:"лв"},
-    VU:{code:"VUV",name:"Vatu",sym:"Vt"},VE:{code:"VEF",name:"Bolivar",sym:"Bs.F"},VN:{code:"VND",name:"Dong",sym:"₫"},YE:{code:"YER",name:"Rial",sym:"﷼"},
+    VU:{code:"VUV",name:"Vatu",sym:"Vt"},VE:{code:"VES",name:"Bolivar",sym:"Bs."},VN:{code:"VND",name:"Dong",sym:"₫"},YE:{code:"YER",name:"Rial",sym:"﷼"},
     ZM:{code:"ZMW",name:"Kwacha",sym:"ZK"},ZW:{code:"ZWL",name:"ZWL",sym:"$"},TW:{code:"TWD",name:"TWD",sym:"$"},HK:{code:"HKD",name:"HKD",sym:"$"},
     CW:{code:"ANG",name:"Guilder",sym:"ƒ"},AW:{code:"AWG",name:"Florin",sym:"ƒ"},GF:{code:"EUR",name:"Euro",sym:"€"},GP:{code:"EUR",name:"Euro",sym:"€"},
     MQ:{code:"EUR",name:"Euro",sym:"€"},RE:{code:"EUR",name:"Euro",sym:"€"},NC:{code:"XPF",name:"CFP Franc",sym:"Fr"},PF:{code:"XPF",name:"CFP Franc",sym:"Fr"},
@@ -58,7 +58,15 @@
     IM:{code:"GBP",name:"Pound",sym:"£"},JE:{code:"GBP",name:"Pound",sym:"£"},GG:{code:"GBP",name:"Pound",sym:"£"},AI:{code:"XCD",name:"XCD",sym:"$"},
     MS:{code:"XCD",name:"XCD",sym:"$"},MF:{code:"EUR",name:"Euro",sym:"€"},BL:{code:"EUR",name:"Euro",sym:"€"},PM:{code:"EUR",name:"Euro",sym:"€"},
     DM:{code:"XCD",name:"XCD",sym:"$"},GD:{code:"XCD",name:"XCD",sym:"$"},LC:{code:"XCD",name:"XCD",sym:"$"},VC:{code:"XCD",name:"XCD",sym:"$"},
-    AG:{code:"XCD",name:"XCD",sym:"$"},KN:{code:"XCD",name:"XCD",sym:"$"},TT:{code:"TTD",name:"TTD",sym:"$"}
+    AG:{code:"XCD",name:"XCD",sym:"$"},KN:{code:"XCD",name:"XCD",sym:"$"},TT:{code:"TTD",name:"TTD",sym:"$"},
+    AQ:{code:"N/A",name:"No official currency",sym:"¤"},BV:{code:"NOK",name:"Krone",sym:"kr"},CC:{code:"AUD",name:"AUD",sym:"A$"},CI:{code:"XOF",name:"CFA",sym:"Fr"},
+    CK:{code:"NZD",name:"NZD",sym:"NZ$"},CX:{code:"AUD",name:"AUD",sym:"A$"},FM:{code:"USD",name:"USD",sym:"$"},GS:{code:"GBP",name:"Pound",sym:"£"},
+    HM:{code:"AUD",name:"AUD",sym:"A$"},IO:{code:"USD",name:"USD",sym:"$"},KI:{code:"AUD",name:"AUD",sym:"A$"},MH:{code:"USD",name:"USD",sym:"$"},
+    NF:{code:"AUD",name:"AUD",sym:"A$"},NR:{code:"AUD",name:"AUD",sym:"A$"},NU:{code:"NZD",name:"NZD",sym:"NZ$"},PN:{code:"NZD",name:"NZD",sym:"NZ$"},
+    PS:{code:"ILS",name:"Shekel",sym:"₪"},PW:{code:"USD",name:"USD",sym:"$"},SC:{code:"SCR",name:"Rupee",sym:"₨"},SH:{code:"SHP",name:"Pound",sym:"£"},
+    ST:{code:"STN",name:"Dobra",sym:"Db"},SZ:{code:"SZL",name:"Lilangeni",sym:"E"},TF:{code:"EUR",name:"Euro",sym:"€"},TK:{code:"NZD",name:"NZD",sym:"NZ$"},
+    TL:{code:"USD",name:"USD",sym:"$"},TO:{code:"TOP",name:"Pa'anga",sym:"T$"},TV:{code:"AUD",name:"AUD",sym:"A$"},UM:{code:"USD",name:"USD",sym:"$"},
+    WF:{code:"XPF",name:"CFP Franc",sym:"Fr"},WS:{code:"WST",name:"Tala",sym:"WS$"},YT:{code:"EUR",name:"Euro",sym:"€"}
   };
 
   var CENTROIDS = {
@@ -206,7 +214,7 @@
     {id:"SA",name:"South America",flag:"🇧🇷",currency:"BRL",symbol:"R$",baseRate:5.0,rate:5.0,prevRate:5.0,color:"#1f2a0f",label:"#8bc34a",
       members:["BR","AR","CO","VE","CL","PE","EC","BO","PY","UY","GY","SR"]},
     {id:"EU",name:"Europe",flag:"🇪🇺",currency:"EUR",symbol:"€",baseRate:0.92,rate:0.92,prevRate:0.92,color:"#0f2a1a",label:"#4caf50",
-      members:["DE","FR","GB","IT","ES","PL","RO","NL","BE","CZ","GR","PT","SE","HU","AT","CH","BY","UA","RS","BG","TR","DK","FI","SK","NO","HR","MD","BA","AL","LT","SI","MK","LV","EE","LU","ME","IS","IE","CY","GE","AM","AD","MT","SM","VA","LI","MC","XK","FO","AX","SJ","GI","IM","JE","GG"]},
+      members:["DE","FR","GB","IT","ES","PL","RO","NL","BE","CZ","GR","PT","SE","HU","AT","CH","BY","UA","RS","BG","TR","DK","FI","SK","NO","HR","MD","BA","AL","LT","SI","MK","LV","EE","LU","ME","IS","IE","CY","GE","AM","AD","MT","SM","VA","LI","MC","XK","FO","GI","IM","JE","GG"]},
     {id:"AF",name:"Africa & M.East",flag:"🇳🇬",currency:"NGN",symbol:"₦",baseRate:1580,rate:1580,prevRate:1580,color:"#1a2208",label:"#cddc39",
       members:["NG","ZA","EG","ET","KE","GH","TZ","UG","RW","BI","SN","CI","CM","ML","BF","NE","TD","SD","SS","SO","MZ","ZM","ZW","MW","MG","AO","GA","CG","CD","CF","GN","SL","LR","GM","GW","BJ","TG","GQ","ER","DJ","BW","NA","LS","SZ","MA","DZ","TN","LY","EH","MR","SA","AE","IQ","IR","SY","YE","OM","JO","IL","PS","LB","KW","QA","PK","AF","AZ","KM","MU","SC","RE","YT","SH","ST","CV"]},
     {id:"AS",name:"Asia-Pacific",flag:"🇨🇳",currency:"CNY",symbol:"¥",baseRate:7.1,rate:7.1,prevRate:7.1,color:"#2a0f0f",label:"#ef5350",
@@ -482,6 +490,9 @@
     var cityIndex;
     var cityAsciiIndex;
     var iso2Index;
+    var latIndex;
+    var lngIndex;
+    var lonIndex;
     var populationIndex;
     var byIso2 = {};
     var byIso2State = {};
@@ -499,6 +510,9 @@
     cityIndex = header.indexOf("city");
     cityAsciiIndex = header.indexOf("city_ascii");
     iso2Index = header.indexOf("iso2");
+    latIndex = header.indexOf("lat");
+    lngIndex = header.indexOf("lng");
+    lonIndex = header.indexOf("lon");
     populationIndex = header.indexOf("population");
     stateIndex = header.indexOf("state_id");
     stateNameIndex = header.indexOf("state_name");
@@ -515,6 +529,8 @@
       var iso2;
       var name;
       var population;
+      var lat;
+      var lng;
       var stateName;
       var stateKey;
 
@@ -528,6 +544,8 @@
       if (!name) return;
 
       population = Number(populationIndex >= 0 ? row[populationIndex] : 0);
+      lat = Number(latIndex >= 0 ? row[latIndex] : NaN);
+      lng = Number(lngIndex >= 0 ? row[lngIndex] : (lonIndex >= 0 ? row[lonIndex] : NaN));
       if (!Array.isArray(byIso2[iso2])) byIso2[iso2] = [];
       byIso2[iso2].push({
         name:name,
@@ -556,6 +574,8 @@
       detailsByIso2[iso2].push({
         name:name,
         population:Number.isFinite(population) ? population : 0,
+        lat:Number.isFinite(lat) ? lat : null,
+        lng:Number.isFinite(lng) ? lng : null,
         state:stateName || null,
         stateKey:stateKey || null
       });
@@ -833,9 +853,125 @@
     return populations[middle];
   }
 
-  function createCountryProfile(iso, blocId, overrides){
+  function buildStartPresetCountryOverrides(preset, iso, blocId){
+    var id = String(preset && preset.id || "");
+    var startYear = Number(preset && preset.startYear);
+    var isNorthAtlantic = blocId === "NA" || blocId === "EU";
+    var overrides = {
+      worldStartPresetId:id || null,
+      worldStartYear:Number.isFinite(startYear) ? startYear : null,
+      prehistoryWealthPressureIndex:0.32,
+      prehistoryMobilityTrendIndex:0.5,
+      prehistoryConflictScarIndex:0.14
+    };
+
+    if (!id) {
+      return overrides;
+    }
+
+    if (id === "1998") {
+      overrides.consumerSpendMultiplier = 0.9;
+      overrides.consumerCostOfLivingPressure = 0.92;
+      overrides.consumerStressIndex = 0.28;
+      overrides.housingCostPressure = 0.88;
+      overrides.housingRentBurden = 0.28;
+      overrides.housingHomeownershipRate = 0.58;
+      overrides.housingAffordabilityIndex = 0.66;
+      overrides.topOneWealthShare = 0.25;
+      overrides.intergenerationalMobilityIndex = 0.6;
+      overrides.socialUnrestIndex = 0.2;
+      overrides.populismIndex = 0.16;
+      overrides.emigrationPressureIndex = 0.18;
+      overrides.institutionalInstabilityIndex = 0.14;
+      overrides.prehistoryWealthPressureIndex = 0.24;
+      overrides.prehistoryMobilityTrendIndex = 0.62;
+      overrides.prehistoryConflictScarIndex = 0.1;
+    } else if (id === "2000") {
+      overrides.consumerSpendMultiplier = 0.96;
+      overrides.consumerStressIndex = 0.3;
+      overrides.housingCostPressure = 0.94;
+      overrides.housingAffordabilityIndex = 0.61;
+      overrides.topOneWealthShare = 0.27;
+      overrides.intergenerationalMobilityIndex = 0.57;
+      overrides.socialUnrestIndex = 0.21;
+      overrides.populismIndex = 0.17;
+      overrides.prehistoryWealthPressureIndex = 0.28;
+      overrides.prehistoryMobilityTrendIndex = 0.57;
+      overrides.prehistoryConflictScarIndex = 0.1;
+    } else if (id === "2008") {
+      overrides.consumerSpendMultiplier = 0.82;
+      overrides.consumerStressIndex = 0.54;
+      overrides.housingCostPressure = isNorthAtlantic ? 1.14 : 1.03;
+      overrides.housingRentBurden = 0.38;
+      overrides.housingAffordabilityIndex = 0.42;
+      overrides.housingMarketStress = 0.58;
+      overrides.topOneWealthShare = 0.34;
+      overrides.intergenerationalMobilityIndex = 0.42;
+      overrides.socialUnrestIndex = 0.36;
+      overrides.strikeRiskIndex = 0.3;
+      overrides.populismIndex = 0.28;
+      overrides.emigrationPressureIndex = 0.3;
+      overrides.institutionalInstabilityIndex = 0.28;
+      overrides.prehistoryWealthPressureIndex = 0.42;
+      overrides.prehistoryMobilityTrendIndex = 0.36;
+      overrides.prehistoryConflictScarIndex = 0.16;
+    } else if (id === "2016") {
+      overrides.consumerSpendMultiplier = 0.94;
+      overrides.consumerStressIndex = 0.42;
+      overrides.housingCostPressure = 1.06;
+      overrides.topOneWealthShare = 0.36;
+      overrides.intergenerationalMobilityIndex = 0.43;
+      overrides.socialUnrestIndex = 0.38;
+      overrides.populismIndex = isNorthAtlantic ? 0.42 : 0.32;
+      overrides.emigrationPressureIndex = 0.28;
+      overrides.institutionalInstabilityIndex = 0.31;
+      overrides.prehistoryWealthPressureIndex = 0.44;
+      overrides.prehistoryMobilityTrendIndex = 0.39;
+      overrides.prehistoryConflictScarIndex = 0.18;
+    } else if (id === "2020") {
+      overrides.consumerSpendMultiplier = 0.78;
+      overrides.consumerCostOfLivingPressure = 1.08;
+      overrides.consumerStressIndex = 0.62;
+      overrides.housingCostPressure = 1.18;
+      overrides.housingRentBurden = 0.4;
+      overrides.housingAffordabilityIndex = 0.4;
+      overrides.housingMarketStress = 0.64;
+      overrides.socialUnrestIndex = 0.42;
+      overrides.strikeRiskIndex = 0.34;
+      overrides.populismIndex = 0.34;
+      overrides.emigrationPressureIndex = 0.34;
+      overrides.institutionalInstabilityIndex = 0.33;
+      overrides.demographicLaborForcePressureIndex = 0.62;
+      overrides.prehistoryWealthPressureIndex = 0.46;
+      overrides.prehistoryMobilityTrendIndex = 0.33;
+      overrides.prehistoryConflictScarIndex = 0.22;
+    } else if (id === "present-day") {
+      overrides.consumerSpendMultiplier = 0.92;
+      overrides.consumerCostOfLivingPressure = 1.1;
+      overrides.consumerStressIndex = 0.46;
+      overrides.housingCostPressure = 1.2;
+      overrides.housingRentBurden = 0.41;
+      overrides.housingAffordabilityIndex = 0.38;
+      overrides.housingMarketStress = 0.62;
+      overrides.topOneWealthShare = 0.38;
+      overrides.intergenerationalMobilityIndex = 0.39;
+      overrides.socialUnrestIndex = 0.39;
+      overrides.populismIndex = 0.31;
+      overrides.emigrationPressureIndex = 0.29;
+      overrides.institutionalInstabilityIndex = 0.29;
+      overrides.demographicAgingIndex = 0.52;
+      overrides.demographicYouthBulgeIndex = 0.26;
+      overrides.prehistoryWealthPressureIndex = 0.48;
+      overrides.prehistoryMobilityTrendIndex = 0.35;
+      overrides.prehistoryConflictScarIndex = 0.2;
+    }
+
+    return overrides;
+  }
+
+  function createCountryProfile(iso, blocId, overrides, options){
     var baseline = getBlocProfileHeuristics(blocId);
-    var givenOverrides = overrides || {};
+    var givenOverrides = Object.assign({}, buildStartPresetCountryOverrides(options && options.startPreset, iso, blocId), overrides || {});
     var population = Number(givenOverrides.population != null ? givenOverrides.population : getCountryPopulation(iso));
     var laborForceParticipation = Number(givenOverrides.laborForceParticipation != null ? givenOverrides.laborForceParticipation : baseline.laborForceParticipation);
     var unemploymentRate = Number(givenOverrides.unemploymentRate != null ? givenOverrides.unemploymentRate : baseline.unemploymentRate);
@@ -914,6 +1050,11 @@
       philanthropicCapitalAnnualGU:Math.max(0, Number(givenOverrides.philanthropicCapitalAnnualGU != null ? givenOverrides.philanthropicCapitalAnnualGU : 0)),
       philanthropyImpactIndex:clampNumber(Number(givenOverrides.philanthropyImpactIndex != null ? givenOverrides.philanthropyImpactIndex : 0), 0, 1.6),
       legacyProjectsIndex:clampNumber(Number(givenOverrides.legacyProjectsIndex != null ? givenOverrides.legacyProjectsIndex : 0), 0, 1.4),
+      worldStartPresetId:givenOverrides.worldStartPresetId != null ? String(givenOverrides.worldStartPresetId) : null,
+      worldStartYear:Number.isFinite(Number(givenOverrides.worldStartYear)) ? Number(givenOverrides.worldStartYear) : null,
+      prehistoryWealthPressureIndex:clampNumber(Number(givenOverrides.prehistoryWealthPressureIndex != null ? givenOverrides.prehistoryWealthPressureIndex : 0.32), 0, 1),
+      prehistoryMobilityTrendIndex:clampNumber(Number(givenOverrides.prehistoryMobilityTrendIndex != null ? givenOverrides.prehistoryMobilityTrendIndex : 0.5), 0, 1),
+      prehistoryConflictScarIndex:clampNumber(Number(givenOverrides.prehistoryConflictScarIndex != null ? givenOverrides.prehistoryConflictScarIndex : 0.14), 0, 1),
       developmentEducationQuality:clampNumber(Number(givenOverrides.developmentEducationQuality != null ? givenOverrides.developmentEducationQuality : baseline.educationIndex), 0, 1),
       developmentCorruptionIndex:clampNumber(Number(givenOverrides.developmentCorruptionIndex != null ? givenOverrides.developmentCorruptionIndex : (1 - baseline.institutionScore)), 0, 1),
       developmentInfrastructureIndex:clampNumber(Number(givenOverrides.developmentInfrastructureIndex != null ? givenOverrides.developmentInfrastructureIndex : (baseline.institutionScore * 0.78)), 0, 1),
@@ -930,13 +1071,13 @@
     };
   }
 
-  function createCountryProfiles(blocs, existingProfiles){
+  function createCountryProfiles(blocs, existingProfiles, options){
     var profiles = {};
     var prior = existingProfiles || {};
 
     (blocs || []).forEach(function(bloc){
       (bloc.members || []).forEach(function(iso){
-        profiles[iso] = createCountryProfile(iso, bloc.id, prior[iso]);
+        profiles[iso] = createCountryProfile(iso, bloc.id, prior[iso], options);
       });
     });
 

@@ -9,6 +9,7 @@
 
   var BASE_FLOOR_BY_TYPE = {
     "default":60,
+    debtCrisis:60,
     bankruptcy:55,
     inheritance:50,
     death:45,
@@ -29,6 +30,7 @@
   var CATEGORY_BY_TYPE = {
     bankruptcy:"structural",
     default:"structural",
+    debtCrisis:"structural",
     tariff:"structural",
     market:"structural",
     ipo:"structural",
@@ -54,6 +56,7 @@
 
   var DIMENSIONS_BY_TYPE = {
     "default":{ impact:0.88, rarity:0.62, legacy:0.78, crossGen:0.52 },
+    debtCrisis:{ impact:0.88, rarity:0.62, legacy:0.78, crossGen:0.52 },
     bankruptcy:{ impact:0.70, rarity:0.58, legacy:0.62, crossGen:0.36 },
     inheritance:{ impact:0.62, rarity:0.50, legacy:0.76, crossGen:0.78 },
     death:{ impact:0.54, rarity:0.42, legacy:0.62, crossGen:0.70 },

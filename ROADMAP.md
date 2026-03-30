@@ -8,16 +8,16 @@ Everything below is aimed at making outcomes emerge from systems rather than pla
 
 - Current state: Phase 2 closure and acceptance criteria are complete and stable.
 - Recently completed: Global population layer phases 1-4 (labor/demand, birth-death pressure, migration + talent drift, inequality -> social pressure + institution drift).
-- Current frontier: Tier 4 finance/wealth depth, Tier 5 country/institution expansion, and tooling for long-run replay and diagnostics.
-- Recommendation: prioritize Tier 4 Asset classes + Wealth transmission next to strengthen household and dynasty compounding realism.
+- Current frontier: Tier 6 geopolitics/start-era systems, Tier 8 storytelling tools, and deterministic/replay diagnostics.
+- Recommendation: keep closure resilience margins strong while starting Tier 6 in small, testable slices (elections/sanctions before full conflict systems).
 
 ## Core Direction
 
-- [ ] Keep the simulation autonomous. No policy buttons, no direct player control, no god powers.
-- [ ] Make outcomes explainable. Every major life, business, and geopolitical event should have visible reasons.
+- [x] Keep the simulation autonomous. No policy buttons, no direct player control, no god powers.
+- [x] Make outcomes explainable. Every major life, business, and geopolitical event should have visible reasons.
 - [ ] Reduce "pure randomness" over time. More events should emerge from conditions, incentives, and relationships.
-- [ ] Connect all major layers: people -> households -> firms -> industries -> countries -> blocs -> world events.
-- [ ] Make history persistent. The world should feel like it remembers what happened.
+- [x] Connect all major layers: people -> households -> firms -> industries -> countries -> blocs -> world events.
+- [x] Make history persistent. The world should feel like it remembers what happened.
 - [ ] Define a clear "feels alive" finish line so depth does not outpace observability.
 
 ## Core Simulation Loop
@@ -37,6 +37,17 @@ Depth should come from pressure and tradeoffs, not unconstrained accumulation.
 - [ ] Capital and liquidity must cap investment, resilience, and hiring speed.
 - [ ] Resources, infrastructure, and logistics must cap production and throughput.
 - [ ] Housing and local cost of living must cap migration attractiveness and household surplus.
+
+## World Epoch Strategy
+
+Lock this product direction early so geography and scenario scope stay stable:
+
+- [x] Freeze the official world map to the modern country roster and border layout. NEXUS should not simulate alternate border eras, collapsing empires, or redrawn national maps.
+- [ ] Make `1998` the default sandbox start because it gives more dynasty runway than 2000 while keeping the world close to the modern order.
+- [ ] Support additional official start presets: `2000`, `2008`, `2016`, `2020`, and a deterministic `Present Day` snapshot.
+- [ ] Treat `Present Day` as a versioned data snapshot, not the machine wall clock, so tests and replays stay reproducible.
+- [ ] Implement shallow world prehistory early: inherited wealth tiers, firm ages, founder ages, debt vintages, institutional trust, migration pressure, and social status momentum.
+- [ ] Defer deep prehistory until later: multi-generation lineage backfill, rich institutional backstory, and long-form historical calibration.
 
 ## Core Loop Implementation Map
 
@@ -111,7 +122,7 @@ Phase 1 closure is complete. Phase 2 starts now with guardrailed depth work.
 
 ### Phase 2 Acceptance Criteria
 
-- [ ] Tier 1-4 closure remains stable against baseline on at least 3 sequential +1Y runs.
+- [x] Tier 1-4 closure remains stable against baseline on at least 3 sequential +1Y runs.
 - [x] No hard-failure trigger regressions without an explicitly documented design reason.
 - [x] At least one new upward loop and one new downward loop are implemented and observable.
 - [x] New systems emit clear evidence fields so outcomes stay explainable in inspector output.
@@ -393,12 +404,12 @@ These extend what already exists in the sim and should feel natural immediately.
     - [x] Wired demographic indices into birth/death targets and labor-force participation in yearly population pressure updates.
     - [x] Wired demographic pressure into migration pull/push scoring so youth bulges and labor force strain influence outflow risk while aging labor gaps increase attraction pressure.
 
-## Tier 6 - Politics, Geopolitics, and World History
+## Tier 6 - Politics, Geopolitics, and Start-Era Scenarios
 
-- [ ] Elections
+- [x] Elections
   - Hold elections in democratic blocs on a schedule.
   - Let outcomes influence tax, trade, labor, immigration, and business confidence.
-- [ ] Sanctions
+- [x] Sanctions
   - Block trade, finance, and deal flow between targeted blocs.
   - Force firms and countries to reroute supply chains over time.
 - [ ] Expanded trade wars
@@ -408,8 +419,18 @@ These extend what already exists in the sim and should feel natural immediately.
   - Drafting, destruction, refugee flows, sanctions, and postwar debt should all matter.
 - [ ] Treaty and peace outcomes
   - After wars, apply reparations, reconstruction, debt, demographic scars, and geopolitical realignment.
-- [ ] Colonial history mode
-  - Optional historical start with different GDP hierarchy, development paths, and scripted century-defining shocks.
+- [ ] Fixed-border start-era framework
+  - Official starts should all use the same modern country roster, map topology, and city/country identity rules.
+  - Scenario variation should come from seeded macro conditions, institutions, demographics, and firm/household history rather than border redraws.
+- [ ] Start-date preset pack
+  - `1998` default sandbox.
+  - `2000` early-globalization baseline.
+  - `2008` financial-crisis stress baseline.
+  - `2016` legitimacy, polarization, and coalition-stress baseline.
+  - `2020` supply-chain and labor-shock baseline.
+  - `Present Day` deterministic current-world snapshot.
+- [ ] Shallow world prehistory
+  - Seed pre-existing dynasties, mature firms, household class momentum, debt exposure, and institutional reputation so the world feels lived-in from day one.
 - [ ] Commodity shocks
   - Oil shocks, food shocks, shipping disruptions, and financial crises should hit globally.
 - [ ] Disaster systems
@@ -440,7 +461,7 @@ These are crucial because the user is watching, not controlling.
   - Keep routine events visible without crowding out structural and dynasty-defining moments.
 - [ ] Family tree viewer
   - Visual lineage browser for parents, spouses, children, grandchildren, heirs, and branch splits.
-- [ ] Historical timeline
+- [ ] World timeline
   - Full chronicle of births, marriages, deaths, firm launches, bankruptcies, IPOs, elections, wars, sanctions, and scandals.
 - [ ] Follow this person
   - Pin one citizen and keep their story visible as the world updates.
@@ -466,7 +487,7 @@ These are crucial because the user is watching, not controlling.
   - Distinguish structural events from gossip-like human events.
   - Let the feed surface both macro history and intimate story beats.
 
-## Tier 9 - Historical Memory and World Persistence
+## Tier 9 - World Memory and Persistence
 
 - [x] Simulation save and load
   - Preserve long-running worlds.
@@ -474,10 +495,15 @@ These are crucial because the user is watching, not controlling.
 - [ ] Deterministic seeds
   - Same seed should reproduce the same broad history for debugging and comparison.
 - [ ] Scenario presets
-  - Modern sandbox
-  - historical century mode
-  - post-crisis world
-  - emerging-markets-heavy world
+  - `1998` default sandbox
+  - `2000` early-globalization baseline
+  - `2008` post-credit-expansion crisis baseline
+  - `2016` legitimacy and coalition-stress baseline
+  - `2020` supply-chain and labor-shock baseline
+  - deterministic `Present Day` snapshot
+- [ ] Prehistory generation layers
+  - Phase 1: shallow inherited conditions for families, firms, countries, and blocs.
+  - Phase 2: deep lineage backfill and richer pre-sim narrative memory.
 - [ ] Snapshot and replay
   - Save yearly snapshots and compare world states.
 - [ ] Era summaries
@@ -503,9 +529,9 @@ These are crucial because the user is watching, not controlling.
 
 ## Tier Completion Summary
 
-- Core simulation depth shipped: Tier 1, Tier 2, Tier 3 major pillars are complete.
+- Core simulation depth shipped: Tier 1, Tier 2, Tier 3, Tier 4, and Tier 5 major pillars are complete.
 - Major observability foundation shipped: Event significance weighting and closure/baseline telemetry are active.
-- Remaining strategic depth: Tier 4+ systems, deterministic/replay stack maturation, and advanced diagnostics.
+- Remaining strategic depth: Tier 6+ geopolitics and start-era systems, deterministic/replay stack maturation, and advanced diagnostics.
 
 ## Concrete Backlog by Phase and Build Order
 
@@ -522,21 +548,21 @@ Loop-first sequencing note:
 ### Phase A - Loop Foundation
 
 - [x] Build 0: Versioned save schema + migration hooks + snapshot compatibility baseline
-- [ ] Build 1: Trait mechanical pass + simulation health governors + population layer phase 1 + unemployment + wages + hiring
-- [ ] Build 2: Education + skills + worker-to-founder pipeline + population layer phase 2 (birth and death pressure)
+- [x] Build 1: Trait mechanical pass + simulation health governors + population layer phase 1 + unemployment + wages + hiring
+- [x] Build 2: Education + skills + worker-to-founder pipeline + population layer phase 2 (birth and death pressure)
 
 ### Phase B - Loop Reactivity
 
-- [ ] Build 3: Household budgets + class mobility + fertility pressure + population layer phase 3 (migration pressure)
-- [ ] Build 4: Inheritance disputes + family politics + personal reputation + population layer phase 4 (inequality feedback)
-- [ ] Build 5: Company reputation + industry-specific behavior
-- [ ] Build 6: Supply chains + debt + credit + bankruptcy stages
-- [ ] Build 7: Central banks + inflation + rates + housing sensitivity
+- [x] Build 3: Household budgets + class mobility + fertility pressure + population layer phase 3 (migration pressure)
+- [x] Build 4: Inheritance disputes + family politics + personal reputation + population layer phase 4 (inequality feedback)
+- [x] Build 5: Company reputation + industry-specific behavior
+- [x] Build 6: Supply chains + debt + credit + bankruptcy stages
+- [x] Build 7: Central banks + inflation + rates + housing sensitivity
 
 ### Phase C - Loop Complexity
 
-- [ ] Build 8: Stock market + outside investors + M&A
-- [ ] Build 9: Country institutions + migration + regional detail
+- [x] Build 8: Stock market + outside investors + M&A
+- [x] Build 9: Country institutions + migration + regional detail
 
 ### Phase D - World Response and Observability
 
@@ -544,20 +570,41 @@ Loop-first sequencing note:
 - [ ] Build 11: Explainability layer + family tree + timeline + follow modes + event significance weighting
 - [ ] Build 12: Save/load UX + deterministic seeds + replay + scenario presets
 
+## Tier 6 Readiness Split
+
+Use this as the execution gate before opening full Tier 6 scope.
+
+### Must Finish Before Tier 6 Starts
+
+- [x] Build design gate brief is written for the Tier 6 kickoff:
+  - [Tier 6 kickoff brief](requirements/tier6/kickoff-gate-brief.md)
+  - [stability and failure-mode checklist](requirements/tier6/stability-failure-checklist.md)
+  - [core-loop attachment matrix for Tier 6 mechanics](requirements/tier6/core-loop-attachment-matrix.md)
+- [x] Closure resilience margin is stable in headless runs (keep `overallPassing` true and widen low-margin guardrails, especially under-utilized layoff behavior).
+  - Latest `npm run closure` baseline (2026-03-26T23:20:46.048Z) is passing with `overallPassing=true`; gate `3.2` remains inside the guardrail at `0.200` in run 3, and the latest regression artifact (2026-03-26T23:17:08.766Z) also passes.
+- [x] Tier 6 starts in constrained slices (elections/sanctions first) before wars/conflict phases.
+  - Constrained Slice 1 scaffolding is active in `src/js/app/sim.js` with elections/sanctions yearly passes and conflict phase hard-disabled.
+  - [Tier 6 constrained slice plan](requirements/tier6/slice-plan.md)
+
+### Can Run In Parallel While Tier 6 Begins
+
+- [ ] Tier 8 observability/story tools (family tree, timeline, follow modes, explainability panels, diagnostics overlays).
+- [ ] Tier 9 deterministic/replay stack maturation (deterministic seeds, snapshot/replay, era summaries).
+- [ ] Tier 10 quality/performance tooling (balancing dashboards, profiling/scale tests, migration audits, invariant tests).
+- [ ] Remaining Core Direction polish:
+  - reduce pure randomness with more condition-driven chains
+  - define and lock the "feels alive" finish line
+
 ## Immediate Next Focus
 
-- [ ] Core loop stabilization
-  - Tighten the labor -> production -> income -> consumption -> demand -> prices -> firm decisions -> employment chain.
-  - Make this loop visible and testable before adding more top-level world systems.
-- [ ] Constraint enforcement
-  - Audit where labor, demand, capital, housing, and infrastructure constraints are still too soft.
-  - Close remaining inflationary or unconstrained growth paths before expanding geopolitics or event complexity.
-
-- [ ] Tier 4: Asset classes
+- [x] Tier 4: Asset classes
   - Separate cash, equity, business ownership, property, debt obligations, and inherited trusts.
   - This unlocks clearer wealth compounding and richer intergenerational outcomes.
-- [ ] Tier 4: Wealth transmission
+- [x] Tier 4: Wealth transmission
   - Shift dynasty growth from founder income dependence toward ownership and portfolio effects.
   - This will make inheritance, social mobility, and class persistence more realistic.
+- [ ] Closure resilience margin
+  - Keep the jsdom closure harness green while widening the narrowest guardrail margins, especially under-utilized layoff behavior.
+  - Treat regression drift in headless reports as a balancing task, not as a roadmap blocker for Tier 4 work.
 - [x] Corporate ladders (v1 leadership roster shipped)
   - This bridge is in place and ready for deeper wealth and ownership modeling.

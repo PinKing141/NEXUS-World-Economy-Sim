@@ -2,6 +2,16 @@
   var App = global.Nexus || (global.Nexus = {});
   var initialized = false;
   var countryGeometryCache = {};
+  var cityDetailLookupCache = {};
+  var COUNTRY_PLACEMENT_FALLBACKS = {
+    AX:"FI",
+    CC:"AU",
+    CX:"AU",
+    HK:"CN",
+    MO:"CN",
+    SJ:"NO",
+    UM:"US"
+  };
 
   function getMapRoot() {
     return App.store.mapSvg;
@@ -247,11 +257,165 @@
       "g[id] > path, g[id] > g > path, g[id] > circle { transition: fill 0.35s ease, stroke 0.2s ease, opacity 0.2s ease; }",
       "text { user-select:none; fill:#48627d; font-family:'Share Tech Mono', monospace; font-size:6px; letter-spacing:0.08em; }",
       "#nexus-node-layer text { pointer-events:none; fill:#5a7a9a; }",
-      "#nexus-node-layer .pnode circle, #nexus-node-layer .pnode text { transition: cx 0.22s ease, cy 0.22s ease, r 0.22s ease, opacity 0.22s ease, fill 0.22s ease, x 0.22s ease, y 0.22s ease, font-size 0.22s ease; }",
-      "#nexus-node-layer .pnode { cursor:pointer; }",
+      "#nexus-node-layer .bnode circle, #nexus-node-layer .bnode text { transition: cx 0.22s ease, cy 0.22s ease, r 0.22s ease, opacity 0.22s ease, fill 0.22s ease, x 0.22s ease, y 0.22s ease, font-size 0.22s ease; }",
+      "#nexus-node-layer .bnode { cursor:pointer; }",
       "#Ocean, #World { stroke:none !important; }"
     ].join(" ");
     defs.appendChild(styleNode);
+  }
+
+  function normalizeText(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function normalizeIso(value) {
+    var text = String(value || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+    var aliases = {
+      USA:"US",
+      USO:"US",
+      UK:"GB",
+      GBR:"GB",
+      UAE:"AE",
+      KSA:"SA"
+    };
+
+    if (!text) return "";
+    return aliases[text] || text;
+  }
+
+  function resolveMapCountryIso(iso, options) {
+    var normalized = normalizeIso(iso);
+    var fallback = COUNTRY_PLACEMENT_FALLBACKS[normalized];
+    var allowBlocFallback = !(options && options.allowBlocFallback === false);
+    var bloc;
+    var mappedMember;
+
+    if (!normalized) return "";
+    if (getCountryGeometry(normalized)) return normalized;
+
+    if (fallback && getCountryGeometry(fallback)) {
+      return fallback;
+    }
+
+    bloc = allowBlocFallback && App.store && typeof App.store.getBlocByCountry === "function" ? App.store.getBlocByCountry(normalized) : null;
+    if (allowBlocFallback && bloc && Array.isArray(bloc.members)) {
+      mappedMember = bloc.members.find(function (memberIso) {
+        var candidate = String(memberIso || "").trim().toUpperCase();
+        return !!candidate && candidate !== normalized && !!getCountryGeometry(candidate);
+      });
+      if (mappedMember) {
+        return mappedMember;
+      }
+    }
+
+    return normalized;
+  }
+
+  function hashString(value) {
+    var text = String(value || "");
+    var hash = 2166136261;
+
+    for (var index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return hash >>> 0;
+  }
+
+  function hashToUnit(value) {
+    return (hashString(value) % 1000000) / 1000000;
+  }
+
+  function getBusinessNodeColor(stage) {
+    var key = String(stage || "growing").toLowerCase();
+    var map = {
+      startup: "#00d4ff",
+      growing: "#2ecc71",
+      stable: "#5bc0eb",
+      distress: "#f5a623",
+      restructuring: "#ff8f5a",
+      fire_sale: "#e67e22",
+      bailout: "#9b59b6",
+      liquidation: "#e74c3c",
+      defunct: "#6b7d90"
+    };
+
+    return map[key] || "#5bc0eb";
+  }
+
+  function getCityDetailLookup(iso) {
+    var code = String(iso || "").trim().toUpperCase();
+    var lookup;
+
+    if (!code) return { byCity: {}, byCityState: {} };
+    if (cityDetailLookupCache[code]) return cityDetailLookupCache[code];
+
+    lookup = { byCity: {}, byCityState: {} };
+
+    if (App.data && typeof App.data.getWorldCityDetailsByCountry === "function") {
+      App.data.getWorldCityDetailsByCountry(code).forEach(function (entry) {
+        var cityKey = normalizeText(entry && entry.name);
+        var stateKey = normalizeText(entry && entry.state);
+        var compositeKey = cityKey + "|" + stateKey;
+        var current = lookup.byCity[cityKey];
+        var currentComposite = lookup.byCityState[compositeKey];
+        var population = Number(entry && entry.population) || 0;
+
+        if (!cityKey) return;
+        if (!current || population > (Number(current.population) || 0)) {
+          lookup.byCity[cityKey] = entry;
+        }
+        if (!currentComposite || population > (Number(currentComposite.population) || 0)) {
+          lookup.byCityState[compositeKey] = entry;
+        }
+      });
+    }
+
+    cityDetailLookupCache[code] = lookup;
+    return lookup;
+  }
+
+  function getBusinessAnchorPoint(business, mapIso) {
+    var iso = resolveMapCountryIso(mapIso || (business && business.countryISO));
+    var cityKey = normalizeText(business && business.hqCity);
+    var stateKey = normalizeText(business && business.hqSubdivision);
+    var lookup = getCityDetailLookup(iso);
+    var detail = lookup.byCityState[cityKey + "|" + stateKey] || lookup.byCity[cityKey];
+    var center;
+    var sampled;
+    var spawn;
+
+    if (detail && Number.isFinite(Number(detail.lat)) && Number.isFinite(Number(detail.lng))) {
+      center = App.utils.latLngToSVG(Number(detail.lat), Number(detail.lng));
+      sampled = sampleNearPointInCountry(iso, center, 10, 8, 44);
+      if (sampled) return { point:sampled, countryISO:iso };
+      if (isPointInCountry(iso, center.x, center.y)) return { point:center, countryISO:iso };
+    }
+
+    spawn = getCountrySpawnPoint(iso, null);
+    return {
+      point:spawn && spawn.pos ? spawn.pos : { x: 500, y: 253 },
+      countryISO:iso
+    };
+  }
+
+  function spreadPointAroundAnchor(iso, anchor, locationKey, businessId) {
+    var slotHash = hashString(String(locationKey || "") + "|" + String(businessId || ""));
+    var angle = ((slotHash % 3600) / 3600) * Math.PI * 2;
+    var ring = 1 + (((slotHash >>> 7) % 4));
+    var radius = Math.min(18, 2.4 + (ring * 2.2) + (((slotHash >>> 12) % 1000) / 1000) * 1.4);
+    var x = anchor.x + (Math.cos(angle) * radius);
+    var y = anchor.y + (Math.sin(angle) * radius * 0.74);
+    var point;
+
+    if (isPointInCountry(iso, x, y)) {
+      return { x: x, y: y };
+    }
+
+    point = sampleNearPointInCountry(iso, anchor, 12 + radius, 10 + radius * 0.7, 28);
+    if (point) return point;
+    return anchor;
   }
 
   function registerCountryNames() {
@@ -331,16 +495,24 @@
     var bloc = App.store.getBlocByCountry(iso);
     var currency = App.utils.getCurrency(iso);
     var countryFlag = App.utils.getCountryFlag(iso);
+    var countryFlagMarkup = App.utils.renderCountryFlagIcon(iso, {
+      alt:App.store.getCountryName(iso),
+      className:"flag-icon-sm"
+    });
+    var blocFlagMarkup = bloc ? App.utils.renderFlagIcon(bloc.flag, {
+      alt:bloc.name,
+      className:"flag-icon-sm"
+    }) : "";
     var people = App.store.getCountryPeople(iso);
     var businesses = App.store.getCountryBusinesses(iso);
     var fxChange = bloc && bloc.prevRate ? ((bloc.rate - bloc.prevRate) / bloc.prevRate) * 100 : 0;
-    var countryLabel = countryFlag ? (countryFlag + " " + App.store.getCountryName(iso)) : App.store.getCountryName(iso);
+    var countryLabel = countryFlag ? ((countryFlagMarkup || countryFlag) + " " + App.store.getCountryName(iso)) : App.store.getCountryName(iso);
 
     tip.style.display = "block";
     moveTip(event);
     tip.innerHTML = [
       "<strong>" + countryLabel + "</strong>",
-      bloc ? (bloc.flag + " " + bloc.name) : "Unassigned bloc",
+      bloc ? ((blocFlagMarkup || bloc.flag) + " " + bloc.name) : "Unassigned bloc",
       "Currency: <span style='color:var(--cyan)'>" + currency.sym + " " + currency.code + "</span>",
       "Citizens: " + people.length + " | Firms: " + businesses.length,
       bloc ? ("FX Rate: " + (bloc.rate > 100 ? bloc.rate.toFixed(1) : bloc.rate.toFixed(4)) + "/GU") : "FX Rate: n/a",
@@ -515,116 +687,136 @@
   }
 
   function showNodeTip(event, id) {
-    var person = App.store.getPerson(id);
-    if (!person) return;
+    var business = App.store.getBusiness(id);
+    if (!business) return;
 
-    var bloc = App.store.getBloc(person.blocId);
-    var countryFlag = App.utils.getCountryFlag(person.countryISO) || bloc.flag;
-    var business = App.store.getAssociatedBusiness(person);
-    var currency = App.utils.getCurrency(person.countryISO);
-    var spouse = App.store.getSpouse(person);
-    var children = App.store.getChildren(person, false);
-    var heir = person.businessId && App.sim.getPotentialHeir ? App.sim.getPotentialHeir(person) : null;
-    var roleLabel = person.jobTitle ? (person.jobTitle + " - ") : "";
+    var bloc = App.store.getBloc(business.blocId);
+    var countryFlag = App.utils.renderCountryFlagIcon(business.countryISO, {
+      alt:App.store.getCountryName(business.countryISO),
+      className:"flag-icon-sm"
+    }) || App.utils.renderFlagIcon(bloc.flag, {
+      alt:bloc.name,
+      className:"flag-icon-sm"
+    });
+    var currency = App.utils.getCurrency(business.countryISO);
+    var owner = App.store.getPerson(business.ownerId);
+    var ceo = App.store.getBusinessLeader ? App.store.getBusinessLeader(business, "ceo") : null;
+    var ceoPerson = ceo && ceo.person ? ceo.person : owner;
+    var location = App.utils.businessLocationLabel(business, false);
     var tip = document.getElementById("map-tip");
 
     tip.style.display = "block";
     moveTip(event);
     tip.innerHTML = [
-      countryFlag + " <strong>" + person.name + "</strong>",
-      roleLabel + App.utils.getLifeStageLabel(person) + " - " + App.utils.locationLabel(person, false) + " - " + currency.sym + " " + currency.code,
-      business ? business.name : "No business",
-      spouse ? ((person.sex === "male" ? "Spouse: " : "Spouse: ") + spouse.name) : "Spouse: none",
-      "Children: " + children.length + (heir ? (" | Heir: " + heir.name) : ""),
-      App.utils.fmtCountry(person.netWorthGU, person.countryISO),
-      "<span style='color:var(--text3)'>" + App.utils.fmtGU(person.netWorthGU) + "</span>"
+      countryFlag + " <strong>" + business.name + "</strong>",
+      "CEO: " + (ceoPerson ? ceoPerson.name : "Unknown"),
+      (business.industry || "Business") + " - " + location,
+      "Stage: " + String(business.stage || "growing").toUpperCase() + " | " + currency.sym + " " + currency.code,
+      "Owner: " + (owner ? owner.name : "Unknown") + " | Employees: " + (business.employees || 0),
+      "Valuation: " + App.utils.fmtCountry(business.valuationGU || 0, business.countryISO),
+      "Revenue: " + App.utils.fmtCountry(business.revenueGU || 0, business.countryISO)
     ].join("<br>");
   }
 
   function renderNodes() {
     var nodeSvg = App.store.mapSvg ? ensureNodeLayer(App.store.mapSvg) : null;
     var zoom = App.store.panZoom ? Math.max(1, App.store.panZoom.getZoom()) : 1;
-    var nodeScale = App.utils.clamp(0.82 * Math.pow(zoom, -0.45), 0.24, 0.9);
-    var haloPad = 0.95 * Math.pow(zoom, -0.42) + 0.25;
-    var showAdultLabels = zoom >= 3.2;
-    var labelFontSize = 2.5 * Math.pow(zoom, -0.2);
+    var nodeScale = App.utils.clamp(0.88 * Math.pow(zoom, -0.32), 0.4, 0.94);
+    var haloPad = 0.8 * Math.pow(zoom, -0.34) + 0.35;
+    var showLabels = zoom >= 3.6;
+    var labelFontSize = 2.8 * Math.pow(zoom, -0.14);
     var ownerDocument;
     var seenIds = {};
+    var activeBusinesses = App.store.businesses.filter(function (business) {
+      return !!business && business.stage !== "defunct";
+    });
+    var locationKeys = {};
 
     if (!nodeSvg) return;
     ownerDocument = App.store.mapSvg.ownerDocument || document;
 
-    App.store.getPublicPeople().forEach(function (person) {
+    activeBusinesses.forEach(function (business) {
+      var mapIso = resolveMapCountryIso(business.countryISO);
+      locationKeys[business.id] = [
+        mapIso,
+        normalizeText(business.hqCity) || "_country_",
+        normalizeText(business.hqSubdivision) || ""
+      ].join("|");
+    });
+
+    activeBusinesses.forEach(function (business) {
       var node;
       var halo;
       var selectedRing;
       var core;
       var label;
-      var business;
+      var locationKey;
+      var mapIso;
+      var nodeAnchorKey;
+      var anchorData;
+      var anchor;
+      var point;
+      var hasStablePoint;
+      var pointInCountry;
       var baseRadius;
       var radius;
       var color;
       var selected;
-      var isMinor;
       var opacity;
 
-      if (person && person.countryISO && !isPointInCountry(person.countryISO, person.svgX, person.svgY)) {
-        var correctedSpawn = getCountrySpawnPoint(person.countryISO, person.state || null);
-        if (correctedSpawn && correctedSpawn.pos && isPointInCountry(person.countryISO, correctedSpawn.pos.x, correctedSpawn.pos.y)) {
-          person.svgX = correctedSpawn.pos.x;
-          person.svgY = correctedSpawn.pos.y;
-          if (person.countryISO === "US") {
-            person.state = correctedSpawn.state || person.state || null;
-            if (App.data && typeof App.data.getWorldCitiesByCountryState === "function") {
-              var alignedCities = App.data.getWorldCitiesByCountryState("US", person.state, 48);
-              if (alignedCities.length && alignedCities.indexOf(person.city) === -1) {
-                person.city = App.utils.pick(alignedCities);
-              }
-            }
-          }
-        } else {
-          return;
-        }
+      mapIso = resolveMapCountryIso(business.countryISO);
+      locationKey = locationKeys[business.id] || [
+        mapIso,
+        normalizeText(business.hqCity) || "_country_",
+        normalizeText(business.hqSubdivision) || ""
+      ].join("|");
+      nodeAnchorKey = locationKey;
+      hasStablePoint = Number.isFinite(Number(business.mapSvgX)) && Number.isFinite(Number(business.mapSvgY));
+      pointInCountry = hasStablePoint ? isPointInCountry(mapIso, Number(business.mapSvgX), Number(business.mapSvgY)) : false;
+
+      if (!hasStablePoint || business.mapNodeAnchorKey !== nodeAnchorKey || business.mapNodeCountryISO !== mapIso || !pointInCountry) {
+        anchorData = getBusinessAnchorPoint(business, mapIso);
+        anchor = anchorData && anchorData.point ? anchorData.point : { x: 500, y: 253 };
+        point = spreadPointAroundAnchor(mapIso, anchor, nodeAnchorKey, business.id || nodeAnchorKey);
+
+        business.mapSvgX = point.x;
+        business.mapSvgY = point.y;
+        business.mapNodeAnchorKey = nodeAnchorKey;
+        business.mapNodeCountryISO = mapIso;
       }
 
-      business = App.store.getAssociatedBusiness(person);
-      baseRadius = business ? Math.min(4.5, 1 + Math.log10(Math.max(1, business.valuationGU / 8000)) * 1.1) : 1;
-      radius = Math.max(0.16, baseRadius * nodeScale);
-      color = App.data.STATUS_COLOR[person.status] || "#00d4ff";
-      selected = App.store.selection.type === "person" && App.store.selection.id === person.id;
-      isMinor = person.age < 18;
-      opacity = isMinor ? 0.55 : (selected ? 1 : 0.85);
+      baseRadius = App.utils.clamp(1.4 + (Math.log10(Math.max(1, Number(business.valuationGU) || 1)) - 3.8) * 0.8, 1.2, 3.9);
+      radius = Math.max(0.7, baseRadius * nodeScale);
+      color = getBusinessNodeColor(business.stage);
+      selected = App.store.selection.type === "business" && App.store.selection.id === business.id;
+      opacity = selected ? 1 : 0.9;
 
-      if (isMinor) {
-        radius = Math.max(0.7, radius * 0.72);
-      }
-
-      seenIds[person.id] = true;
-      node = nodeSvg.querySelector(".pnode[data-person-id='" + person.id + "']");
+      seenIds[business.id] = true;
+      node = nodeSvg.querySelector(".bnode[data-business-id='" + business.id + "']");
 
       if (!node) {
         node = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "g");
-        node.setAttribute("class", "pnode");
-        node.setAttribute("data-person-id", person.id);
+        node.setAttribute("class", "bnode");
+        node.setAttribute("data-business-id", business.id);
       }
 
       halo = node.querySelector("circle[data-role='pulse']");
       selectedRing = node.querySelector("circle[data-role='selected']");
       core = node.querySelector("circle[data-role='core']");
 
-      if (person.pulse) {
+      if (selected) {
         if (!halo) {
           halo = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "circle");
           halo.setAttribute("data-role", "pulse");
           node.appendChild(halo);
         }
-        halo.setAttribute("cx", person.svgX);
-        halo.setAttribute("cy", person.svgY);
+        halo.setAttribute("cx", business.mapSvgX);
+        halo.setAttribute("cy", business.mapSvgY);
         halo.setAttribute("r", radius + (haloPad * 2.6));
         halo.setAttribute("fill", "none");
         halo.setAttribute("stroke", color);
-        halo.setAttribute("stroke-width", Math.max(0.12, 0.48 * nodeScale));
-        halo.setAttribute("opacity", "0.35");
+        halo.setAttribute("stroke-width", Math.max(0.18, 0.54 * nodeScale));
+        halo.setAttribute("opacity", "0.42");
       } else if (halo) {
         halo.remove();
       }
@@ -635,8 +827,8 @@
           selectedRing.setAttribute("data-role", "selected");
           node.appendChild(selectedRing);
         }
-        selectedRing.setAttribute("cx", person.svgX);
-        selectedRing.setAttribute("cy", person.svgY);
+        selectedRing.setAttribute("cx", business.mapSvgX);
+        selectedRing.setAttribute("cy", business.mapSvgY);
         selectedRing.setAttribute("r", radius + (haloPad * 1.8));
         selectedRing.setAttribute("fill", "none");
         selectedRing.setAttribute("stroke", color);
@@ -650,25 +842,25 @@
         core.setAttribute("data-role", "core");
         node.appendChild(core);
       }
-      core.setAttribute("cx", person.svgX);
-      core.setAttribute("cy", person.svgY);
+      core.setAttribute("cx", business.mapSvgX);
+      core.setAttribute("cy", business.mapSvgY);
       core.setAttribute("r", radius);
       core.setAttribute("fill", color);
       core.setAttribute("opacity", opacity);
 
       label = node.querySelector("text[data-role='label']");
-      if (person.age >= 16 && (selected || showAdultLabels)) {
+      if (selected || showLabels) {
         if (!label) {
           label = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "text");
           label.setAttribute("data-role", "label");
           node.appendChild(label);
         }
-        label.setAttribute("x", person.svgX + radius + (0.9 * Math.pow(zoom, -0.35)));
-        label.setAttribute("y", person.svgY + (labelFontSize * 0.45));
+        label.setAttribute("x", business.mapSvgX + radius + (0.9 * Math.pow(zoom, -0.35)));
+        label.setAttribute("y", business.mapSvgY + (labelFontSize * 0.45));
         label.setAttribute("font-family", "Share Tech Mono, monospace");
         label.setAttribute("font-size", labelFontSize);
         label.setAttribute("fill", "#5a7a9a");
-        label.textContent = person.name.split(" ")[0];
+        label.textContent = App.utils.getBusinessTicker ? App.utils.getBusinessTicker(business.name) : String(business.name || "").slice(0, 8);
       } else if (label) {
         label.remove();
       }
@@ -678,8 +870,8 @@
       }
     });
 
-    Array.prototype.forEach.call(nodeSvg.querySelectorAll(".pnode"), function (node) {
-      var id = node.getAttribute("data-person-id");
+    Array.prototype.forEach.call(nodeSvg.querySelectorAll(".bnode, .pnode"), function (node) {
+      var id = node.getAttribute("data-business-id") || node.getAttribute("data-person-id");
 
       if (!seenIds[id]) {
         node.remove();
@@ -690,7 +882,7 @@
 
       node.addEventListener("click", function (event) {
         event.stopPropagation();
-        App.store.selectPerson(id);
+        App.store.selectBusiness(id);
         App.ui.renderSelection();
       });
       node.addEventListener("mouseenter", function (event) {

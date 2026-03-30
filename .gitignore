@@ -24,3 +24,10 @@ out/
 .env
 .env.local
 .env.*.local
+
+# Simulation artifacts
+closure-latest-run.json
+long-horizon-*.json
+CSVFILESEXPORT/*.csv
+tests/closure_test_notes/debug-*.json
+tests/closure_test_notes/*-current.json

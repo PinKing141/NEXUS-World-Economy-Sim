@@ -60,9 +60,18 @@ function createSeededRandom(seed) {
 }
 
 function installDeterministicRandom(seed) {
-  const random = createSeededRandom(seed);
+  let state = normalizeSeed(seed);
   Math.random = function deterministicRandom() {
-    return random();
+    state = (state + 0x6D2B79F5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+  Math.random.getState = function getDeterministicRandomState() {
+    return state >>> 0;
+  };
+  Math.random.setState = function setDeterministicRandomState(nextState) {
+    state = normalizeSeed(nextState);
   };
 }
 
@@ -93,6 +102,13 @@ function bootApp() {
     "src/js/app/state.js",
     "src/js/app/events.js",
     "src/js/app/persistence.js",
+    "src/js/app/sim-core.js",
+    "src/js/app/sim-business.js",
+    "src/js/app/sim-labour.js",
+    "src/js/app/sim-finance.js",
+    "src/js/app/sim-demographics.js",
+    "src/js/app/sim-society.js",
+    "src/js/app/sim-geopolitics.js",
     "src/js/app/sim.js"
   ].forEach((rel) => {
     const code = fs.readFileSync(path.join(ROOT, rel), "utf8");
@@ -234,7 +250,8 @@ async function main() {
 
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n", "utf8");
   console.log("wrote " + reportPath);
-  console.log(JSON.stringify(report, null, 2));
+  console.log("baseline: " + report.baseline.passed + " passed, " + report.baseline.failed + " failed");
+  console.log("sequential runs: " + sequential.filter((item) => item.ok).length + "/" + sequential.length + " passing");
   process.exit(report.pass ? 0 : 1);
 }
 

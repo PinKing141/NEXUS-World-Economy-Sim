@@ -5,13 +5,19 @@
   "description": "NEXUS World Economy Simulator (static prototype)",
   "scripts": {
     "dev": "http-server -c-1 -p 5173 .",
+    "closure": "node scripts/run-closure.mjs",
+    "horizon:70y": "node scripts/run-long-horizon.mjs",
     "build:names": "powershell -ExecutionPolicy Bypass -File scripts/build-name-pools.ps1",
     "build:map": "powershell -ExecutionPolicy Bypass -File scripts/build-inline-world-map.ps1",
     "build:assets": "npm run build:names && npm run build:map",
-    "test:closure": "node tests/closure-tier14-regression-check.js"
+    "test:start-era": "node tests/start-era-contract-check.js",
+    "test:architecture": "node tests/sim-engine-architecture-check.js",
+    "test:closure": "node tests/closure-tier14-regression-check.js",
+    "debug:closure:gate14": "node tests/debug-closure-gate14.js"
   },
   "devDependencies": {
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "jsdom": "^26.1.0"
   },
   "engines": {
     "node": ">=20"

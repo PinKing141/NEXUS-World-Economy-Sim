@@ -30,6 +30,21 @@
     };
   }
 
+  function normalizeIso(value){
+    var text = String(value || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+    var aliases = {
+      USA:"US",
+      USO:"US",
+      UK:"GB",
+      GBR:"GB",
+      UAE:"AE",
+      KSA:"SA"
+    };
+
+    if (!text) return "";
+    return aliases[text] || text;
+  }
+
   var store = {
     blocs: [],
     isoToBloc: {},
@@ -45,6 +60,8 @@
     econHist: {},
     tickerData: {},
     businessNamingMode: "v2",
+    startPresetId: "1998",
+    startYear: 1998,
     selectedBlocId: "NA",
     selection: { type:null, id:null },
     simSpeed: 1,
@@ -54,8 +71,10 @@
     countryNames: {},
     countryData: {},
     countryProfiles: {},
+    tier6SanctionLanes: {},
     governor: createGovernorState(),
     stockMarket: createStockMarketState(),
+    yearlyTuningTelemetry: [],
     mapObject: null,
     mapSvg: null,
     mapDocument: null,
@@ -137,6 +156,8 @@
     store.econHist = {};
     store.tickerData = {};
     store.businessNamingMode = "v2";
+    store.startPresetId = "1998";
+    store.startYear = 1998;
     store.selectedBlocId = "NA";
     store.selection = { type:null, id:null };
     store.simSpeed = 1;
@@ -146,8 +167,10 @@
     store.countryNames = {};
     store.countryData = {};
     store.countryProfiles = {};
+    store.tier6SanctionLanes = {};
     store.governor = createGovernorState();
     store.stockMarket = createStockMarketState();
+    store.yearlyTuningTelemetry = [];
     store.mapObject = null;
     store.mapSvg = null;
     store.mapDocument = null;
@@ -156,7 +179,7 @@
     store.blocs.forEach(function(bloc){
       store.econHist[bloc.id] = [];
       bloc.members.forEach(function(iso){
-        store.isoToBloc[iso] = bloc.id;
+        store.isoToBloc[normalizeIso(iso)] = bloc.id;
       });
     });
   };
@@ -173,7 +196,8 @@
   };
 
   store.getBlocByCountry = function(iso){
-    return store.getBloc(store.isoToBloc[iso] || "NA");
+    var normalized = normalizeIso(iso);
+    return store.getBloc(store.isoToBloc[normalized] || "NA");
   };
 
   store.getPerson = function(id){
@@ -344,35 +368,39 @@
   };
 
   store.setCountryName = function(iso, name){
+    iso = normalizeIso(iso);
     if (iso && name) {
       store.countryNames[iso] = normalizeCountryDisplayName(name);
     }
   };
 
   store.getCountryName = function(iso){
-    var name = store.countryNames[iso];
-    if (!name) return iso;
+    var normalized = normalizeIso(iso);
+    var name = store.countryNames[normalized];
+    if (!name) return normalized || iso;
     name = normalizeCountryDisplayName(name);
-    store.countryNames[iso] = name;
+    store.countryNames[normalized] = name;
     return name;
   };
 
   store.setCountryData = function(iso, data){
+    iso = normalizeIso(iso);
     if (!iso) return;
     store.countryData[iso] = Object.assign({ iso:iso }, data || {});
   };
 
   store.getCountryData = function(iso){
-    return store.countryData[iso] || null;
+    return store.countryData[normalizeIso(iso)] || null;
   };
 
   store.setCountryProfile = function(iso, profile){
+    iso = normalizeIso(iso);
     if (!iso) return;
     store.countryProfiles[iso] = Object.assign({ iso:iso }, profile || {});
   };
 
   store.getCountryProfile = function(iso){
-    return store.countryProfiles[iso] || null;
+    return store.countryProfiles[normalizeIso(iso)] || null;
   };
 
   store.getBlocProfiles = function(blocId){
@@ -391,8 +419,9 @@
   };
 
   store.selectCountry = function(iso){
-    var bloc = store.getBlocByCountry(iso);
-    store.selection = { type:"country", id:iso };
+    var normalized = normalizeIso(iso);
+    var bloc = store.getBlocByCountry(normalized);
+    store.selection = { type:"country", id:normalized || iso };
     if (bloc) {
       store.selectedBlocId = bloc.id;
     }
@@ -498,26 +527,30 @@
   };
 
   store.getCountryPeople = function(iso){
+    iso = normalizeIso(iso);
     return store.people.filter(function(person){
-      return person.countryISO === iso && person.alive;
+      return normalizeIso(person.countryISO) === iso && person.alive;
     });
   };
 
   store.getPublicCountryPeople = function(iso){
+    iso = normalizeIso(iso);
     return store.people.filter(function(person){
-      return person.countryISO === iso && store.isPublicPerson(person);
+      return normalizeIso(person.countryISO) === iso && store.isPublicPerson(person);
     }).slice().sort(publicSort);
   };
 
   store.getCountryPeopleAll = function(iso){
+    iso = normalizeIso(iso);
     return store.people.filter(function(person){
-      return person.countryISO === iso;
+      return normalizeIso(person.countryISO) === iso;
     });
   };
 
   store.getCountryBusinesses = function(iso){
+    iso = normalizeIso(iso);
     return store.businesses.filter(function(business){
-      return business.countryISO === iso;
+      return normalizeIso(business.countryISO) === iso;
     });
   };
 

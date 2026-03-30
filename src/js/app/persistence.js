@@ -3,7 +3,7 @@
   var SAVE_KEY = "nexus.world.snapshot";
   var SAVE_SLOT_KEY_PREFIX = "nexus.world.slot.v1.";
   var SAVE_SLOT_COUNT = 5;
-  var SCHEMA_VERSION = 11;
+  var SCHEMA_VERSION = 12;
   var AUTOSAVE_INTERVAL_DAYS = 30;
   var MAX_NEWS_ITEMS = 100;
   var MAX_EVENT_HISTORY = 2000;
@@ -18,6 +18,8 @@
     bloc:{},
     country:{}
   };
+  var LEGACY_WORLD_START_YEAR = (App.data && App.data.CALENDAR && Number(App.data.CALENDAR.startYear)) ? Number(App.data.CALENDAR.startYear) : 2026;
+  var DEFAULT_WORLD_START_PRESET_ID = "present-day";
 
   function deepClone(value){
     return JSON.parse(JSON.stringify(value == null ? null : value));
@@ -54,6 +56,188 @@
       seen[value] = true;
       return true;
     });
+  }
+
+  function normalizeWorldStartPresetId(value, fallback){
+    return normalizeString(value, fallback || DEFAULT_WORLD_START_PRESET_ID);
+  }
+
+  function normalizeIso(value){
+    var text = String(value || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+    var aliases = {
+      USA:"US",
+      USO:"US",
+      UK:"GB",
+      GBR:"GB",
+      UAE:"AE",
+      KSA:"SA"
+    };
+
+    if (!text) return "";
+    return aliases[text] || text;
+  }
+
+  function hashString(value){
+    var text = String(value || "");
+    var hash = 2166136261;
+    var index;
+
+    for (index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return hash >>> 0;
+  }
+
+  function isNonResidentialIso(iso){
+    return ["AQ", "AX", "BV", "HM", "SJ", "TF", "UM"].indexOf(normalizeIso(iso)) !== -1;
+  }
+
+  function remapUnsupportedIso(iso, options){
+    var normalized = normalizeIso(iso);
+    var blocId = normalizeString(options && options.blocId, null);
+    var key = normalizeString(options && options.stableKey, null) || normalized;
+    var blocs = Array.isArray(options && options.blocs) ? options.blocs : [];
+    var members = [];
+    var bloc;
+    var index;
+    var fallbackMap = {
+      AQ:"CL",
+      AX:"FI",
+      BV:"NO",
+      HM:"AU",
+      SJ:"NO",
+      TF:"FR",
+      UM:"US"
+    };
+
+    if (!normalized) return "";
+    if (!isNonResidentialIso(normalized)) return normalized;
+
+    if (blocId) {
+      bloc = blocs.find(function(item){ return item && item.id === blocId; }) || null;
+      if (bloc && Array.isArray(bloc.members)) {
+        members = bloc.members.filter(function(memberIso){
+          var candidate = normalizeIso(memberIso);
+          return !!candidate && !isNonResidentialIso(candidate);
+        });
+      }
+      if (members.length) {
+        index = hashString(key + "|" + normalized + "|" + blocId) % members.length;
+        return members[index];
+      }
+    }
+
+    return fallbackMap[normalized] || "US";
+  }
+
+  function sanitizeResidencyUnsupportedCountries(state){
+    var blocs = Array.isArray(state && state.blocs) ? state.blocs : [];
+    var templateMap = getBlocTemplateMap();
+    var isoToBloc;
+
+    blocs.forEach(function(bloc){
+      var seen = {};
+      var members = Array.isArray(bloc && bloc.members) ? bloc.members : [];
+      var templateBloc = templateMap[bloc && bloc.id] || null;
+      var allowed = null;
+
+      if (templateBloc && Array.isArray(templateBloc.members)) {
+        allowed = {};
+        templateBloc.members.forEach(function(iso){
+          var normalized = normalizeIso(iso);
+          if (normalized) allowed[normalized] = true;
+        });
+      }
+
+      bloc.members = members.map(function(iso){
+        return normalizeIso(iso);
+      }).filter(function(iso){
+        if (!iso || isNonResidentialIso(iso) || seen[iso]) return false;
+        if (allowed && !allowed[iso]) return false;
+        seen[iso] = true;
+        return true;
+      });
+    });
+
+    isoToBloc = createIsoToBloc(blocs);
+
+    (Array.isArray(state && state.people) ? state.people : []).forEach(function(person){
+      var fromIso = normalizeIso(person && person.countryISO);
+      var toIso = remapUnsupportedIso(fromIso, {
+        blocId:person && person.blocId,
+        stableKey:person && person.id,
+        blocs:blocs
+      });
+      var mappedBlocId;
+
+      if (!person || !fromIso) return;
+
+      if (fromIso !== toIso) {
+        person.countryISO = toIso;
+      }
+
+      mappedBlocId = isoToBloc[toIso || fromIso];
+      if (mappedBlocId) {
+        person.blocId = mappedBlocId;
+      }
+
+      if (fromIso !== toIso) {
+        if (toIso !== "US") {
+          person.state = null;
+          person.subdivision = null;
+        } else if (person.subdivision == null) {
+          person.subdivision = person.state || null;
+        }
+      }
+    });
+
+    (Array.isArray(state && state.businesses) ? state.businesses : []).forEach(function(business){
+      var fromIso = normalizeIso(business && business.countryISO);
+      var toIso = remapUnsupportedIso(fromIso, {
+        blocId:business && business.blocId,
+        stableKey:business && business.id,
+        blocs:blocs
+      });
+      var mappedBlocId;
+
+      if (!business || !fromIso) return;
+
+      if (fromIso !== toIso) {
+        business.countryISO = toIso;
+      }
+
+      mappedBlocId = isoToBloc[toIso || fromIso];
+      if (mappedBlocId) {
+        business.blocId = mappedBlocId;
+      }
+
+      if (fromIso !== toIso && toIso !== "US") {
+        business.hqSubdivision = null;
+      }
+    });
+
+    if (state && state.countryProfiles && typeof state.countryProfiles === "object") {
+      Object.keys(state.countryProfiles).forEach(function(iso){
+        if (!isNonResidentialIso(iso)) return;
+        delete state.countryProfiles[iso];
+      });
+    }
+
+    if (state && state.countryData && typeof state.countryData === "object") {
+      Object.keys(state.countryData).forEach(function(iso){
+        if (!isNonResidentialIso(iso)) return;
+        delete state.countryData[iso];
+      });
+    }
+
+    if (state && state.countryNames && typeof state.countryNames === "object") {
+      Object.keys(state.countryNames).forEach(function(iso){
+        if (!isNonResidentialIso(iso)) return;
+        delete state.countryNames[iso];
+      });
+    }
   }
 
   function normalizeNumberArray(values){
@@ -114,6 +298,63 @@
       runCount:Math.max(0, toInteger(source.runCount, 0)),
       lastRunDay:Math.max(0, toInteger(source.lastRunDay, 0))
     };
+  }
+
+  function parseTier6SanctionLaneKey(key){
+    var parts = String(key || "").split("->");
+    if (parts.length !== 2) {
+      return { sourceBlocId:null, targetBlocId:null };
+    }
+    return {
+      sourceBlocId:normalizeString(parts[0], null),
+      targetBlocId:normalizeString(parts[1], null)
+    };
+  }
+
+  function normalizeTier6SanctionLanes(value, blocs){
+    var source = value && typeof value === "object" ? value : {};
+    var validBlocIds = {};
+    var next = {};
+
+    (Array.isArray(blocs) ? blocs : []).forEach(function(bloc){
+      var blocId = normalizeString(bloc && bloc.id, null);
+      if (blocId) {
+        validBlocIds[blocId] = true;
+      }
+    });
+
+    Object.keys(source).forEach(function(key){
+      var lane = source[key] && typeof source[key] === "object" ? source[key] : {};
+      var parsedKey = parseTier6SanctionLaneKey(key);
+      var sourceBlocId = normalizeString(lane.sourceBlocId, parsedKey.sourceBlocId);
+      var targetBlocId = normalizeString(lane.targetBlocId, parsedKey.targetBlocId);
+      var normalizedKey;
+      var normalizedLane;
+
+      if (!sourceBlocId || !targetBlocId || sourceBlocId === targetBlocId) return;
+      if (Object.keys(validBlocIds).length && (!validBlocIds[sourceBlocId] || !validBlocIds[targetBlocId])) return;
+
+      normalizedLane = {
+        sourceBlocId:sourceBlocId,
+        targetBlocId:targetBlocId,
+        sanctionPressure:clamp(toFiniteNumber(lane.sanctionPressure, 0), 0, 1),
+        tradeBlockIndex:clamp(toFiniteNumber(lane.tradeBlockIndex, 0), 0, 1),
+        financeBlockIndex:clamp(toFiniteNumber(lane.financeBlockIndex, 0), 0, 1),
+        dealBlockIndex:clamp(toFiniteNumber(lane.dealBlockIndex, 0), 0, 1),
+        rerouteProgressIndex:clamp(toFiniteNumber(lane.rerouteProgressIndex, 0), 0, 1),
+        lastUpdatedYear:Math.max(-1, toInteger(lane.lastUpdatedYear, -1)),
+        lastNewsYear:Math.max(-1, toInteger(lane.lastNewsYear, -1)),
+        active:lane.active === true
+      };
+      normalizedLane.active = normalizedLane.active ||
+        normalizedLane.tradeBlockIndex >= 0.09 ||
+        normalizedLane.financeBlockIndex >= 0.09 ||
+        normalizedLane.dealBlockIndex >= 0.09;
+      normalizedKey = normalizedLane.sourceBlocId + "->" + normalizedLane.targetBlocId;
+      next[normalizedKey] = normalizedLane;
+    });
+
+    return next;
   }
 
   function normalizeStockMarketState(value, businesses, people, simDay){
@@ -565,7 +806,12 @@
       institutionalInstabilityIndex:clamp(toFiniteNumber(source.institutionalInstabilityIndex, 0.2), 0, 1.6),
       philanthropicCapitalAnnualGU:Math.max(0, toFiniteNumber(source.philanthropicCapitalAnnualGU, 0)),
       philanthropyImpactIndex:clamp(toFiniteNumber(source.philanthropyImpactIndex, 0), 0, 1.6),
-      legacyProjectsIndex:clamp(toFiniteNumber(source.legacyProjectsIndex, 0), 0, 1.4)
+      legacyProjectsIndex:clamp(toFiniteNumber(source.legacyProjectsIndex, 0), 0, 1.4),
+      worldStartPresetId:normalizeWorldStartPresetId(source.worldStartPresetId, DEFAULT_WORLD_START_PRESET_ID),
+      worldStartYear:Math.max(0, toInteger(source.worldStartYear, LEGACY_WORLD_START_YEAR)),
+      prehistoryWealthPressureIndex:clamp(toFiniteNumber(source.prehistoryWealthPressureIndex, 0.32), 0, 1),
+      prehistoryMobilityTrendIndex:clamp(toFiniteNumber(source.prehistoryMobilityTrendIndex, 0.5), 0, 1),
+      prehistoryConflictScarIndex:clamp(toFiniteNumber(source.prehistoryConflictScarIndex, 0.14), 0, 1)
     };
     var laborForce;
     var employed;
@@ -583,6 +829,12 @@
 
     medianWage = Math.max(1500, toFiniteNumber(source.medianWageGU, toFiniteNumber(seed.medianWageGU, 12000)));
     consumerDemand = Math.max(0, toFiniteNumber(source.consumerDemandGU, employed * medianWage * 0.72));
+
+    seed.worldStartPresetId = normalizeWorldStartPresetId(source.worldStartPresetId, normalizeWorldStartPresetId(seed.worldStartPresetId, DEFAULT_WORLD_START_PRESET_ID));
+    seed.worldStartYear = Math.max(0, toInteger(source.worldStartYear, Math.max(0, toInteger(seed.worldStartYear, LEGACY_WORLD_START_YEAR))));
+    seed.prehistoryWealthPressureIndex = clamp(toFiniteNumber(source.prehistoryWealthPressureIndex, toFiniteNumber(seed.prehistoryWealthPressureIndex, 0.32)), 0, 1);
+    seed.prehistoryMobilityTrendIndex = clamp(toFiniteNumber(source.prehistoryMobilityTrendIndex, toFiniteNumber(seed.prehistoryMobilityTrendIndex, 0.5)), 0, 1);
+    seed.prehistoryConflictScarIndex = clamp(toFiniteNumber(source.prehistoryConflictScarIndex, toFiniteNumber(seed.prehistoryConflictScarIndex, 0.14)), 0, 1);
 
     return {
       iso:iso,
@@ -695,7 +947,7 @@
     return {
       id:normalizeString(source.id, fallbackId),
       blocId:normalizeString(source.blocId, firstResident ? firstResident.blocId : (firstResidentProfile ? firstResidentProfile.blocId : "NA")),
-      countryISO:normalizeString(source.countryISO, firstResident ? firstResident.countryISO : "US"),
+      countryISO:normalizeIso(normalizeString(source.countryISO, firstResident ? firstResident.countryISO : "US")),
       state:normalizeString(source.state, firstResident ? firstResident.state : null),
       adultIds:adultIds,
       childIds:childIds,
@@ -814,8 +1066,10 @@
   }
 
   function getCanonicalEventDefaults(type, source){
+    var normalizedType = type === "default" ? "debtCrisis" : type;
+
     if (App.events && typeof App.events.getCanonicalDefaults === "function") {
-      return App.events.getCanonicalDefaults(type, source || {});
+      return App.events.getCanonicalDefaults(normalizedType, source || {});
     }
 
     return {
@@ -823,11 +1077,11 @@
       scope:normalizeString(source && source.scope, "global"),
       entities:normalizeEventEntities(source && source.entities),
       significance:{
-        score:clamp(toFiniteNumber(type === "default" ? 60 : (type === "bankruptcy" ? 55 : (type === "hire" ? 18 : 35)), 35), 0, 100),
-        tier:inferTierFromScore(type === "default" ? 60 : (type === "bankruptcy" ? 55 : (type === "hire" ? 18 : 35))),
+        score:clamp(toFiniteNumber(normalizedType === "debtCrisis" ? 60 : (normalizedType === "bankruptcy" ? 55 : (normalizedType === "hire" ? 18 : 35)), 35), 0, 100),
+        tier:inferTierFromScore(normalizedType === "debtCrisis" ? 60 : (normalizedType === "bankruptcy" ? 55 : (normalizedType === "hire" ? 18 : 35))),
         dimensions:normalizeSignificanceDimensions(null, null),
         adaptiveBoost:0,
-        baseFloor:clamp(toFiniteNumber(type === "default" ? 60 : (type === "bankruptcy" ? 55 : (type === "hire" ? 18 : 35)), 35), 0, 100)
+        baseFloor:clamp(toFiniteNumber(normalizedType === "debtCrisis" ? 60 : (normalizedType === "bankruptcy" ? 55 : (normalizedType === "hire" ? 18 : 35)), 35), 0, 100)
       }
     };
   }
@@ -1037,7 +1291,7 @@
 
     (Array.isArray(blocs) ? blocs : []).forEach(function(bloc){
       (Array.isArray(bloc.members) ? bloc.members : []).forEach(function(iso){
-        isoToBloc[iso] = bloc.id;
+        isoToBloc[normalizeIso(iso)] = bloc.id;
       });
     });
 
@@ -1094,7 +1348,7 @@
       person.sexualOrientation = "gay";
     }
     person.blocId = normalizeString(person.blocId, "NA");
-    person.countryISO = normalizeString(person.countryISO, "US");
+    person.countryISO = normalizeIso(normalizeString(person.countryISO, "US"));
     person.state = normalizeString(person.state, null);
     person.subdivision = normalizeString(person.subdivision, person.state);
     person.city = normalizeString(person.city, null);
@@ -1219,7 +1473,7 @@
     business.ownerId = normalizeString(business.ownerId, null);
     business.founderId = normalizeString(business.founderId, business.ownerId);
     business.blocId = normalizeString(business.blocId, "NA");
-    business.countryISO = normalizeString(business.countryISO, "US");
+    business.countryISO = normalizeIso(normalizeString(business.countryISO, "US"));
     business.hqCity = normalizeString(business.hqCity, null);
     business.lineageId = normalizeString(business.lineageId, null);
     business.revenueGU = Math.max(0, toFiniteNumber(business.revenueGU, 0));
@@ -1692,8 +1946,39 @@
     });
 
     migratedState.stockMarket = normalizeStockMarketState(previousState.stockMarket, migratedState.businesses, migratedState.people, migratedState.simDay);
+    migratedState.tier6SanctionLanes = normalizeTier6SanctionLanes(previousState.tier6SanctionLanes, migratedState.blocs);
+    sanitizeResidencyUnsupportedCountries(migratedState);
 
     return buildSnapshotEnvelope(snapshot, 11, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
+  }
+
+  function migrateSnapshotToV12(snapshot){
+    var previousState = snapshot.state || {};
+    var migratedState = deepClone(previousState);
+    var startYear = Math.max(0, toInteger(previousState.startYear, LEGACY_WORLD_START_YEAR));
+    var yearDays = getYearDays();
+
+    migratedState.startPresetId = normalizeWorldStartPresetId(previousState.startPresetId, startYear === 1998 ? "1998" : DEFAULT_WORLD_START_PRESET_ID);
+    migratedState.startYear = startYear;
+    migratedState.people = (Array.isArray(migratedState.people) ? migratedState.people : []).map(function(person){
+      var next = deepClone(person || {});
+      var relativeYear = toInteger(next.lastLifeEventYear, Math.floor(Math.max(0, toInteger(migratedState.simDay, 0)) / Math.max(1, yearDays)));
+
+      next.lastLifeEventYear = relativeYear + startYear;
+      return next;
+    });
+    migratedState.countryProfiles = normalizeCountryProfiles(previousState.countryProfiles, migratedState.blocs, migratedState.businesses, {
+      injectBusinessHeadcount:false
+    });
+    Object.keys(migratedState.countryProfiles || {}).forEach(function(iso){
+      var profile = migratedState.countryProfiles[iso];
+
+      if (!profile) return;
+      profile.worldStartPresetId = normalizeWorldStartPresetId(profile.worldStartPresetId, migratedState.startPresetId);
+      profile.worldStartYear = Math.max(0, toInteger(profile.worldStartYear, migratedState.startYear));
+    });
+
+    return buildSnapshotEnvelope(snapshot, 12, migratedState, resolveSnapshotBusinessNamingMode(snapshot, "legacy") || "legacy");
   }
 
   function migrateSnapshot(rawSnapshot){
@@ -1738,11 +2023,6 @@
       version = nextVersion;
     }
 
-    if (fromVersion === SCHEMA_VERSION && typeof snapshotMigrations[SCHEMA_VERSION] === "function") {
-      working = snapshotMigrations[SCHEMA_VERSION](working, { fromVersion:0, toVersion:SCHEMA_VERSION }) || working;
-      working.schemaVersion = SCHEMA_VERSION;
-    }
-
     return {
       ok:true,
       fromVersion:fromVersion,
@@ -1769,6 +2049,11 @@
     App.store.econHist = deepClone(state.econHist || {});
     App.store.tickerData = deepClone(state.tickerData || {});
     App.store.businessNamingMode = normalizeBusinessNamingMode(resolveSnapshotBusinessNamingMode(snapshot, "legacy"), "legacy");
+    App.store.startPresetId = normalizeWorldStartPresetId(state.startPresetId, DEFAULT_WORLD_START_PRESET_ID);
+    App.store.startYear = Math.max(0, toInteger(state.startYear, LEGACY_WORLD_START_YEAR));
+    if (App.data && App.data.CALENDAR) {
+      App.data.CALENDAR.startYear = App.store.startYear;
+    }
     App.store.selectedBlocId = normalizeString(state.selectedBlocId, "NA");
     App.store.selection = normalizeSelection(state.selection);
     App.store.simSpeed = clamp(toFiniteNumber(state.simSpeed, 1), 0, 8);
@@ -1779,8 +2064,10 @@
     App.store.countryProfiles = normalizeCountryProfiles(state.countryProfiles, App.store.blocs, App.store.businesses, {
       injectBusinessHeadcount:false
     });
+    App.store.tier6SanctionLanes = normalizeTier6SanctionLanes(state.tier6SanctionLanes, App.store.blocs);
     App.store.governor = normalizeGovernorState(state.governor);
     App.store.stockMarket = normalizeStockMarketState(state.stockMarket, App.store.businesses, App.store.people, simDay);
+    App.store.yearlyTuningTelemetry = deepClone(state.yearlyTuningTelemetry || []);
     App.store.households = normalizeHouseholds(state.households, App.store.people, App.store.countryProfiles);
 
     App.store.households.forEach(function(household){
@@ -1835,6 +2122,8 @@
       traitEffectStats:deepClone(App.store.traitEffectStats || {}),
       econHist:deepClone(App.store.econHist || {}),
       tickerData:deepClone(App.store.tickerData || {}),
+      startPresetId:normalizeWorldStartPresetId(App.store.startPresetId, DEFAULT_WORLD_START_PRESET_ID),
+      startYear:Math.max(0, toInteger(App.store.startYear, LEGACY_WORLD_START_YEAR)),
       selectedBlocId:App.store.selectedBlocId,
       selection:deepClone(App.store.selection || { type:null, id:null }),
       simSpeed:App.store.simSpeed,
@@ -1843,11 +2132,13 @@
       countryNames:deepClone(App.store.countryNames || {}),
       countryData:deepClone(App.store.countryData || {}),
       countryProfiles:deepClone(App.store.countryProfiles || {}),
+      tier6SanctionLanes:normalizeTier6SanctionLanes(App.store.tier6SanctionLanes, App.store.blocs),
       governor:normalizeGovernorState(App.store.governor),
-      stockMarket:deepClone(App.store.stockMarket || {})
+      stockMarket:deepClone(App.store.stockMarket || {}),
+      yearlyTuningTelemetry:deepClone(App.store.yearlyTuningTelemetry || [])
     };
     var migrated = migrateSnapshot({
-      schemaVersion:0,
+      schemaVersion:SCHEMA_VERSION,
       savedAtISO:new Date().toISOString(),
       businessNamingMode:normalizeBusinessNamingMode(App.store.businessNamingMode, "v2"),
       state:rawState
@@ -2117,6 +2408,7 @@
   registerSnapshotMigration(9, migrateSnapshotToV9);
   registerSnapshotMigration(10, migrateSnapshotToV10);
   registerSnapshotMigration(11, migrateSnapshotToV11);
+  registerSnapshotMigration(12, migrateSnapshotToV12);
 
   App.persistence = {
     SAVE_KEY:SAVE_KEY,
