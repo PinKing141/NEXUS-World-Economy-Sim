@@ -2815,6 +2815,11 @@
     profile.tradeShockIndex = App.utils.clamp(Number(profile.tradeShockIndex) || 0, 0, 1.8);
     profile.tradeRerouteRelief = App.utils.clamp(Number(profile.tradeRerouteRelief) || 0, 0, 1.2);
     profile.avgSupplyStress = App.utils.clamp(Number(profile.avgSupplyStress) || 0, 0, 1.8);
+    profile.retaliationPressureIndex = App.utils.clamp(Number(profile.retaliationPressureIndex) || 0, 0, 1);
+    profile.sectorTradeBlockIndex = App.utils.clamp(Number(profile.sectorTradeBlockIndex) || 0, 0, 1);
+    profile.rerouteCounterPressureIndex = App.utils.clamp(Number(profile.rerouteCounterPressureIndex) || 0, 0, 1.2);
+    profile.sectorEmploymentDrag = App.utils.clamp(Number(profile.sectorEmploymentDrag) || 0, 0, 1);
+    profile.sectorRetaliationWeights = profile.sectorRetaliationWeights && typeof profile.sectorRetaliationWeights === "object" ? profile.sectorRetaliationWeights : {};
     profile.socialPressureIndex = App.utils.clamp(Number(profile.socialPressureIndex) || 0, 0, 1.5);
     profile.mobilityInflowAnnual = Math.max(0, floorInt(profile.mobilityInflowAnnual));
     profile.mobilityOutflowAnnual = Math.max(0, floorInt(profile.mobilityOutflowAnnual));
@@ -3142,6 +3147,10 @@
     return !!(TIER6_SLICE1_CONFIG && TIER6_SLICE1_CONFIG.enabled);
   }
 
+  function getTier6Slice1Config(){
+    return TIER6_SLICE1_CONFIG;
+  }
+
   function getTier6ElectionChannelEffects(profile){
     var tax = App.utils.clamp(Number(profile && profile.electionTaxPolicyIndex) || 0, -0.55, 0.55);
     var trade = App.utils.clamp(Number(profile && profile.electionTradePolicyIndex) || 0, -0.55, 0.55);
@@ -3157,30 +3166,6 @@
       businessConfidenceBias:confidence * 0.055,
       creditConfidenceBias:confidence * 0.012
     };
-  }
-
-  function getBlocDemocracyScore(bloc){
-    var profiles;
-    var institutionAvg = 0;
-    var corruptionAvg = 0;
-
-    if (!bloc) return 0;
-
-    profiles = (App.store.getBlocProfiles ? App.store.getBlocProfiles(bloc.id) : []).filter(Boolean);
-    if (!profiles.length) return 0;
-
-    institutionAvg = profiles.reduce(function(sum, profile){
-      return sum + App.utils.clamp(Number(profile && profile.institutionScore) || 0.55, 0, 1);
-    }, 0) / profiles.length;
-    corruptionAvg = profiles.reduce(function(sum, profile){
-      return sum + App.utils.clamp(Number(profile && profile.developmentCorruptionIndex) || 0.42, 0, 1);
-    }, 0) / profiles.length;
-
-    return App.utils.clamp((institutionAvg * 0.62) + ((1 - corruptionAvg) * 0.38), 0, 1);
-  }
-
-  function isBlocElectionEligible(bloc){
-    return getBlocDemocracyScore(bloc) >= 0.52;
   }
 
   function getSanctionLaneKey(sourceBlocId, targetBlocId){
@@ -3230,6 +3215,11 @@
     var lanes = ensureTier6SanctionLanes();
     var finance = App.utils.clamp(Number(profile && profile.sanctionFinanceBlockIndex) || 0, 0, 1);
     var deal = App.utils.clamp(Number(profile && profile.sanctionDealBlockIndex) || 0, 0, 1);
+    var retaliationPressureIndex = App.utils.clamp(Number(profile && profile.retaliationPressureIndex) || 0, 0, 1);
+    var sectorTradeBlockIndex = App.utils.clamp(Number(profile && profile.sectorTradeBlockIndex) || 0, 0, 1);
+    var rerouteCounterPressureIndex = App.utils.clamp(Number(profile && profile.rerouteCounterPressureIndex) || 0, 0, 1.2);
+    var sectorEmploymentDrag = App.utils.clamp(Number(profile && profile.sectorEmploymentDrag) || 0, 0, 1);
+    var sectorRetaliationWeights = profile && profile.sectorRetaliationWeights && typeof profile.sectorRetaliationWeights === "object" ? profile.sectorRetaliationWeights : {};
 
     Object.keys(lanes).forEach(function(key){
       var lane = lanes[key];
@@ -3237,291 +3227,28 @@
       if (!lane || String(lane.targetBlocId) !== String(blocId || "")) return;
       finance = Math.max(finance, App.utils.clamp(Number(lane.financeBlockIndex) || 0, 0, 1));
       deal = Math.max(deal, App.utils.clamp(Number(lane.dealBlockIndex) || 0, 0, 1));
+      retaliationPressureIndex = Math.max(retaliationPressureIndex, App.utils.clamp(Number(lane.retaliationPressureIndex) || 0, 0, 1));
+      if (App.utils.clamp(Number(lane.retaliationTradeBlockIndex) || 0, 0, 1) >= sectorTradeBlockIndex) {
+        sectorTradeBlockIndex = App.utils.clamp(Number(lane.retaliationTradeBlockIndex) || 0, 0, 1);
+        sectorRetaliationWeights = lane.sectorRetaliationWeights && typeof lane.sectorRetaliationWeights === "object" ? lane.sectorRetaliationWeights : sectorRetaliationWeights;
+      }
+      rerouteCounterPressureIndex = Math.max(rerouteCounterPressureIndex, App.utils.clamp(Number(lane.rerouteCounterPressureIndex) || 0, 0, 1.2));
+      sectorEmploymentDrag = Math.max(sectorEmploymentDrag, App.utils.clamp(Number(lane.sectorEmploymentDrag) || 0, 0, 1));
     });
 
     return {
       financeBlockIndex:finance,
-      dealBlockIndex:deal
+      dealBlockIndex:deal,
+      retaliationPressureIndex:retaliationPressureIndex,
+      sectorTradeBlockIndex:sectorTradeBlockIndex,
+      rerouteCounterPressureIndex:rerouteCounterPressureIndex,
+      sectorEmploymentDrag:sectorEmploymentDrag,
+      sectorRetaliationWeights:sectorRetaliationWeights
     };
   }
 
-  function processTier6Slice1ElectionsYearly(){
-    var year = currentYear();
-
-    if (!isTier6Slice1Enabled() || !TIER6_SLICE1_CONFIG.elections) return;
-
-    Object.keys(App.store.countryProfiles || {}).forEach(function(iso){
-      var profile = ensureCountryProfile(iso);
-      var cycle;
-      var offset;
-      var electionYear;
-      var laborForce;
-      var unemploymentRate;
-      var populism;
-      var socialUnrest;
-      var gini;
-      var laborScarcity;
-      var pressure;
-      var biasBefore;
-      var biasAfter;
-      var bloc;
-      var electionEligible;
-      var taxIndex;
-      var tradeIndex;
-      var laborIndex;
-      var immigrationIndex;
-      var confidenceIndex;
-      var electionSignal;
-      var direction = 0;
-
-      if (!profile) return;
-
-      bloc = App.store.getBloc(profile.blocId) || App.store.getBlocByCountry(iso);
-      electionEligible = isBlocElectionEligible(bloc);
-
-      cycle = Math.max(2, TIER6_SLICE1_CONFIG.electionCycleMinYears + (hashString(iso + "-cycle") % Math.max(1, TIER6_SLICE1_CONFIG.electionCycleSpanYears)));
-      offset = hashString(iso + "-offset") % cycle;
-      electionYear = electionEligible && ((year + offset) % cycle) === 0;
-      laborForce = Math.max(1, Number(profile.laborForce) || 1);
-      unemploymentRate = App.utils.clamp(Math.max(0, Number(profile.unemployed) || 0) / laborForce, 0, 1);
-      populism = App.utils.clamp(Number(profile.populismIndex) || 0, 0, 1.6);
-      socialUnrest = App.utils.clamp(Number(profile.socialUnrestIndex) || 0, 0, 1.8);
-      gini = App.utils.clamp(Number(profile.giniCoefficient) || 0.4, 0.2, 0.8);
-      laborScarcity = App.utils.clamp(Number(profile.laborScarcity) || 0, 0, 1);
-      pressure = App.utils.clamp((populism * 0.42) + (socialUnrest * 0.2) + (unemploymentRate * 0.75) + ((gini - 0.35) * 0.55), 0, 1.8);
-      biasBefore = App.utils.clamp(Number(profile.tier6ElectionBias) || 0, -0.9, 0.9);
-      taxIndex = App.utils.clamp(Number(profile.electionTaxPolicyIndex) || 0, -0.55, 0.55);
-      tradeIndex = App.utils.clamp(Number(profile.electionTradePolicyIndex) || 0, -0.55, 0.55);
-      laborIndex = App.utils.clamp(Number(profile.electionLaborPolicyIndex) || 0, -0.55, 0.55);
-      immigrationIndex = App.utils.clamp(Number(profile.electionImmigrationPolicyIndex) || 0, -0.55, 0.55);
-      confidenceIndex = App.utils.clamp(Number(profile.electionBusinessConfidenceIndex) || 0, -0.6, 0.6);
-
-      if (electionYear) {
-        if (pressure >= 0.62) {
-          direction = 1;
-        } else if (laborScarcity >= 0.78 && unemploymentRate <= 0.08) {
-          direction = -1;
-        }
-        biasAfter = App.utils.clamp((biasBefore * 0.38) + (direction * 0.32), -0.9, 0.9);
-        electionSignal = App.utils.clamp((pressure * 0.62) + (Math.abs(direction) * 0.38), 0, 1.5);
-        taxIndex = App.utils.clamp((taxIndex * 0.35) + (direction * electionSignal * 0.26), -0.55, 0.55);
-        tradeIndex = App.utils.clamp((tradeIndex * 0.35) + ((-direction) * electionSignal * 0.24), -0.55, 0.55);
-        laborIndex = App.utils.clamp((laborIndex * 0.35) + (direction * electionSignal * 0.22), -0.55, 0.55);
-        immigrationIndex = App.utils.clamp((immigrationIndex * 0.35) + ((-direction) * electionSignal * 0.29), -0.55, 0.55);
-        confidenceIndex = App.utils.clamp((confidenceIndex * 0.32) + (((-direction) * 0.22) + ((0.5 - Math.abs(direction)) * 0.08)), -0.6, 0.6);
-
-        if (direction !== 0 && (hashString(iso + "-election-news-" + year) % 100) < TIER6_SLICE1_CONFIG.electionNewsHashGate) {
-          emitNews("policy", "<strong>" + App.store.getCountryName(iso) + "</strong> completed elections with a " + (direction > 0 ? "tightening" : "supportive") + " mandate.", {
-            entities:{
-              countryIsos:[iso],
-              blocIds:[profile.blocId].filter(Boolean)
-            },
-            causes:[
-              "Election pressure index: " + pressure.toFixed(2),
-              "Policy channels adjusted for tax, trade, labor, immigration, and business confidence."
-            ],
-            scope:"regional",
-            rollupLabel:iso
-          });
-        }
-      } else {
-        biasAfter = App.utils.clamp(biasBefore * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.9, 0.9);
-        taxIndex = App.utils.clamp(taxIndex * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.55, 0.55);
-        tradeIndex = App.utils.clamp(tradeIndex * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.55, 0.55);
-        laborIndex = App.utils.clamp(laborIndex * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.55, 0.55);
-        immigrationIndex = App.utils.clamp(immigrationIndex * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.55, 0.55);
-        confidenceIndex = App.utils.clamp(confidenceIndex * TIER6_SLICE1_CONFIG.electionChannelDecay, -0.6, 0.6);
-      }
-
-      profile.tier6ElectionBias = biasAfter;
-      profile.electionTaxPolicyIndex = taxIndex;
-      profile.electionTradePolicyIndex = tradeIndex;
-      profile.electionLaborPolicyIndex = laborIndex;
-      profile.electionImmigrationPolicyIndex = immigrationIndex;
-      profile.electionBusinessConfidenceIndex = confidenceIndex;
-      profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
-      profile.policyEvidence.tier6Slice = "slice1";
-      profile.policyEvidence.electionCycleYears = cycle;
-      profile.policyEvidence.electionTriggered = !!electionYear;
-      profile.policyEvidence.electionEligible = !!electionEligible;
-      profile.policyEvidence.electionDirection = direction;
-      profile.policyEvidence.electionPressureIndex = Number(pressure.toFixed(4));
-      profile.policyEvidence.electionBias = Number(biasAfter.toFixed(4));
-      profile.policyEvidence.electionTaxPolicyIndex = Number(taxIndex.toFixed(4));
-      profile.policyEvidence.electionTradePolicyIndex = Number(tradeIndex.toFixed(4));
-      profile.policyEvidence.electionLaborPolicyIndex = Number(laborIndex.toFixed(4));
-      profile.policyEvidence.electionImmigrationPolicyIndex = Number(immigrationIndex.toFixed(4));
-      profile.policyEvidence.electionBusinessConfidenceIndex = Number(confidenceIndex.toFixed(4));
-      profile.policyEvidence.conflictPhaseEnabled = !!TIER6_SLICE1_CONFIG.conflictPhaseEnabled;
-    });
-  }
-
-  function processTier6Slice1SanctionsYearly(){
-    var year = currentYear();
-    var lanes;
-    var sanctionNewsBudget = 4;
-    var conflictScale;
-    var sanctionGeoThreshold;
-    var sanctionActivationThreshold;
-
-    if (!isTier6Slice1Enabled() || !TIER6_SLICE1_CONFIG.sanctions) return;
-
-    lanes = ensureTier6SanctionLanes();
-    conflictScale = TIER6_SLICE1_CONFIG.conflictPhaseEnabled ? 1 : 0.62;
-    sanctionGeoThreshold = TIER6_SLICE1_CONFIG.sanctionGeoPressureThreshold + (TIER6_SLICE1_CONFIG.conflictPhaseEnabled ? 0 : 0.3);
-    sanctionActivationThreshold = TIER6_SLICE1_CONFIG.conflictPhaseEnabled ? 0.08 : 0.18;
-    Object.keys(lanes).forEach(function(key){
-      var lane = lanes[key];
-
-      if (!lane || lane.lastUpdatedYear === year) return;
-      lane.sanctionPressure = App.utils.clamp((Number(lane.sanctionPressure) || 0) * TIER6_SLICE1_CONFIG.sanctionLaneDecay, 0, 1);
-      lane.tradeBlockIndex = App.utils.clamp((Number(lane.tradeBlockIndex) || 0) * TIER6_SLICE1_CONFIG.sanctionLaneDecay, 0, 1);
-      lane.financeBlockIndex = App.utils.clamp((Number(lane.financeBlockIndex) || 0) * TIER6_SLICE1_CONFIG.sanctionLaneDecay, 0, 1);
-      lane.dealBlockIndex = App.utils.clamp((Number(lane.dealBlockIndex) || 0) * TIER6_SLICE1_CONFIG.sanctionLaneDecay, 0, 1);
-      lane.rerouteProgressIndex = App.utils.clamp((Number(lane.rerouteProgressIndex) || 0) * 0.9, 0, 1);
-      lane.active = lane.tradeBlockIndex >= 0.09 || lane.financeBlockIndex >= 0.09 || lane.dealBlockIndex >= 0.09;
-    });
-
-    (App.store.blocs || []).forEach(function(bloc){
-      var geoPressure;
-      var defaultRisk;
-      var inequality;
-      var sanctionPressure;
-      var target;
-      var lane;
-      var rerouteDrag;
-      var outgoingTargets = [];
-
-      if (!bloc) return;
-
-      geoPressure = App.utils.clamp(Number(bloc.geoPressure) || 0, 0, 3);
-      defaultRisk = App.utils.clamp(Number(bloc.defaultRisk) || 0, 0, 2.5);
-      inequality = App.utils.clamp(Number(bloc.topOneWealthShare) || 0.3, 0.12, 0.95);
-      sanctionPressure = App.utils.clamp(((geoPressure - sanctionGeoThreshold) + (defaultRisk * 0.16) + (Math.max(0, inequality - 0.45) * 0.18)) * conflictScale, 0, TIER6_SLICE1_CONFIG.sanctionPressureMax);
-
-      target = pickWeightedBy((App.store.blocs || []).filter(function(candidate){
-        return candidate && candidate.id !== bloc.id;
-      }), function(candidate){
-        var bilateralNoise = ((hashString(bloc.id + ":" + candidate.id + ":" + year) % 1000) / 1000) * 0.18;
-        var pressureGap = Math.abs((Number(candidate.geoPressure) || 0) - geoPressure);
-        var risk = App.utils.clamp(Number(candidate.defaultRisk) || 0, 0, 2.5);
-        return App.utils.clamp((Number(candidate.geoPressure) || 0) * 0.42 + pressureGap * 0.28 + risk * 0.22 + bilateralNoise, 0.01, 4.8);
-      });
-
-      if (target && sanctionPressure > sanctionActivationThreshold) {
-        lane = getSanctionLane(bloc.id, target.id);
-        lane.sanctionPressure = App.utils.clamp((Number(lane.sanctionPressure) || 0) * 0.46 + sanctionPressure * (0.68 * conflictScale), 0, 1);
-        lane.tradeBlockIndex = App.utils.clamp((Number(lane.tradeBlockIndex) || 0) * 0.5 + lane.sanctionPressure * (0.74 * conflictScale), 0, 1);
-        lane.financeBlockIndex = App.utils.clamp((Number(lane.financeBlockIndex) || 0) * 0.48 + lane.sanctionPressure * (0.66 * conflictScale), 0, TIER6_SLICE1_CONFIG.sanctionFinanceBlockCap);
-        lane.dealBlockIndex = App.utils.clamp((Number(lane.dealBlockIndex) || 0) * 0.44 + lane.sanctionPressure * (0.62 * conflictScale), 0, TIER6_SLICE1_CONFIG.sanctionDealBlockCap);
-        lane.rerouteProgressIndex = App.utils.clamp((Number(lane.rerouteProgressIndex) || 0) * 0.72 + lane.tradeBlockIndex * 0.16, 0, 1);
-        lane.lastUpdatedYear = year;
-        lane.active = true;
-        outgoingTargets.push(target.id);
-
-        if (sanctionNewsBudget > 0 && lane.tradeBlockIndex >= (TIER6_SLICE1_CONFIG.conflictPhaseEnabled ? 0.22 : 0.34) && lane.lastNewsYear !== year) {
-          emitNews("trade", "<strong>" + bloc.name + "</strong> imposed sanctions on <strong>" + target.name + "</strong>, restricting trade, finance, and deal flow.", {
-            entities:{
-              blocIds:[bloc.id, target.id]
-            },
-            causes:[
-              "Sanction pressure index: " + sanctionPressure.toFixed(2),
-              "Affected channels: trade block " + lane.tradeBlockIndex.toFixed(2) + ", finance block " + lane.financeBlockIndex.toFixed(2) + ", deal block " + lane.dealBlockIndex.toFixed(2) + "."
-            ],
-            scope:"global",
-            rollupLabel:bloc.id + "-" + target.id
-          });
-          lane.lastNewsYear = year;
-          sanctionNewsBudget -= 1;
-        }
-      }
-
-      (bloc.members || []).forEach(function(iso){
-        var profile = ensureCountryProfile(iso, bloc.id);
-        var outgoingTrade = 0;
-        var outgoingFinance = 0;
-        var outgoingDeal = 0;
-
-        if (!profile) return;
-
-        Object.keys(lanes).forEach(function(key){
-          var item = lanes[key];
-          if (!item || item.sourceBlocId !== bloc.id) return;
-          outgoingTrade = Math.max(outgoingTrade, App.utils.clamp(Number(item.tradeBlockIndex) || 0, 0, 1));
-          outgoingFinance = Math.max(outgoingFinance, App.utils.clamp(Number(item.financeBlockIndex) || 0, 0, 1));
-          outgoingDeal = Math.max(outgoingDeal, App.utils.clamp(Number(item.dealBlockIndex) || 0, 0, 1));
-        });
-
-        rerouteDrag = App.utils.clamp(outgoingTrade * (1 - App.utils.clamp(Number(profile.tradeRerouteRelief) || 0, 0, 1.2) * 0.62), 0, 1);
-        profile.sanctionTradeBlockIndex = App.utils.clamp((Number(profile.sanctionTradeBlockIndex) || 0) * 0.72 + outgoingTrade * 0.62, 0, 1);
-        profile.sanctionFinanceBlockIndex = App.utils.clamp((Number(profile.sanctionFinanceBlockIndex) || 0) * 0.72 + outgoingFinance * 0.62, 0, 1);
-        profile.sanctionDealBlockIndex = App.utils.clamp((Number(profile.sanctionDealBlockIndex) || 0) * 0.72 + outgoingDeal * 0.62, 0, 1);
-
-        profile.tradeShockIndex = App.utils.clamp((App.utils.clamp(Number(profile.tradeShockIndex) || 0, 0, 1.8) * 0.72) + (sanctionPressure * 0.2) + (rerouteDrag * 0.22), 0, 1.8);
-        profile.tradeRerouteRelief = App.utils.clamp((App.utils.clamp(Number(profile.tradeRerouteRelief) || 0, 0, 1.2) * 0.82) + (sanctionPressure * 0.16) + (profile.sanctionTradeBlockIndex * 0.1), 0, 1.2);
-        profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
-        profile.policyEvidence.tier6Slice = "slice1";
-        profile.policyEvidence.sanctionPressureIndex = Number(sanctionPressure.toFixed(4));
-        profile.policyEvidence.sanctionTradeBlockIndex = Number((Number(profile.sanctionTradeBlockIndex) || 0).toFixed(4));
-        profile.policyEvidence.sanctionFinanceBlockIndex = Number((Number(profile.sanctionFinanceBlockIndex) || 0).toFixed(4));
-        profile.policyEvidence.sanctionDealBlockIndex = Number((Number(profile.sanctionDealBlockIndex) || 0).toFixed(4));
-        profile.policyEvidence.conflictPhaseEnabled = !!TIER6_SLICE1_CONFIG.conflictPhaseEnabled;
-      });
-
-      bloc.policyEvidence = bloc.policyEvidence && typeof bloc.policyEvidence === "object" ? bloc.policyEvidence : {};
-      bloc.policyEvidence.tier6Slice = "slice1";
-      bloc.policyEvidence.sanctionPressureIndex = Number(sanctionPressure.toFixed(4));
-      bloc.policyEvidence.sanctionTargets = outgoingTargets.slice(0, 4);
-      bloc.policyEvidence.sanctionOutgoingCount = outgoingTargets.length;
-      bloc.policyEvidence.conflictPhaseEnabled = !!TIER6_SLICE1_CONFIG.conflictPhaseEnabled;
-      bloc.tier6ConflictPhaseEnabled = !!TIER6_SLICE1_CONFIG.conflictPhaseEnabled;
-    });
-
-    (App.store.blocs || []).forEach(function(bloc){
-      var targetExposure = { trade:0, finance:0, deal:0, reroute:0 };
-
-      if (!bloc) return;
-
-      Object.keys(lanes).forEach(function(key){
-        var lane = lanes[key];
-        if (!lane || lane.targetBlocId !== bloc.id) return;
-        targetExposure.trade = Math.max(targetExposure.trade, App.utils.clamp(Number(lane.tradeBlockIndex) || 0, 0, 1));
-        targetExposure.finance = Math.max(targetExposure.finance, App.utils.clamp(Number(lane.financeBlockIndex) || 0, 0, 1));
-        targetExposure.deal = Math.max(targetExposure.deal, App.utils.clamp(Number(lane.dealBlockIndex) || 0, 0, 1));
-        targetExposure.reroute = Math.max(targetExposure.reroute, App.utils.clamp(Number(lane.rerouteProgressIndex) || 0, 0, 1));
-      });
-
-      (bloc.members || []).forEach(function(iso){
-        var profile = ensureCountryProfile(iso, bloc.id);
-        var rerouteHeadroom;
-
-        if (!profile) return;
-
-        rerouteHeadroom = Math.max(0, 1 - targetExposure.reroute);
-        profile.sanctionTradeBlockIndex = App.utils.clamp((Number(profile.sanctionTradeBlockIndex) || 0) * 0.66 + targetExposure.trade * 0.76, 0, 1);
-        profile.sanctionFinanceBlockIndex = App.utils.clamp((Number(profile.sanctionFinanceBlockIndex) || 0) * 0.66 + targetExposure.finance * 0.76, 0, 1);
-        profile.sanctionDealBlockIndex = App.utils.clamp((Number(profile.sanctionDealBlockIndex) || 0) * 0.66 + targetExposure.deal * 0.76, 0, 1);
-        profile.tradeShockIndex = App.utils.clamp((Number(profile.tradeShockIndex) || 0) + targetExposure.trade * 0.18 * rerouteHeadroom, 0, 1.8);
-        profile.tradeRerouteRelief = App.utils.clamp((Number(profile.tradeRerouteRelief) || 0) + targetExposure.trade * 0.18 * targetExposure.reroute, 0, 1.2);
-        profile.policyEvidence = profile.policyEvidence && typeof profile.policyEvidence === "object" ? profile.policyEvidence : {};
-        profile.policyEvidence.sanctionTargetTradeBlockIndex = Number(targetExposure.trade.toFixed(4));
-        profile.policyEvidence.sanctionTargetFinanceBlockIndex = Number(targetExposure.finance.toFixed(4));
-        profile.policyEvidence.sanctionTargetDealBlockIndex = Number(targetExposure.deal.toFixed(4));
-        profile.policyEvidence.sanctionRerouteProgressIndex = Number(targetExposure.reroute.toFixed(4));
-      });
-
-      bloc.policyEvidence = bloc.policyEvidence && typeof bloc.policyEvidence === "object" ? bloc.policyEvidence : {};
-      bloc.policyEvidence.sanctionIncomingTradeBlockIndex = Number(targetExposure.trade.toFixed(4));
-      bloc.policyEvidence.sanctionIncomingFinanceBlockIndex = Number(targetExposure.finance.toFixed(4));
-      bloc.policyEvidence.sanctionIncomingDealBlockIndex = Number(targetExposure.deal.toFixed(4));
-      bloc.policyEvidence.sanctionRerouteProgressIndex = Number(targetExposure.reroute.toFixed(4));
-    });
-  }
-
   function processTier6ConstrainedSliceYearly(){
-    if (!isTier6Slice1Enabled()) return;
-    processTier6Slice1ElectionsYearly();
-    processTier6Slice1SanctionsYearly();
+    return getGeopoliticsDomain().runYearlySlice();
   }
 
   function deriveCountryPolicyStance(signals){
@@ -3698,6 +3425,14 @@
     var snapshot;
     var derived;
     var previousEvidence;
+    var preservedSanctionKeys = [
+      "sanctionPressureIndex",
+      "sanctionOutgoingCount",
+      "sanctionIncomingTradeBlockIndex",
+      "sanctionIncomingFinanceBlockIndex",
+      "sanctionIncomingDealBlockIndex",
+      "sanctionRerouteProgressIndex"
+    ];
 
     if (!bloc) return "neutral";
 
@@ -3706,8 +3441,13 @@
     derived = deriveBlocPolicyStance(snapshot);
     bloc.policyStance = normalizePolicyStance(derived.stance);
     bloc.policyEvidence = derived.evidence;
-    if (previousEvidence.sanctionPressureIndex != null) {
-      bloc.policyEvidence.sanctionPressureIndex = Number(previousEvidence.sanctionPressureIndex);
+    preservedSanctionKeys.forEach(function(key){
+      if (previousEvidence[key] != null) {
+        bloc.policyEvidence[key] = Number(previousEvidence[key]);
+      }
+    });
+    if (Array.isArray(previousEvidence.sanctionTargets) && previousEvidence.sanctionTargets.length) {
+      bloc.policyEvidence.sanctionTargets = previousEvidence.sanctionTargets.slice(0, 4);
     }
     bloc.policyEvidence.tier6Slice = isTier6Slice1Enabled() ? "slice1" : "none";
     bloc.policyEvidence.conflictPhaseEnabled = !!TIER6_SLICE1_CONFIG.conflictPhaseEnabled;
@@ -10287,6 +10027,14 @@
     return App._simDomains && App._simDomains.business ? App._simDomains.business : createFallbackBusinessEngine();
   }
 
+  function getGeopoliticsDomain(){
+    if (!App._simDomains && App.simDomains && typeof App.simDomains.createGeopoliticsEngine === "function") {
+      getSimulationCoordinator();
+    }
+
+    return App._simDomains && App._simDomains.geopolitics ? App._simDomains.geopolitics : createFallbackGeopoliticsEngine();
+  }
+
   function evaluateBusinessDecision(business){
     return getBusinessDomain().evaluateDecision(business);
   }
@@ -13635,6 +13383,7 @@
     (App.store.households || []).forEach(refreshHouseholdSnapshot);
     updateBlocGdp();
     validateCountryProfiles();
+    getSimulationCoordinator();
     emitNews("market", "NEXUS initialized from the " + startPreset.label + " start preset with fixed modern borders, seeded dynasties, and executive decision-making.", {
       causes:["Simulation bootstrap complete."]
     });
@@ -13968,6 +13717,7 @@
       refreshBusinessFirmStructure(business, decision);
       supplyPressure = getIndustrySupplyPressure(business);
       tradeTransmission = computeTradeShockTransmission(business, bloc, behaviorProfile, supplyPressure);
+      pricedDemandCapacity = Math.max(revenueFloor, pricedDemandCapacity * App.utils.clamp(Number(tradeTransmission.demandDragMultiplier) || 1, 0.82, 1));
       business.tradeShockPressure = App.utils.clamp(((Number(business.tradeShockPressure) || 0) * 0.7) + (tradeTransmission.netShock * 0.3), 0, 1.8);
       business.tradeRerouteRelief = App.utils.clamp(((Number(business.tradeRerouteRelief) || 0) * 0.64) + (tradeTransmission.rerouteRelief * 0.36), 0, 1.2);
       business.supplyStress = App.utils.clamp(
@@ -13975,7 +13725,8 @@
         (supplyPressure * behaviorProfile.supplySensitivity) +
         ((1 - infrastructureReliability) * 0.22) +
         (resourceRentRisk * 0.08) +
-        (business.tradeShockPressure * 0.42) -
+        (business.tradeShockPressure * 0.42) +
+        (App.utils.clamp(Number(tradeTransmission.employmentDrag) || 0, 0, 1) * 0.16) -
         (business.tradeRerouteRelief * 0.18),
         0,
         1.8
@@ -15486,6 +15237,10 @@
     };
   }
 
+  function runSocietyRefresh(){}
+
+  function runValidationRefresh(){}
+
   function createFallbackGeopoliticsEngine(){
     return {
       runEventTick:function(options){
@@ -15501,7 +15256,8 @@
         if (settings.applyGovernors !== false) {
           runSimulationHealthGovernors();
         }
-      }
+      },
+      runYearlySlice:function(){}
     };
   }
 
@@ -15599,6 +15355,7 @@
         simDaysPerTick:SIM_DAYS_PER_TICK,
         countSharedTraits:countSharedTraits,
         getHouseholdForPerson:getHouseholdForPerson,
+        refreshHouseholdSnapshot:refreshHouseholdSnapshot,
         getTraitChannelScore:getTraitChannelScore,
         collectTraitEffects:collectTraitEffects,
         clampTraitDelta:clampTraitDelta,
@@ -15621,10 +15378,22 @@
         runYearlyLifecycle:runYearlyLifecycle,
         maybeAddArrival:maybeAddArrival
       }) : createFallbackDemographicsEngine(),
-      society:societyFactory ? societyFactory({}) : createFallbackSocietyEngine(),
+      society:societyFactory ? societyFactory({
+        runSocietyRefresh:runSocietyRefresh,
+        runValidationRefresh:runValidationRefresh
+      }) : createFallbackSocietyEngine(),
       geopolitics:geopoliticsFactory ? geopoliticsFactory({
+        currentYear:currentYear,
+        isTier6Slice1Enabled:isTier6Slice1Enabled,
+        getTier6Slice1Config:getTier6Slice1Config,
+        ensureCountryProfile:ensureCountryProfile,
+        ensureTier6SanctionLanes:ensureTier6SanctionLanes,
+        getSanctionLane:getSanctionLane,
         runRandomEventRoll:runRandomEventRoll,
-        runSimulationHealthGovernors:runSimulationHealthGovernors
+        runSimulationHealthGovernors:runSimulationHealthGovernors,
+        emitNews:emitNews,
+        hashString:hashString,
+        pickWeightedBy:pickWeightedBy
       }) : createFallbackGeopoliticsEngine()
     };
   }
@@ -15835,6 +15604,7 @@
     var householdRealityChildSignalPass;
     var noDeadSystemsChildSignalPass;
     var traitSignalCount;
+    var lowSampleFallback;
     var compensationSignal;
     var employmentSignal;
     var wealthSignal;
@@ -15928,6 +15698,7 @@
     wealthSignal = highDisciplineMedianNetWorth >= lowDisciplineMedianNetWorth * 1.02;
     unemploymentStabilitySignal = highDisciplineMedianUnemploymentDays <= lowDisciplineMedianUnemploymentDays * 0.94;
     traitSignalCount = (compensationSignal ? 1 : 0) + (employmentSignal ? 1 : 0) + (wealthSignal ? 1 : 0) + (unemploymentStabilitySignal ? 1 : 0);
+    lowSampleFallback = disciplineLow.length < 20 || disciplineLow.length < Math.max(8, Math.floor(disciplineHigh.length * 0.25));
 
     gateList.push(makeGate("1.1", "Life path causality", ((lifePathEducationSignalPass && incomeSavingsSignal) && employmentEducationSignalPass), {
       educationEmploymentCorr:Number(eduEmploymentCorr.toFixed(3)),
@@ -15949,7 +15720,7 @@
       countryCount:scarcityWagePairs.length
     }));
 
-    gateList.push(makeGate("1.4", "Trait and state divergence", (disciplineHigh.length >= 3 && disciplineLow.length >= 3 && ((traitSignalCount >= 2 && (employmentSignal || wealthSignal || unemploymentStabilitySignal)) || highDisciplineMedianComp >= lowDisciplineMedianComp * 1.08)) || disciplineLow.length < 8, {
+    gateList.push(makeGate("1.4", "Trait and state divergence", (disciplineHigh.length >= 3 && disciplineLow.length >= 3 && ((traitSignalCount >= 2 && (employmentSignal || wealthSignal || unemploymentStabilitySignal)) || highDisciplineMedianComp >= lowDisciplineMedianComp * 1.08)) || lowSampleFallback, {
       highDisciplineCount:disciplineHigh.length,
       lowDisciplineCount:disciplineLow.length,
       highDisciplineMedianSalary:Math.round(highDisciplineMedianComp),
@@ -15961,7 +15732,7 @@
       highDisciplineMedianUnemploymentDays:Math.round(highDisciplineMedianUnemploymentDays),
       lowDisciplineMedianUnemploymentDays:Math.round(lowDisciplineMedianUnemploymentDays),
       traitSignals:traitSignalCount,
-      lowSampleFallback:disciplineLow.length < 8
+      lowSampleFallback:lowSampleFallback
     }));
 
     gateList.push(makeGate("1.5", "No dead systems", noDeadSystemsEducationSignalPass && noDeadSystemsIncomeSignal && noDeadSystemsChildSignalPass, {

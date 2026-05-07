@@ -5,17 +5,29 @@
 
   App.simDomains.createSocietyEngine = function createSocietyEngine(handlers){
     var api = handlers || {};
+    var missingRequiredHandlers = [];
+
+    function requireHandler(name, fallback){
+      if (typeof api[name] !== "function") {
+        missingRequiredHandlers.push(name);
+        return typeof fallback === "function" ? fallback : function(){};
+      }
+      return api[name];
+    }
+
+    var runSocietyRefresh = requireHandler("runSocietyRefresh", function(){});
+    var runValidationRefresh = requireHandler("runValidationRefresh", function(){});
+
+    if (missingRequiredHandlers.length) {
+      throw new Error("Society engine missing required handlers: " + missingRequiredHandlers.join(", "));
+    }
 
     return {
       runSocietyTick:function(){
-        if (typeof api.runSocietyRefresh === "function") {
-          api.runSocietyRefresh();
-        }
+        runSocietyRefresh();
       },
       runValidationTick:function(){
-        if (typeof api.runValidationRefresh === "function") {
-          api.runValidationRefresh();
-        }
+        runValidationRefresh();
       }
     };
   };

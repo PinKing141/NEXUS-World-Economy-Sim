@@ -5,30 +5,41 @@
 
   App.simDomains.createFinanceEngine = function createFinanceEngine(handlers){
     var api = handlers || {};
+    var missingRequiredHandlers = [];
+
+    function requireHandler(name, fallback){
+      if (typeof api[name] !== "function") {
+        missingRequiredHandlers.push(name);
+        return typeof fallback === "function" ? fallback : function(){};
+      }
+      return api[name];
+    }
+
+    var enforceFinancialBounds = requireHandler("enforceFinancialBounds", function(){});
+    var runDealRoll = requireHandler("runDealRoll", function(){});
+    var updateBlocGdp = requireHandler("updateBlocGdp", function(){});
+    var pushEconomicHistory = requireHandler("pushEconomicHistory", function(){});
+    var updateForex = requireHandler("updateForex", function(){});
+
+    if (missingRequiredHandlers.length) {
+      throw new Error("Finance engine missing required handlers: " + missingRequiredHandlers.join(", "));
+    }
 
     return {
       runFinanceTick:function(){
-        if (typeof api.enforceFinancialBounds === "function") {
-          api.enforceFinancialBounds();
-        }
+        enforceFinancialBounds();
       },
       runMarketTick:function(options){
         var settings = options && typeof options === "object" ? options : {};
 
-        if (settings.includeRandom !== false && typeof api.runDealRoll === "function") {
-          api.runDealRoll();
+        if (settings.includeRandom !== false) {
+          runDealRoll();
         }
       },
       runMetricsTick:function(){
-        if (typeof api.updateBlocGdp === "function") {
-          api.updateBlocGdp();
-        }
-        if (typeof api.pushEconomicHistory === "function") {
-          api.pushEconomicHistory();
-        }
-        if (typeof api.updateForex === "function") {
-          api.updateForex();
-        }
+        updateBlocGdp();
+        pushEconomicHistory();
+        updateForex();
       }
     };
   };

@@ -584,6 +584,7 @@ Use this as the execution gate before opening full Tier 6 scope.
   - Latest `npm run closure` baseline (2026-03-26T23:20:46.048Z) is passing with `overallPassing=true`; gate `3.2` remains inside the guardrail at `0.200` in run 3, and the latest regression artifact (2026-03-26T23:17:08.766Z) also passes.
 - [x] Tier 6 starts in constrained slices (elections/sanctions first) before wars/conflict phases.
   - Constrained Slice 1 scaffolding is active in `src/js/app/sim.js` with elections/sanctions yearly passes and conflict phase hard-disabled.
+  - Dedicated Slice 1 contract coverage now exists via `npm run test:tier6:slice1`, including election activation, sanction activation under bounded pressure, and snapshot round-trip retention.
   - [Tier 6 constrained slice plan](requirements/tier6/slice-plan.md)
 
 ### Can Run In Parallel While Tier 6 Begins

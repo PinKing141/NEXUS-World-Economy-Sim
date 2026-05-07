@@ -342,10 +342,23 @@
         financeBlockIndex:clamp(toFiniteNumber(lane.financeBlockIndex, 0), 0, 1),
         dealBlockIndex:clamp(toFiniteNumber(lane.dealBlockIndex, 0), 0, 1),
         rerouteProgressIndex:clamp(toFiniteNumber(lane.rerouteProgressIndex, 0), 0, 1),
+        retaliationPressureIndex:clamp(toFiniteNumber(lane.retaliationPressureIndex, 0), 0, 1),
+        retaliationTradeBlockIndex:clamp(toFiniteNumber(lane.retaliationTradeBlockIndex, 0), 0, 1),
+        rerouteCounterPressureIndex:clamp(toFiniteNumber(lane.rerouteCounterPressureIndex, 0), 0, 1.2),
+        sectorEmploymentDrag:clamp(toFiniteNumber(lane.sectorEmploymentDrag, 0), 0, 1),
+        sectorRetaliationWeights:{},
+        retaliationSourceLaneKey:normalizeString(lane.retaliationSourceLaneKey, null),
+        lastRetaliationYear:Math.max(-1, toInteger(lane.lastRetaliationYear, -1)),
+        retaliationCooldownUntilYear:Math.max(-1, toInteger(lane.retaliationCooldownUntilYear, -1)),
+        retaliationActive:lane.retaliationActive === true,
         lastUpdatedYear:Math.max(-1, toInteger(lane.lastUpdatedYear, -1)),
         lastNewsYear:Math.max(-1, toInteger(lane.lastNewsYear, -1)),
         active:lane.active === true
       };
+      normalizedLane.sectorRetaliationWeights = normalizeRetaliationSectorWeights(lane.sectorRetaliationWeights);
+      normalizedLane.retaliationActive = normalizedLane.retaliationActive ||
+        normalizedLane.retaliationTradeBlockIndex >= 0.08 ||
+        normalizedLane.retaliationPressureIndex >= 0.12;
       normalizedLane.active = normalizedLane.active ||
         normalizedLane.tradeBlockIndex >= 0.09 ||
         normalizedLane.financeBlockIndex >= 0.09 ||
@@ -766,6 +779,31 @@
     return normalized;
   }
 
+  function normalizeRetaliationSectorWeights(weights){
+    var source = weights && typeof weights === "object" ? weights : {};
+    var normalized = {};
+    var total = 0;
+
+    Object.keys(source).forEach(function(key){
+      var cleanKey = normalizeString(key, null);
+      var value;
+
+      if (!cleanKey) return;
+      value = Math.max(0, toFiniteNumber(source[key], 0));
+      if (value <= 0) return;
+      normalized[cleanKey] = value;
+      total += value;
+    });
+
+    if (total <= 0) return {};
+
+    Object.keys(normalized).forEach(function(key){
+      normalized[key] = normalized[key] / total;
+    });
+
+    return normalized;
+  }
+
   function normalizeCountryProfileRecord(iso, blocId, rawProfile){
     var source = rawProfile && typeof rawProfile === "object" ? rawProfile : {};
     var seed = (App.data && typeof App.data.createCountryProfile === "function") ? App.data.createCountryProfile(iso, blocId, source) : {
@@ -881,6 +919,23 @@
       philanthropicCapitalAnnualGU:Math.max(0, toFiniteNumber(source.philanthropicCapitalAnnualGU, toFiniteNumber(seed.philanthropicCapitalAnnualGU, 0))),
       philanthropyImpactIndex:clamp(toFiniteNumber(source.philanthropyImpactIndex, toFiniteNumber(seed.philanthropyImpactIndex, 0)), 0, 1.6),
       legacyProjectsIndex:clamp(toFiniteNumber(source.legacyProjectsIndex, toFiniteNumber(seed.legacyProjectsIndex, 0)), 0, 1.4),
+      tradeShockIndex:clamp(toFiniteNumber(source.tradeShockIndex, toFiniteNumber(seed.tradeShockIndex, 0)), 0, 1.8),
+      tradeRerouteRelief:clamp(toFiniteNumber(source.tradeRerouteRelief, toFiniteNumber(seed.tradeRerouteRelief, 0)), 0, 1.2),
+      tier6ElectionBias:clamp(toFiniteNumber(source.tier6ElectionBias, toFiniteNumber(seed.tier6ElectionBias, 0)), -0.9, 0.9),
+      electionTaxPolicyIndex:clamp(toFiniteNumber(source.electionTaxPolicyIndex, toFiniteNumber(seed.electionTaxPolicyIndex, 0)), -0.55, 0.55),
+      electionTradePolicyIndex:clamp(toFiniteNumber(source.electionTradePolicyIndex, toFiniteNumber(seed.electionTradePolicyIndex, 0)), -0.55, 0.55),
+      electionLaborPolicyIndex:clamp(toFiniteNumber(source.electionLaborPolicyIndex, toFiniteNumber(seed.electionLaborPolicyIndex, 0)), -0.55, 0.55),
+      electionImmigrationPolicyIndex:clamp(toFiniteNumber(source.electionImmigrationPolicyIndex, toFiniteNumber(seed.electionImmigrationPolicyIndex, 0)), -0.55, 0.55),
+      electionBusinessConfidenceIndex:clamp(toFiniteNumber(source.electionBusinessConfidenceIndex, toFiniteNumber(seed.electionBusinessConfidenceIndex, 0)), -0.6, 0.6),
+      sanctionTradeBlockIndex:clamp(toFiniteNumber(source.sanctionTradeBlockIndex, toFiniteNumber(seed.sanctionTradeBlockIndex, 0)), 0, 1),
+      sanctionFinanceBlockIndex:clamp(toFiniteNumber(source.sanctionFinanceBlockIndex, toFiniteNumber(seed.sanctionFinanceBlockIndex, 0)), 0, 1),
+      sanctionDealBlockIndex:clamp(toFiniteNumber(source.sanctionDealBlockIndex, toFiniteNumber(seed.sanctionDealBlockIndex, 0)), 0, 1),
+      retaliationPressureIndex:clamp(toFiniteNumber(source.retaliationPressureIndex, toFiniteNumber(seed.retaliationPressureIndex, 0)), 0, 1),
+      sectorTradeBlockIndex:clamp(toFiniteNumber(source.sectorTradeBlockIndex, toFiniteNumber(seed.sectorTradeBlockIndex, 0)), 0, 1),
+      rerouteCounterPressureIndex:clamp(toFiniteNumber(source.rerouteCounterPressureIndex, toFiniteNumber(seed.rerouteCounterPressureIndex, 0)), 0, 1.2),
+      sectorEmploymentDrag:clamp(toFiniteNumber(source.sectorEmploymentDrag, toFiniteNumber(seed.sectorEmploymentDrag, 0)), 0, 1),
+      sectorRetaliationWeights:normalizeRetaliationSectorWeights(source.sectorRetaliationWeights || seed.sectorRetaliationWeights),
+      policyEvidence:source.policyEvidence && typeof source.policyEvidence === "object" ? deepClone(source.policyEvidence) : {},
       populationPressure:0
     };
   }

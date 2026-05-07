@@ -38,6 +38,7 @@ Define a constrained Tier 6 start that preserves closure stability while introdu
 - Elections and sanctions run in simulation without breaking save compatibility.
 - New evidence fields visible in inspector/telemetry outputs.
 - Closure regression command remains runnable and results are documented.
+- Dedicated Slice 1 contract coverage exists for election activation, sanction activation under bounded pressure, and snapshot round-trip retention (`npm run test:tier6:slice1`).
 
 ## Non-Goals
 

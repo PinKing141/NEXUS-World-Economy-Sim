@@ -5,6 +5,16 @@
 
   App.simDomains.createBusinessEngine = function createBusinessEngine(handlers){
     var api = handlers || {};
+    var missingRequiredHandlers = [];
+
+    function requireHandler(name, fallback){
+      if (typeof api[name] !== "function") {
+        missingRequiredHandlers.push(name);
+        return typeof fallback === "function" ? fallback : function(){};
+      }
+      return api[name];
+    }
+
     var decisionRoleWeights = api.decisionRoleWeights || {};
     var bankruptcyStageOrder = api.bankruptcyStageOrder || [];
     var ensureDecisionData = typeof api.ensureDecisionData === "function" ? api.ensureDecisionData : function(){};
@@ -78,23 +88,31 @@
       return {};
     };
     var getCountrySanctionExposure = typeof api.getCountrySanctionExposure === "function" ? api.getCountrySanctionExposure : function(){
-      return { financeBlockIndex:0, dealBlockIndex:0 };
+      return {
+        financeBlockIndex:0,
+        dealBlockIndex:0,
+        retaliationPressureIndex:0,
+        sectorTradeBlockIndex:0,
+        rerouteCounterPressureIndex:0,
+        sectorEmploymentDrag:0,
+        sectorRetaliationWeights:{}
+      };
     };
     var getTier6ElectionChannelEffects = typeof api.getTier6ElectionChannelEffects === "function" ? api.getTier6ElectionChannelEffects : function(){
       return { creditConfidenceBias:0 };
     };
-    var emitNews = typeof api.emitNews === "function" ? api.emitNews : function(){};
+    var emitNews = requireHandler("emitNews", function(){});
     var liquidateBusiness = typeof api.liquidateBusiness === "function" ? api.liquidateBusiness : function(){};
     var adjustTemporaryStates = typeof api.adjustTemporaryStates === "function" ? api.adjustTemporaryStates : function(){};
-    var adjustPersonalReputation = typeof api.adjustPersonalReputation === "function" ? api.adjustPersonalReputation : function(){};
-    var syncPerson = typeof api.syncPerson === "function" ? api.syncPerson : function(){};
+    var adjustPersonalReputation = requireHandler("adjustPersonalReputation", function(){});
+    var syncPerson = requireHandler("syncPerson", function(){});
     var releaseLabor = typeof api.releaseLabor === "function" ? api.releaseLabor : function(){
       return 0;
     };
     var reserveLabor = typeof api.reserveLabor === "function" ? api.reserveLabor : function(){
       return 0;
     };
-    var syncBusinessLeadership = typeof api.syncBusinessLeadership === "function" ? api.syncBusinessLeadership : function(){};
+    var syncBusinessLeadership = requireHandler("syncBusinessLeadership", function(){});
     var buildTraitEffectTags = typeof api.buildTraitEffectTags === "function" ? api.buildTraitEffectTags : function(){
       return [];
     };
@@ -165,14 +183,14 @@
     var getBlocBusinessDiversificationMultiplier = typeof api.getBlocBusinessDiversificationMultiplier === "function" ? api.getBlocBusinessDiversificationMultiplier : function(){
       return 1;
     };
-    var createBusiness = typeof api.createBusiness === "function" ? api.createBusiness : function(){
+    var createBusiness = requireHandler("createBusiness", function(){
       return null;
-    };
-    var seedBusiness = typeof api.seedBusiness === "function" ? api.seedBusiness : function(){};
-    var currentYear = typeof api.currentYear === "function" ? api.currentYear : function(){
+    });
+    var seedBusiness = requireHandler("seedBusiness", function(){});
+    var currentYear = requireHandler("currentYear", function(){
       return 0;
-    };
-    var recordLaunchWindow = typeof api.recordLaunchWindow === "function" ? api.recordLaunchWindow : function(){};
+    });
+    var recordLaunchWindow = requireHandler("recordLaunchWindow", function(){});
     var ensureSocialNetworkData = typeof api.ensureSocialNetworkData === "function" ? api.ensureSocialNetworkData : function(){};
     var getSocialProximityScore = typeof api.getSocialProximityScore === "function" ? api.getSocialProximityScore : function(){
       return 0;
@@ -180,9 +198,10 @@
     var countSharedTraits = typeof api.countSharedTraits === "function" ? api.countSharedTraits : function(){
       return 0;
     };
-    var getHouseholdForPerson = typeof api.getHouseholdForPerson === "function" ? api.getHouseholdForPerson : function(){
+    var getHouseholdForPerson = requireHandler("getHouseholdForPerson", function(){
       return null;
-    };
+    });
+    var refreshHouseholdSnapshot = requireHandler("refreshHouseholdSnapshot", function(){});
     var getTraitChannelScore = typeof api.getTraitChannelScore === "function" ? api.getTraitChannelScore : function(){
       return 0;
     };
@@ -428,10 +447,19 @@
     }
 
     function computeTradeShockTransmission(business, bloc, behaviorProfile, supplyPressure){
+      var countryProfile = ensureCountryProfile(business && business.countryISO, business && business.blocId);
+      var sanctionExposure = getCountrySanctionExposure(countryProfile, business && business.blocId);
       var dependencies = getIndustrySupplyDependencies(business && business.industry);
       var tradeExposure = getIndustryTradeExposure(business && business.industry);
       var rerouteAdaptability = getIndustryRerouteAdaptability(business && business.industry);
       var crossBlocDependencyPressure = getCrossBlocDependencyPressure(bloc, dependencies);
+      var sectorWeights = sanctionExposure && sanctionExposure.sectorRetaliationWeights && typeof sanctionExposure.sectorRetaliationWeights === "object" ? sanctionExposure.sectorRetaliationWeights : {};
+      var industryKey = String(business && business.industry || "general").trim().toLowerCase();
+      var sectorWeight = App.utils.clamp(Number(sectorWeights[industryKey]) || Number(sectorWeights.general) || 0, 0, 1);
+      var retaliationTradeBlockIndex = App.utils.clamp(Number(sanctionExposure && sanctionExposure.sectorTradeBlockIndex) || 0, 0, 1);
+      var retaliationPressureIndex = App.utils.clamp(Number(sanctionExposure && sanctionExposure.retaliationPressureIndex) || 0, 0, 1);
+      var rerouteCounterPressureIndex = App.utils.clamp(Number(sanctionExposure && sanctionExposure.rerouteCounterPressureIndex) || 0, 0, 1.2);
+      var employmentDrag = App.utils.clamp(Number(sanctionExposure && sanctionExposure.sectorEmploymentDrag) || 0, 0, 1);
       var baseTradeShock;
       var rerouteCapacity;
       var rerouteRelief;
@@ -450,6 +478,8 @@
       baseTradeShock =
         App.utils.clamp((Number(bloc.geoPressure) || 0) * 0.13, 0, 0.58) +
         (App.utils.clamp(Number(supplyPressure) || 0, 0, 1.8) * 0.24) +
+        (retaliationTradeBlockIndex * (0.16 + (sectorWeight * 0.34))) +
+        (retaliationPressureIndex * 0.08) +
         crossBlocDependencyPressure;
       baseTradeShock *= App.utils.clamp(tradeExposure * (Number(behaviorProfile && behaviorProfile.supplySensitivity) || 1), 0.2, 1.35);
       baseTradeShock = App.utils.clamp(baseTradeShock, 0, 1.6);
@@ -461,9 +491,10 @@
         0,
         1.15
       );
+      rerouteCapacity -= rerouteCounterPressureIndex * (0.12 + (sectorWeight * 0.18));
       rerouteCapacity = App.utils.clamp(rerouteCapacity * (0.72 + (rerouteAdaptability * 0.6)), 0, 1.2);
       rerouteRelief = App.utils.clamp(Math.min(baseTradeShock * App.utils.clamp(0.22 + (rerouteCapacity * 0.38), 0.22, 0.62), 0.8), 0, 0.8);
-      netShock = App.utils.clamp(baseTradeShock - rerouteRelief, 0, 1.6);
+      netShock = App.utils.clamp(baseTradeShock - rerouteRelief + (employmentDrag * (0.05 + (sectorWeight * 0.1))), 0, 1.6);
 
       business.tradeRerouteCapacity = App.utils.clamp(rerouteCapacity - (netShock * 0.09), 0, 1.2);
       business.tradeShockExposure = tradeExposure;
@@ -473,7 +504,9 @@
         netShock:netShock,
         rerouteRelief:rerouteRelief,
         rerouteCapacity:rerouteCapacity,
-        costMultiplier:1 + App.utils.clamp((netShock * 0.07) - (rerouteRelief * 0.018), 0, 0.16)
+        costMultiplier:1 + App.utils.clamp((netShock * 0.07) - (rerouteRelief * 0.018) + (employmentDrag * 0.025), 0, 0.18),
+        demandDragMultiplier:App.utils.clamp(1 - (retaliationTradeBlockIndex * (0.04 + (sectorWeight * 0.08))) - (employmentDrag * 0.03), 0.82, 1),
+        employmentDrag:employmentDrag
       };
     }
 
@@ -1351,13 +1384,23 @@
       var managementTilt;
       var leadershipCount;
       var boardPressure;
+      var sanctionExposure;
+      var employmentDrag;
+      var sectorWeights;
+      var sectorWeight;
+      var industryKey;
 
       if (!business) return;
 
       profile = ensureCountryProfile(business.countryISO);
+      sanctionExposure = getCountrySanctionExposure(profile, business.blocId);
       behavior = getIndustryBehaviorProfile(business.industry);
       leadershipCount = Math.max(1, (business.leadership || []).length);
       boardPressure = Number(business.governance && business.governance.boardPressure) || 0;
+      employmentDrag = App.utils.clamp(Number(sanctionExposure && sanctionExposure.sectorEmploymentDrag) || 0, 0, 1);
+      sectorWeights = sanctionExposure && sanctionExposure.sectorRetaliationWeights && typeof sanctionExposure.sectorRetaliationWeights === "object" ? sanctionExposure.sectorRetaliationWeights : {};
+      industryKey = String(business.industry || "general").trim().toLowerCase();
+      sectorWeight = App.utils.clamp(Number(sectorWeights[industryKey]) || Number(sectorWeights.general) || 0, 0, 1);
 
       departmentShares = {
         operations:App.utils.clamp(0.18 + (behavior.supplySensitivity * 0.16), 0.16, 0.42),
@@ -1372,6 +1415,7 @@
         (((Number(business.customerTrust) || 50) - 50) * 0.01) +
         ((decision && decision.stance === "aggressive") ? -0.08 : 0) +
         ((decision && decision.cashPolicy === "preserve") ? 0.06 : 0) -
+        (employmentDrag * (0.06 + (sectorWeight * 0.08))) -
         (boardPressure * 0.05);
 
       business.managementQuality = App.utils.clamp((Number(business.managementQuality) || 50) * 0.95 + (50 + managementTilt * 100) * 0.05, 10, 98);
@@ -1384,7 +1428,7 @@
       business.wageBillAnnual = Math.max(0, getLeadershipPayrollAnnual(business) + getAnonymousPayrollAnnual(business));
       business.operatingCostAnnual = Math.max(0, (business.revenueGU || 0) * getOperatingCostRate(business));
       business.hiringNeed = App.utils.clamp(
-        Math.round(((decision && decision.staffingAction === "hire") ? 1 : (decision && decision.staffingAction === "layoff" ? -1 : 0)) * Math.max(0, business.employees || 0) * 0.08 + ((Number(profile && profile.talentShortageIndex) || 0) * -8) + (leadershipCount * 0.4)),
+        Math.round(((decision && decision.staffingAction === "hire") ? 1 : (decision && decision.staffingAction === "layoff" ? -1 : 0)) * Math.max(0, business.employees || 0) * 0.08 + ((Number(profile && profile.talentShortageIndex) || 0) * -8) + (leadershipCount * 0.4) - (employmentDrag * Math.min(42, Math.max(0, business.employees || 0) * (0.018 + (sectorWeight * 0.022))))),
         -600,
         600
       );
@@ -1472,6 +1516,13 @@
       var institutionVolatility;
       var sanctionExposure;
       var electionEffects;
+      var retaliationPressureIndex;
+      var sectorTradeBlockIndex;
+      var rerouteCounterPressureIndex;
+      var sectorEmploymentDrag;
+      var sectorWeights;
+      var sectorWeight;
+      var industryKey;
 
       if (!business || !owner || !bloc) return { liquidated:false, creditStress:0 };
 
@@ -1497,17 +1548,27 @@
       institutionVolatility = App.utils.clamp((instabilityIndex / 1.6) * 0.65 + (corruptionIndex * 0.35), 0, 1.2);
       sanctionExposure = getCountrySanctionExposure(countryProfile, business.blocId);
       electionEffects = getTier6ElectionChannelEffects(countryProfile);
+      retaliationPressureIndex = App.utils.clamp(Number(sanctionExposure.retaliationPressureIndex) || 0, 0, 1);
+      sectorTradeBlockIndex = App.utils.clamp(Number(sanctionExposure.sectorTradeBlockIndex) || 0, 0, 1);
+      rerouteCounterPressureIndex = App.utils.clamp(Number(sanctionExposure.rerouteCounterPressureIndex) || 0, 0, 1.2);
+      sectorEmploymentDrag = App.utils.clamp(Number(sanctionExposure.sectorEmploymentDrag) || 0, 0, 1);
+      sectorWeights = sanctionExposure.sectorRetaliationWeights && typeof sanctionExposure.sectorRetaliationWeights === "object" ? sanctionExposure.sectorRetaliationWeights : {};
+      industryKey = String(business.industry || "general").trim().toLowerCase();
+      sectorWeight = App.utils.clamp(Number(sectorWeights[industryKey]) || Number(sectorWeights.general) || 0, 0, 1);
       debtRateBias = (countryPolicyEffects.debtRateBias || 0) + (blocPolicyEffects.debtRateBias || 0);
       rolloverChanceBias = (countryPolicyEffects.rolloverChanceBias || 0) + (blocPolicyEffects.rolloverChanceBias || 0);
       distressBias = (countryPolicyEffects.distressBias || 0) + (blocPolicyEffects.distressBias || 0);
       bailoutBias = (countryPolicyEffects.bailoutBias || 0) + (blocPolicyEffects.bailoutBias || 0);
-      investmentConfidence = App.utils.clamp(investmentConfidence - (sanctionExposure.financeBlockIndex * 0.24) - (sanctionExposure.dealBlockIndex * 0.08) + (electionEffects.creditConfidenceBias || 0), 0.06, 1);
+      investmentConfidence = App.utils.clamp(investmentConfidence - (sanctionExposure.financeBlockIndex * 0.24) - (sanctionExposure.dealBlockIndex * 0.08) - (sectorTradeBlockIndex * (0.1 + (sectorWeight * 0.08))) - (retaliationPressureIndex * 0.05) + (electionEffects.creditConfidenceBias || 0), 0.06, 1);
       debtRateBias += App.utils.clamp((0.55 - contractReliability) * 0.022 + (institutionVolatility * 0.012), -0.012, 0.034);
       debtRateBias += App.utils.clamp(sanctionExposure.financeBlockIndex * 0.019, 0, 0.026);
+      debtRateBias += App.utils.clamp((sectorTradeBlockIndex * 0.01) + (sectorEmploymentDrag * 0.006), 0, 0.02);
       rolloverChanceBias += App.utils.clamp((contractReliability - 0.5) * 0.22 + (investmentConfidence - 0.5) * 0.12 - (institutionVolatility * 0.18), -0.16, 0.18);
       rolloverChanceBias -= App.utils.clamp(sanctionExposure.financeBlockIndex * 0.18, 0, 0.18);
+      rolloverChanceBias -= App.utils.clamp(rerouteCounterPressureIndex * 0.08, 0, 0.12);
       distressBias += App.utils.clamp((0.52 - investmentConfidence) * 0.22 + (institutionVolatility * 0.2), -0.12, 0.2);
       distressBias += App.utils.clamp(sanctionExposure.financeBlockIndex * 0.22, 0, 0.2);
+      distressBias += App.utils.clamp((sectorEmploymentDrag * 0.16) + (sectorTradeBlockIndex * 0.08), 0, 0.22);
       bailoutBias += App.utils.clamp((contractReliability - 0.5) * 0.12 + (institutionScore - 0.5) * 0.08 - (corruptionIndex - 0.4) * 0.08, -0.1, 0.14);
       debtCapacity = Math.max(0, (Number(business.valuationGU) || 0) * App.utils.clamp(0.2 + behavior.leverageAppetite * 0.32, 0.2, 0.82));
 
@@ -1631,7 +1692,11 @@
         institutionVolatility:Number(institutionVolatility.toFixed(4)),
         corruptionIndex:Number(corruptionIndex.toFixed(4)),
         sanctionFinanceBlockIndex:Number(sanctionExposure.financeBlockIndex.toFixed(4)),
-        sanctionDealBlockIndex:Number(sanctionExposure.dealBlockIndex.toFixed(4))
+        sanctionDealBlockIndex:Number(sanctionExposure.dealBlockIndex.toFixed(4)),
+        retaliationPressureIndex:Number(retaliationPressureIndex.toFixed(4)),
+        sectorTradeBlockIndex:Number(sectorTradeBlockIndex.toFixed(4)),
+        rerouteCounterPressureIndex:Number(rerouteCounterPressureIndex.toFixed(4)),
+        sectorEmploymentDrag:Number(sectorEmploymentDrag.toFixed(4))
       };
 
       return {
@@ -1834,6 +1899,14 @@
       var underUtilizedLayoffAllowed;
       var decisionTraitEffects = [];
       var institutionPrestige = 50;
+      var sanctionExposure;
+      var retaliationPressureIndex;
+      var sectorTradeBlockIndex;
+      var rerouteCounterPressureIndex;
+      var sectorEmploymentDrag;
+      var sectorWeights;
+      var sectorWeight;
+      var industryKey;
 
       if (!business) return null;
 
@@ -1841,6 +1914,7 @@
       makers = getBusinessDecisionMakers(business);
       bloc = App.store.getBloc(business.blocId);
       profile = ensureCountryProfile(business.countryISO);
+      sanctionExposure = getCountrySanctionExposure(profile, business.blocId);
       trend = getRevenueTrend(business);
       demandGrowth = ((Math.max(0, Number(profile && profile.consumerDemandGU) || 0) - Math.max(1, Number(profile && profile.prevConsumerDemandGU) || Number(profile && profile.consumerDemandGU) || 1)) / Math.max(1, Number(profile && profile.prevConsumerDemandGU) || Number(profile && profile.consumerDemandGU) || 1));
       profitMargin = getProfitMargin(business);
@@ -1855,6 +1929,13 @@
       demandSlack = App.utils.clamp(1 - demandUtilization, -0.8, 0.8);
       leverageRatio = Math.max(0, Number(business.debtGU) || 0) / Math.max(1, Number(business.valuationGU) || 1);
       employeeCount = Math.max(0, Number(business.employees) || 0);
+      retaliationPressureIndex = App.utils.clamp(Number(sanctionExposure.retaliationPressureIndex) || 0, 0, 1);
+      sectorTradeBlockIndex = App.utils.clamp(Number(sanctionExposure.sectorTradeBlockIndex) || 0, 0, 1);
+      rerouteCounterPressureIndex = App.utils.clamp(Number(sanctionExposure.rerouteCounterPressureIndex) || 0, 0, 1.2);
+      sectorEmploymentDrag = App.utils.clamp(Number(sanctionExposure.sectorEmploymentDrag) || 0, 0, 1);
+      sectorWeights = sanctionExposure.sectorRetaliationWeights && typeof sanctionExposure.sectorRetaliationWeights === "object" ? sanctionExposure.sectorRetaliationWeights : {};
+      industryKey = String(business.industry || "general").trim().toLowerCase();
+      sectorWeight = App.utils.clamp(Number(sectorWeights[industryKey]) || Number(sectorWeights.general) || 0, 0, 1);
       metrics = {
         trend:trend,
         demandGrowth:demandGrowth,
@@ -1889,6 +1970,9 @@
       scores.expansion += App.utils.clamp((demandSlack * 24) - ((Math.max(0, demandUtilization - 1)) * 32), -28, 16);
       scores.staffing += App.utils.clamp((demandSlack * 40) - ((Math.max(0, demandUtilization - 1)) * 48), -30, 20);
       scores.cash += App.utils.clamp((Math.max(0, demandUtilization - 1)) * 28, 0, 18);
+      scores.expansion -= App.utils.clamp((sectorTradeBlockIndex * (12 + (sectorWeight * 16))) + (retaliationPressureIndex * 10), 0, 28);
+      scores.staffing -= App.utils.clamp((sectorEmploymentDrag * (16 + (sectorWeight * 18))) + (sectorTradeBlockIndex * 8), 0, 30);
+      scores.cash += App.utils.clamp((rerouteCounterPressureIndex * 12) + (sectorTradeBlockIndex * 10), 0, 20);
 
       if (profile && profile.talentShortageIndex != null) {
         scores.staffing -= App.utils.clamp(Number(profile.talentShortageIndex) * 9, 0, 6);
@@ -1962,6 +2046,7 @@
         business.bankruptcyStage === "restructuring" ||
         (business.stage === "declining" && (trend < -0.08 || demandGrowth < -0.05)) ||
         (leverageRatio > 0.35 && (cashCoverage < 1.6 || demandGrowth < -0.06)) ||
+        sectorEmploymentDrag > 0.2 ||
         (Number(business.distressScore) || 0) > 1.35;
       if (business.stage === "startup" && employeeCount <= 4 && demandUtilization < 0.9) {
         underUtilizedLayoffAllowed = false;
@@ -2094,6 +2179,10 @@
         traitEffects:(business.currentDecision && business.currentDecision.traitEffects ? business.currentDecision.traitEffects.slice(0, 4) : []),
         influencers:(business.currentDecision && business.currentDecision.influencers ? business.currentDecision.influencers.slice(0, 3) : [])
       });
+    }
+
+    if (missingRequiredHandlers.length) {
+      throw new Error("Business engine missing required handlers: " + missingRequiredHandlers.join(", "));
     }
 
     return {
