@@ -4,6 +4,7 @@
   var SAVE_SLOT_KEY_PREFIX = "nexus.world.slot.v1.";
   var SAVE_SLOT_COUNT = 5;
   var SCHEMA_VERSION = 12;
+  var DEFAULT_WORLD_SEED = 20260325;
   var AUTOSAVE_INTERVAL_DAYS = 30;
   var MAX_NEWS_ITEMS = 100;
   var MAX_EVENT_HISTORY = 2000;
@@ -38,6 +39,17 @@
     var numeric = Number(value);
     if (!Number.isFinite(numeric)) return fallback;
     return Math.floor(numeric);
+  }
+
+  function normalizeRandomSeed(value, fallback){
+    var normalizedFallback = Number.isFinite(Number(fallback)) ? ((Number(fallback) >>> 0) || DEFAULT_WORLD_SEED) : DEFAULT_WORLD_SEED;
+    var numeric = Number(value);
+
+    if (Number.isFinite(numeric)) {
+      return (numeric >>> 0) || normalizedFallback;
+    }
+
+    return normalizedFallback;
   }
 
   function normalizeString(value, fallback){
@@ -269,8 +281,9 @@
 
     normalizedLog = interventionLog.map(function(item){
       var entry = item && typeof item === "object" ? item : {};
+      var fallbackId = ["gov-log", Math.max(0, toInteger(entry.day, nowDay)), normalizeString(entry.key, "intervention"), normalizeString(entry.scope, "global")].join("-");
       return {
-        id:normalizeString(entry.id, "gov-log-" + nowDay + "-" + Math.floor(Math.random() * 1000000)),
+        id:normalizeString(entry.id, fallbackId),
         day:Math.max(0, toInteger(entry.day, nowDay)),
         key:normalizeString(entry.key, "intervention"),
         text:normalizeString(entry.text, "Governor intervention applied."),
@@ -819,7 +832,7 @@
       birthRatePer1000:toFiniteNumber(source.birthRatePer1000, 14),
       deathRatePer1000:toFiniteNumber(source.deathRatePer1000, 8),
       netMigrationRatePer1000:toFiniteNumber(source.netMigrationRatePer1000, 0),
-      giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, 0.4), 0.2, 0.7),
+      giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, 0.4), 0.2, 0.8),
       educationIndex:clamp(toFiniteNumber(source.educationIndex, 0.6), 0.1, 1),
       institutionScore:clamp(toFiniteNumber(source.institutionScore, 0.55), 0.1, 1),
       populationPressure:0.5,
@@ -887,7 +900,7 @@
       birthRatePer1000:toFiniteNumber(source.birthRatePer1000, toFiniteNumber(seed.birthRatePer1000, 14)),
       deathRatePer1000:toFiniteNumber(source.deathRatePer1000, toFiniteNumber(seed.deathRatePer1000, 8)),
       netMigrationRatePer1000:toFiniteNumber(source.netMigrationRatePer1000, toFiniteNumber(seed.netMigrationRatePer1000, 0)),
-      giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, toFiniteNumber(seed.giniCoefficient, 0.4)), 0.2, 0.7),
+      giniCoefficient:clamp(toFiniteNumber(source.giniCoefficient, toFiniteNumber(seed.giniCoefficient, 0.4)), 0.2, 0.8),
       educationIndex:clamp(toFiniteNumber(source.educationIndex, toFiniteNumber(seed.educationIndex, 0.6)), 0.1, 1),
       institutionScore:clamp(toFiniteNumber(source.institutionScore, toFiniteNumber(seed.institutionScore, 0.55)), 0.1, 1),
       wagePressure:clamp(toFiniteNumber(source.wagePressure, toFiniteNumber(seed.wagePressure, 0)), -0.45, 0.45),
@@ -2106,6 +2119,8 @@
     App.store.businessNamingMode = normalizeBusinessNamingMode(resolveSnapshotBusinessNamingMode(snapshot, "legacy"), "legacy");
     App.store.startPresetId = normalizeWorldStartPresetId(state.startPresetId, DEFAULT_WORLD_START_PRESET_ID);
     App.store.startYear = Math.max(0, toInteger(state.startYear, LEGACY_WORLD_START_YEAR));
+    App.store.worldSeed = normalizeRandomSeed(state.worldSeed, DEFAULT_WORLD_SEED);
+    App.store.randomState = normalizeRandomSeed(state.randomState, App.store.worldSeed);
     if (App.data && App.data.CALENDAR) {
       App.data.CALENDAR.startYear = App.store.startYear;
     }
@@ -2164,6 +2179,10 @@
   }
 
   function exportSnapshot(){
+    var worldSeed = normalizeRandomSeed(App.store.worldSeed, DEFAULT_WORLD_SEED);
+    var randomState = typeof Math !== "undefined" && typeof Math.random === "function" && typeof Math.random.getState === "function"
+      ? normalizeRandomSeed(Math.random.getState(), worldSeed)
+      : normalizeRandomSeed(App.store.randomState, worldSeed);
     var rawState = {
       blocs:deepClone(App.store.blocs || []),
       people:deepClone(App.store.people || []),
@@ -2179,6 +2198,8 @@
       tickerData:deepClone(App.store.tickerData || {}),
       startPresetId:normalizeWorldStartPresetId(App.store.startPresetId, DEFAULT_WORLD_START_PRESET_ID),
       startYear:Math.max(0, toInteger(App.store.startYear, LEGACY_WORLD_START_YEAR)),
+      worldSeed:worldSeed,
+      randomState:randomState,
       selectedBlocId:App.store.selectedBlocId,
       selection:deepClone(App.store.selection || { type:null, id:null }),
       simSpeed:App.store.simSpeed,
@@ -2192,6 +2213,9 @@
       stockMarket:deepClone(App.store.stockMarket || {}),
       yearlyTuningTelemetry:deepClone(App.store.yearlyTuningTelemetry || [])
     };
+
+    sanitizeResidencyUnsupportedCountries(rawState);
+
     var migrated = migrateSnapshot({
       schemaVersion:SCHEMA_VERSION,
       savedAtISO:new Date().toISOString(),

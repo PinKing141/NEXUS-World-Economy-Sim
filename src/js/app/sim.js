@@ -2,6 +2,8 @@
   var App = global.Nexus || (global.Nexus = {});
   var YEAR_DAYS = (App.data && App.data.CALENDAR && App.data.CALENDAR.daysPerYear) ? App.data.CALENDAR.daysPerYear : 360;
   var lastFrameTime = performance.now();
+  var nativeMathRandom = (typeof Math !== "undefined" && typeof Math.random === "function") ? Math.random : null;
+  var DEFAULT_WORLD_SEED = 20260325;
   var ENTREPRENEURIAL_TRAITS = {
     Ambitious:true,
     Visionary:true,
@@ -1138,13 +1140,129 @@
     return hash >>> 0;
   }
 
-  function createSeededRandom(seed){
-    var state = seed >>> 0;
+  function normalizeRandomSeed(value, fallback){
+    var normalizedFallback = Number.isFinite(Number(fallback)) ? ((Number(fallback) >>> 0) || DEFAULT_WORLD_SEED) : DEFAULT_WORLD_SEED;
+    var numeric = Number(value);
 
-    return function(){
-      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-      return state / 4294967296;
+    if (Number.isFinite(numeric)) {
+      return (numeric >>> 0) || normalizedFallback;
+    }
+
+    return normalizedFallback;
+  }
+
+  function resolveProcessRandomSeed(){
+    var env = global.process && global.process.env ? global.process.env : null;
+
+    if (!env) return null;
+
+    return env.NEXUS_WORLD_SEED != null
+      ? env.NEXUS_WORLD_SEED
+      : (env.NEXUS_TEST_SEED != null ? env.NEXUS_TEST_SEED : (env.CLOSURE_SEED != null ? env.CLOSURE_SEED : null));
+  }
+
+  function generateWorldSeed(){
+    var sourceRandom = typeof nativeMathRandom === "function" ? nativeMathRandom : (typeof Math !== "undefined" && typeof Math.random === "function" ? Math.random : null);
+    var entropy = Date.now() ^ Math.floor(((global.performance && typeof global.performance.now === "function") ? global.performance.now() : 0) * 1000);
+
+    if (typeof sourceRandom === "function") {
+      entropy ^= Math.floor(sourceRandom() * 4294967295);
+    }
+
+    return normalizeRandomSeed(entropy, DEFAULT_WORLD_SEED);
+  }
+
+  function resolveConfiguredWorldSeed(){
+    var explicitSeed = App.store && App.store.worldSeed != null
+      ? App.store.worldSeed
+      : (global.__NEXUS_WORLD_SEED != null ? global.__NEXUS_WORLD_SEED : (global.__NEXUS_TEST_SEED != null ? global.__NEXUS_TEST_SEED : resolveProcessRandomSeed()));
+
+    if (explicitSeed != null) {
+      return normalizeRandomSeed(explicitSeed, DEFAULT_WORLD_SEED);
+    }
+
+    if (typeof Math !== "undefined" && typeof Math.random === "function" && typeof Math.random.getState === "function" && !Math.random.__nexusWorldRandom) {
+      return normalizeRandomSeed(Math.random.getState(), DEFAULT_WORLD_SEED);
+    }
+
+    return generateWorldSeed();
+  }
+
+  function createSeededRandom(seed){
+    var state = normalizeRandomSeed(seed, DEFAULT_WORLD_SEED);
+
+    function seededRandom(){
+      var mixed;
+
+      state = (state + 0x6D2B79F5) >>> 0;
+      mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed);
+      return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    }
+
+    seededRandom.getState = function(){
+      return state >>> 0;
     };
+
+    seededRandom.setState = function(nextState){
+      state = normalizeRandomSeed(nextState, DEFAULT_WORLD_SEED);
+      return state;
+    };
+
+    return seededRandom;
+  }
+
+  function installWorldRandom(options){
+    var settings = options && typeof options === "object" ? options : {};
+    var seed = normalizeRandomSeed(settings.seed, resolveConfiguredWorldSeed());
+    var random = createSeededRandom(seed);
+    var state = settings.state == null ? seed : settings.state;
+
+    random.setState(state);
+    random.__nexusWorldRandom = true;
+    random.__nexusWorldSeed = seed;
+
+    if (typeof Math !== "undefined") {
+      Math.random = random;
+    }
+
+    if (App.store) {
+      App.store.worldSeed = seed;
+      App.store.randomState = random.getState();
+    }
+
+    return random;
+  }
+
+  function restoreWorldRandomFromStore(options){
+    var settings = options && typeof options === "object" ? options : {};
+    var seed = settings.seed != null
+      ? settings.seed
+      : (App.store && App.store.worldSeed != null ? App.store.worldSeed : resolveConfiguredWorldSeed());
+    var state = settings.state != null
+      ? settings.state
+      : (App.store && App.store.randomState != null ? App.store.randomState : null);
+
+    return installWorldRandom({
+      seed:seed,
+      state:state
+    });
+  }
+
+  function syncStoredRandomState(){
+    var state = captureRandomState();
+
+    if (!App.store) return state;
+
+    if (typeof Math !== "undefined" && typeof Math.random === "function" && Math.random.__nexusWorldSeed != null) {
+      App.store.worldSeed = normalizeRandomSeed(Math.random.__nexusWorldSeed, DEFAULT_WORLD_SEED);
+    }
+
+    if (state != null) {
+      App.store.randomState = normalizeRandomSeed(state, App.store.worldSeed);
+    }
+
+    return App.store.randomState;
   }
 
   function captureRandomState(){
@@ -1166,6 +1284,7 @@
 
     try {
       Math.random.setState(state);
+      syncStoredRandomState();
     } catch (error) {
       return;
     }
@@ -13084,6 +13203,14 @@
     var strictCoverage = !!(global.location && (global.location.hostname === "localhost" || global.location.hostname === "127.0.0.1"));
     var peopleById = {};
     var businessesById = {};
+    var savedBlocAggregatesById = {};
+    var snapshotHasBlocAggregates = true;
+    var savedRandomState;
+
+    restoreWorldRandomFromStore();
+    savedRandomState = App.store && App.store.randomState != null
+      ? normalizeRandomSeed(App.store.randomState, App.store.worldSeed)
+      : null;
 
     if (!traitCoverage.ok) {
       console.error("Trait mechanical coverage failed:", traitCoverage.errors.join(" | "));
@@ -13303,6 +13430,21 @@
 
     App.store.econHist = App.store.econHist || {};
     App.store.blocs.forEach(function(bloc){
+      var hasSavedAggregates = !!(bloc && Number.isFinite(Number(bloc.gdp)) && Number.isFinite(Number(bloc.giniCoefficient)) && Number.isFinite(Number(bloc.topOneWealthShare)) && Number.isFinite(Number(bloc.intergenerationalMobilityIndex)) && Number.isFinite(Number(bloc.medianHouseholdWealthGU)) && bloc.policyStance && bloc.policyEvidence && typeof bloc.policyEvidence === "object");
+
+      if (!hasSavedAggregates) {
+        snapshotHasBlocAggregates = false;
+      } else {
+        savedBlocAggregatesById[bloc.id] = {
+          gdp:Number(bloc.gdp) || 0,
+          giniCoefficient:Number(bloc.giniCoefficient) || 0.4,
+          topOneWealthShare:Number(bloc.topOneWealthShare) || 0.3,
+          intergenerationalMobilityIndex:Number(bloc.intergenerationalMobilityIndex) || 0.5,
+          medianHouseholdWealthGU:Number(bloc.medianHouseholdWealthGU) || 0,
+          policyStance:bloc.policyStance,
+          policyEvidence:JSON.parse(JSON.stringify(bloc.policyEvidence))
+        };
+      }
       if (!Array.isArray(App.store.econHist[bloc.id])) {
         App.store.econHist[bloc.id] = [];
       }
@@ -13313,12 +13455,30 @@
       }).slice(-60);
     });
 
-    refreshLegacyBusinessNames();
+    if (App.store.businessNamingMode === "legacy") {
+      refreshLegacyBusinessNames();
+      App.store.businessNamingMode = "v2";
+    }
     syncCorporateLadders();
     syncHouseholds();
     enforceFinancialBounds();
     (App.store.households || []).forEach(refreshHouseholdSnapshot);
-    updateBlocGdp();
+    if (!snapshotHasBlocAggregates) {
+      updateBlocGdp();
+    }
+    App.store.blocs.forEach(function(bloc){
+      var savedAggregates = bloc && savedBlocAggregatesById[bloc.id];
+
+      if (!bloc || !savedAggregates) return;
+
+      bloc.gdp = savedAggregates.gdp;
+      bloc.giniCoefficient = savedAggregates.giniCoefficient;
+      bloc.topOneWealthShare = savedAggregates.topOneWealthShare;
+      bloc.intergenerationalMobilityIndex = savedAggregates.intergenerationalMobilityIndex;
+      bloc.medianHouseholdWealthGU = savedAggregates.medianHouseholdWealthGU;
+      bloc.policyStance = savedAggregates.policyStance;
+      bloc.policyEvidence = savedAggregates.policyEvidence;
+    });
     validateCountryProfiles();
 
     App.store.blocs.forEach(function(bloc){
@@ -13330,6 +13490,31 @@
     if (App.events && App.events.rehydrateFromStore) {
       App.events.rehydrateFromStore();
     }
+
+    if (savedRandomState != null) {
+      restoreRandomState(savedRandomState);
+    } else {
+      syncStoredRandomState();
+    }
+  }
+
+  function prepareStoreForSnapshot(){
+    var savedRandomState = captureRandomState();
+
+    syncCorporateLadders();
+    syncHouseholds();
+    enforceFinancialBounds();
+    (App.store.households || []).forEach(refreshHouseholdSnapshot);
+    updateBlocGdp();
+    validateCountryProfiles();
+
+    if (savedRandomState != null) {
+      restoreRandomState(savedRandomState);
+    } else {
+      syncStoredRandomState();
+    }
+
+    return App.store;
   }
 
   function initSim(options){
@@ -13337,6 +13522,14 @@
     var traitCoverage = validateTraitMechanicalCoverage();
     var strictCoverage = !!(global.location && (global.location.hostname === "localhost" || global.location.hostname === "127.0.0.1"));
     var startPreset = applyStartPresetToStore(settings.startPresetId || App.store.startPresetId || DEFAULT_START_PRESET_ID);
+
+    if (settings.seed != null) {
+      App.store.worldSeed = normalizeRandomSeed(settings.seed, DEFAULT_WORLD_SEED);
+    }
+    if (settings.randomState != null) {
+      App.store.randomState = normalizeRandomSeed(settings.randomState, App.store.worldSeed);
+    }
+    restoreWorldRandomFromStore();
 
     if (!traitCoverage.ok) {
       console.error("Trait mechanical coverage failed:", traitCoverage.errors.join(" | "));
@@ -13387,6 +13580,7 @@
     emitNews("market", "NEXUS initialized from the " + startPreset.label + " start preset with fixed modern borders, seeded dynasties, and executive decision-making.", {
       causes:["Simulation bootstrap complete."]
     });
+    syncStoredRandomState();
   }
 
   function randomEvent(){
@@ -17092,6 +17286,7 @@
   App.sim = {
     initSim:initSim,
     rehydrateLoadedState:rehydrateLoadedState,
+    prepareStoreForSnapshot:prepareStoreForSnapshot,
     start:start,
     tickOnce:simTick,
     getCurrentSimYear:currentSimYear,

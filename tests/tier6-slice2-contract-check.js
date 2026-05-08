@@ -58,6 +58,12 @@ function installDeterministicRandom(seed) {
     mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed);
     return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
   };
+  Math.random.getState = function getDeterministicRandomState() {
+    return state >>> 0;
+  };
+  Math.random.setState = function setDeterministicRandomState(nextState) {
+    state = normalizeSeed(nextState);
+  };
 }
 
 function createStorageShim() {

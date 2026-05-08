@@ -1,5 +1,6 @@
 (function(global){
   var App = global.Nexus || (global.Nexus = {});
+  var DEFAULT_WORLD_SEED = 20260325;
 
   function createGovernorState(){
     return {
@@ -62,6 +63,8 @@
     businessNamingMode: "v2",
     startPresetId: "1998",
     startYear: 1998,
+    worldSeed: DEFAULT_WORLD_SEED,
+    randomState: DEFAULT_WORLD_SEED,
     selectedBlocId: "NA",
     selection: { type:null, id:null },
     simSpeed: 1,
@@ -158,6 +161,8 @@
     store.businessNamingMode = "v2";
     store.startPresetId = "1998";
     store.startYear = 1998;
+    store.worldSeed = DEFAULT_WORLD_SEED;
+    store.randomState = DEFAULT_WORLD_SEED;
     store.selectedBlocId = "NA";
     store.selection = { type:null, id:null };
     store.simSpeed = 1;
