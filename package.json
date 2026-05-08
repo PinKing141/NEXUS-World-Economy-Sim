@@ -11,7 +11,7 @@
     "build:map": "powershell -ExecutionPolicy Bypass -File scripts/build-inline-world-map.ps1",
     "build:assets": "npm run build:names && npm run build:map",
     "test:horizon:smoke": "node --input-type=module -e \"process.env.NEXUS_HORIZON_YEARS='5'; process.env.NEXUS_SIM_DAYS_PER_TICK='30'; process.env.NEXUS_HORIZON_OUTPUT='long-horizon-5y-smoke.json'; await import('./scripts/run-long-horizon.mjs');\"",
-    "test:stability": "npm run test:domains && npm run test:architecture && npm run test:start-era && npm run test:determinism && npm run test:tier6:slice1 && npm run test:tier6:slice2 && npm run test:closure && npm run test:horizon:smoke",
+    "test:stability": "npm run test:domains && npm run test:architecture && npm run test:start-era && npm run test:determinism && npm run test:tier6:slice1 && npm run test:tier6:slice2 && npm run test:closure && npm run test:horizon:smoke && npm run test:golden-run",
     "test:determinism": "node tests/deterministic-replay-contract-check.js",
     "test:start-era": "node tests/start-era-contract-check.js",
     "test:tier6:slice1": "node tests/tier6-slice1-contract-check.js",
@@ -19,7 +19,8 @@
     "test:domains": "node tests/sim-domain-construction-check.js",
     "test:architecture": "node tests/sim-engine-architecture-check.js",
     "test:closure": "node tests/closure-tier14-regression-check.js",
-    "debug:closure:gate14": "node tests/debug-closure-gate14.js"
+    "debug:closure:gate14": "node tests/debug-closure-gate14.js",
+    "test:golden-run": "node tests/golden-run-year30-check.js"
   },
   "devDependencies": {
     "http-server": "^14.1.1",
