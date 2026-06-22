@@ -15702,7 +15702,8 @@
     return {
       coordinator:"sim-core",
       domains:EXPECTED_SIM_DOMAINS.slice(),
-      phases:phases
+      phases:phases,
+      phasePlan:coordinator && typeof coordinator.getPhasePlan === "function" ? coordinator.getPhasePlan() : []
     };
   }
 

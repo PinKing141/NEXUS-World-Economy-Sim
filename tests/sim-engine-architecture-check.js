@@ -115,6 +115,14 @@ async function main() {
   assert.equal(architecture.coordinator, "sim-core", "Coordinator contract must remain sim-core");
   assert.deepEqual(architecture.domains, EXPECTED_DOMAINS, "Domain list changed unexpectedly");
   assert.deepEqual(architecture.phases, EXPECTED_PHASES, "Phase order changed unexpectedly");
+  assert.equal(architecture.phasePlan.length, EXPECTED_PHASES.length, "Phase plan should document every main tick phase");
+  architecture.phasePlan.forEach((phase, index) => {
+    assert.equal(phase.order, index + 1, "Phase plan order must be 1-indexed and stable");
+    assert.equal(phase.id, EXPECTED_PHASES[index], "Phase plan id must match phase order");
+    assert.ok(EXPECTED_DOMAINS.includes(phase.domain), "Phase plan should name an expected owner domain");
+    assert.equal(typeof phase.method, "string", "Phase plan should document the invoked domain method");
+    assert.ok(phase.note && phase.note.length > 20, "Phase plan should document causal intent");
+  });
   assert.equal(selfCheck.ok, true, "Architecture self-check failed");
   assert.deepEqual(selfCheck.availableDomains, EXPECTED_DOMAINS.slice().sort(), "Available domain set is incomplete");
   assert.deepEqual(selfCheck.missingDomains, [], "No domains should be missing");
