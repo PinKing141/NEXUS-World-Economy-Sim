@@ -150,8 +150,8 @@ Exit criteria: contributors understand the product direction before writing code
 
 Goal: prepare the codebase for AAA-scale simulation work.
 
-- [ ] Inventory every top-level function in `src/js/app/sim.js`.
-- [ ] Group current behavior into domains: core clock, business, labour, finance, demographics, society, geopolitics, events, persistence glue, and UI glue.
+- [x] Inventory every top-level function in `src/js/app/sim.js`.
+- [x] Group current behavior into domains: core clock, business, labour, finance, demographics, society, geopolitics, events, persistence glue, and UI glue.
 - [x] Define the first-pass domain boundary contract for each module in `requirements/architecture/domain-boundary-plan.md`.
 - [ ] Create an explicit tick orchestrator that documents the causal order.
 - [ ] Move code out of the monolithic simulation file in small, tested slices.
