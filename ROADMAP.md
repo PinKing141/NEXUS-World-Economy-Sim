@@ -1,611 +1,318 @@
-# NEXUS Deep Systems Roadmap
+# NEXUS Global Autonomous Simulation Roadmap
 
-This roadmap assumes NEXUS is not a player-driven strategy game.
-The goal is an observational simulation of business, family life, personality, social mobility, and world conditions.
-Everything below is aimed at making outcomes emerge from systems rather than player input.
+NEXUS is a global, autonomous, observational world-economy simulation. The player does **not** control countries, companies, families, wars, policy, markets, or people. The player watches a living world produce its own history through interacting systems: people, households, families, firms, industries, cities, countries, blocs, migration, trade, inequality, institutions, and geopolitical pressure.
 
-## Status Snapshot
+This roadmap replaces the older broad feature backlog with a AAA-style production roadmap focused on architectural discipline, deterministic simulation, modular systems, explainable causality, and emergent storytelling at global scale.
 
-- Current state: Phase 2 closure and acceptance criteria are complete and stable.
-- Recently completed: Global population layer phases 1-4 (labor/demand, birth-death pressure, migration + talent drift, inequality -> social pressure + institution drift).
-- Current frontier: Tier 6 geopolitics/start-era systems, Tier 8 storytelling tools, and deterministic/replay diagnostics.
-- Recommendation: keep closure resilience margins strong while starting Tier 6 in small, testable slices (elections/sanctions before full conflict systems).
+## North Star
 
-## Core Direction
+Build a world that writes its own history.
 
-- [x] Keep the simulation autonomous. No policy buttons, no direct player control, no god powers.
-- [x] Make outcomes explainable. Every major life, business, and geopolitical event should have visible reasons.
-- [ ] Reduce "pure randomness" over time. More events should emerge from conditions, incentives, and relationships.
-- [x] Connect all major layers: people -> households -> firms -> industries -> countries -> blocs -> world events.
-- [x] Make history persistent. The world should feel like it remembers what happened.
-- [ ] Define a clear "feels alive" finish line so depth does not outpace observability.
+The player experience is:
+
+- Observe a global simulation rather than command it.
+- Follow people, families, companies, countries, industries, classes, migration routes, and crises through watchlists.
+- Read emergent biographies, family sagas, company histories, country reports, and world newspapers generated from real simulation evidence.
+- Ask why an outcome happened and receive a clear causal explanation.
+- Compare how inequality, class mobility, institutions, migration, and global shocks reshape lives across generations.
+
+## Non-Negotiable Product Rules
+
+- No direct player agency over countries, firms, families, people, policy, wars, markets, or central banks.
+- No win condition, conquest loop, god mode, policy-button gameplay, or optimization meta.
+- No scenario lab as a headline user mode. Stress presets and scenario harnesses are developer-only diagnostics.
+- No one-country final product vision. Small slices may be used to prove systems, but the product fantasy is a connected world.
+- No decorative systems. Every major system must attach to the causal loop and create downstream consequences.
+- No fake storytelling. Narrative output must summarize state changes and causal evidence produced by the simulation.
+- No unbounded scope expansion before the required architecture and determinism gates are green.
 
 ## Core Simulation Loop
 
-This is the non-negotiable engine of the sim. New systems should attach to this loop before expanding outward:
-
-- [ ] Labor -> production -> income -> consumption -> demand -> prices -> firm decisions -> employment must remain the central causal chain.
-- [ ] Every major new system should identify where it enters this loop and what downstream variables it changes.
-- [ ] If a proposed feature does not strengthen an interaction inside this loop, treat it as lower priority than loop stability work.
-
-## Hard Constraints
-
-Depth should come from pressure and tradeoffs, not unconstrained accumulation.
-
-- [ ] Labor supply must cap hiring and expansion.
-- [ ] Consumer demand must cap revenue and sector growth.
-- [ ] Capital and liquidity must cap investment, resilience, and hiring speed.
-- [ ] Resources, infrastructure, and logistics must cap production and throughput.
-- [ ] Housing and local cost of living must cap migration attractiveness and household surplus.
-
-## World Epoch Strategy
-
-Lock this product direction early so geography and scenario scope stay stable:
-
-- [x] Freeze the official world map to the modern country roster and border layout. NEXUS should not simulate alternate border eras, collapsing empires, or redrawn national maps.
-- [ ] Make `1998` the default sandbox start because it gives more dynasty runway than 2000 while keeping the world close to the modern order.
-- [ ] Support additional official start presets: `2000`, `2008`, `2016`, `2020`, and a deterministic `Present Day` snapshot.
-- [ ] Treat `Present Day` as a versioned data snapshot, not the machine wall clock, so tests and replays stay reproducible.
-- [ ] Implement shallow world prehistory early: inherited wealth tiers, firm ages, founder ages, debt vintages, institutional trust, migration pressure, and social status momentum.
-- [ ] Defer deep prehistory until later: multi-generation lineage backfill, rich institutional backstory, and long-form historical calibration.
-
-## Core Loop Implementation Map
-
-Tie the roadmap to the current codebase so loop work lands in the right places:
-
-- [ ] [src/js/app/sim.js](src/js/app/sim.js) remains the primary causal engine for labor, production, income, consumption, demand, firm decisions, employment, migration, and yearly macro adjustments.
-- [ ] [src/js/app/data.js](src/js/app/data.js) should supply seeded inputs, country profiles, city/subdivision data, and other exogenous baseline data feeding the loop.
-- [ ] [src/js/app/state.js](src/js/app/state.js) should remain the source of truth for derived aggregates, cross-entity indexing, and selectors used to inspect loop outputs.
-- [ ] [src/js/app/ui.js](src/js/app/ui.js) should expose loop observability: why wages changed, why firms hired or fired, why migration moved, and where constraints bound the system.
-- [ ] [src/js/app/persistence.js](src/js/app/persistence.js) must preserve any new loop state, constraint state, and migration or pricing metrics without breaking save compatibility.
-- [ ] [src/js/app/events.js](src/js/app/events.js) should describe loop consequences after the mechanics exist, not substitute for missing mechanics.
-- [ ] [src/js/app/map.js](src/js/app/map.js) should express geographic outcomes of the loop such as regional placement, migration destinations, and city gravity effects rather than owning economic logic.
-
-Short implementation checklist for the current loop:
-
-- [ ] Labor: validate worker availability, hiring pressure, unemployment duration, and mobility against real labor-pool constraints in [src/js/app/sim.js](src/js/app/sim.js).
-- [ ] Production: tighten how firm output depends on staffing, industry conditions, logistics, and infrastructure in [src/js/app/sim.js](src/js/app/sim.js).
-- [ ] Income: ensure wages, profits, dividends, and transfers consistently feed households and owners before downstream demand updates.
-- [ ] Consumption and demand: keep household spending and country demand as the dominant cap on revenue, with clearer sector composition and response to shocks.
-- [ ] Prices and allocation: add or strengthen price, shortage, and allocation pressure as the reactive layer between demand and firm decisions.
-- [ ] Firm decisions: require expansion, layoffs, investment, and location choice to flow from constrained loop signals rather than isolated heuristics.
-- [ ] Employment closure: make hiring and firing feed back into labor supply, household stress, migration pressure, and next-cycle demand.
-
-## Minimum Viable World Definition
-
-Lock this before adding more economic depth. The sim should pass this loop test:
-
-- [ ] Pick one person at birth and follow them through education, work, relationships, business outcomes, family, aging, and death.
-- [ ] The life should feel causally explainable in the inspector and timeline, not random noise.
-- [ ] Cross-generational continuity should be visible (heirs, sibling divergence, estate outcomes, family status shifts).
-- [ ] Macro conditions should visibly affect this person's path (employment, migration pressure, war or crisis, opportunity windows).
-
-## Current Program Status
-
-These are the highest-impact additions because they connect systems that currently feel parallel.
-
-### Phase 2 - Guardrailed Depth Work
-
-Phase 1 closure is complete. Phase 2 starts now with guardrailed depth work.
-
-- [x] Lock known-good closure baseline and regression snapshot tooling.
-  - Save/compare baseline in the closure panel before and after major changes.
-  - Treat non-intended baseline deltas as blockers.
-- [x] Phase 2A: Scenario pack framework (deterministic stress presets)
-  - Add reusable scenario presets for boom, recession, labor crunch, and demographic stress.
-  - Each scenario should run from current world state, execute defined shocks, and produce a compact report.
-  - Implementation status:
-    - [x] MVP scaffold shipped in closure panel with preset selector + run flow.
-    - [x] Added preset runner APIs and rollback-safe scenario execution path.
-    - [x] Validated deterministic behavior and tuned preset thresholds against baseline snapshots.
-- [x] Phase 2B: Policy and institution feedback loops (autonomous, non-player)
-  - Introduce country/bloc policy stances that emerge from macro pressure (not user buttons).
-  - Wire policy shifts into labor demand, credit cost, migration pressure, and firm survival.
-  - Kickoff checklist:
-    - [x] Add country policy stance state derived from macro pressure.
-    - [x] Add bloc policy stance state derived from aggregate bloc labor-market signals.
-    - [x] Wire stance effects into labor demand/release and firm credit pressure with bounded multipliers.
-    - [x] Wire stance effects into migration pressure and net labor mobility with bounded yearly flows.
-    - [x] Emit explainability evidence for stance changes in closure/scenario outputs.
-    - [x] Verify no unintended closure regressions against saved baseline after stance wiring.
-- [x] Phase 2C: Trade and supply shock depth
-  - Extend trade disruption behavior into sector-specific shock transmission and rerouting.
-  - Ensure shock propagation appears in business, household, and country-level evidence.
-  - Implementation status:
-    - [x] Added industry-specific trade shock transmission and reroute relief into firm supply/cost dynamics.
-    - [x] Propagated trade shock pressure into country-level evidence (`tradeShockIndex`, reroute relief, avg supply stress).
-    - [x] Propagated country trade shock pressure into household burden and financial stress evidence fields.
-    - [x] Added a dedicated `Trade Disruption` scenario preset to stress and observe sector-weighted shock transmission.
-- [x] Phase 2D: Observability pass for balancing
-  - [x] Add a compact balancing dashboard for macro deltas and gate drift over time.
-  - [x] Expose baseline comparison deltas directly in simulation telemetry views.
-
-### Phase 2 Acceptance Criteria
-
-- [x] Tier 1-4 closure remains stable against baseline on at least 3 sequential +1Y runs.
-- [x] No hard-failure trigger regressions without an explicitly documented design reason.
-- [x] At least one new upward loop and one new downward loop are implemented and observable.
-- [x] New systems emit clear evidence fields so outcomes stay explainable in inspector output.
-- [x] Automated headless closure regression command exists for repeatable validation (`npm run test:closure`).
-
-- [x] Corporate ladders (v1 leadership roster shipped)
-  - Named executives and key staff are now real citizens while the remaining workforce stays aggregated as headcount.
-  - Each named leader now tracks employer, role, department, tier, and salary.
-  - Businesses now seed and maintain leadership rosters through launches, succession, retirement, death, and liquidation.
-  - Companies are now directly inspectable with leadership, owner, founder, CEO, and staffing detail.
-  - A future pass can extend this from leadership-backed rosters to full workforce simulation.
-- [x] Expanded decision model (business v1 shipped)
-  - Add personality dimensions beyond traits: risk tolerance, greed, patience, discipline, loyalty, status-seeking, family attachment, adaptability, ethics.
-  - Add temporary states: grief, burnout, confidence, stress, illness, resentment, ambition spikes.
-  - Business v1 now uses those variables for succession, hiring, layoffs, expansion posture, cash preservation, and scandal response.
-- [x] Trait mechanical pass (before Build 1)
-  - [x] Ensure every existing trait already in the sim has at least two measurable gameplay effects before adding new traits.
-  - [x] Cover currently underwired traits in business outcomes, social mobility, deal access, and family outcomes.
-  - [x] Add simple explainability tags so trait impact is visible in decision/event reasoning.
-- [x] Build 0 foundation: versioned save schema and migrations
-  - Introduce snapshot schema versioning immediately, before more model fields land.
-  - Add migration hooks so person, business, bloc, and country data can evolve safely across builds.
-  - Keep replay, scenario presets, and long-run saves compatible as systems expand.
-- [x] Global population layer (two-tier model, priority bridge system)
-  - Add per-country anonymous `PopProfile` state under named citizens.
-  - Track: population, labor force, employed, unemployment, median wage, consumer demand, birth rate, death rate, net migration, inequality, education index, institution score.
-  - Make named citizens and company headcount draw from and return to country labor pools.
-  - Ground local-market business ceilings in country demand and globally-oriented sectors in bloc demand.
-  - Implement in phases:
-    - [x] Phase 1: population, employed, consumer demand, workforce wiring.
-    - [x] Phase 2: birth and death pressure tied to conditions.
-    - [x] Phase 3: migration pressure and talent drift.
-    - [x] Phase 4: inequality feedback into social pressure and institutional drift.
-- [x] Event significance schema (design now, implement with observational tools)
-  - Define significance weighting and narrative pacing rules now so event noise does not bury meaningful moments.
-- [x] Household economy
-  - Track wages, spending, savings, debt, housing cost, childcare burden, and inheritance pressure.
-  - Let household finances shape life outcomes, not just founder net worth.
-  - Make class mobility possible but uneven across countries and families.
-- [x] Business identity naming pass (v1 shipped)
-  - New worlds now use industry-aware, ISO-routed business naming instead of a flat surname-plus-suffix formula.
-  - Naming now supports founder-weighted, coined regional, and Gulf geo-brand modes while preserving legacy naming in migrated worlds.
-  - Logo monograms and ticker symbols now derive from significant name tokens instead of only the first character or first word.
-- [x] Education and development
-  - Add childhood development, education quality, attainment, and skill formation.
-  - Let wealthy families and strong institutions improve access to education.
-  - Let education influence employability, leadership potential, and founder odds.
-  - Implementation status (v1 foundation + outcomes):
-    - [x] Added person-level education index and attainment with save migration coverage.
-    - [x] Wired education access to household advantage and institution context.
-    - [x] Wired education into employability, leadership scoring, and founder launch odds.
-    - [x] Extend v1 into full childhood stage progression and explicit skill formation tracks.
-
-## Build Design Gates (Required Before Each Build)
-
-- [ ] Explicit feedback-loop design brief
-  - For each build, define at least one upward loop (micro -> macro) and one downward loop (macro -> micro).
-  - Example upward loop: unemployment spike -> weaker demand -> firm stress -> lower GDP and currency pressure.
-  - Example downward loop: currency shock -> import costs -> household stress -> fertility/migration shifts.
-- [ ] Stability and failure-mode checklist
-  - Define degenerate-state risks for each build and mitigation knobs before implementation.
-  - Require soft governors rather than hard resets when the world drifts toward collapse or stagnation.
-- [ ] Core-loop attachment check
-  - Before greenlighting a build, specify exactly how it modifies labor, production, income, consumption, demand, prices, firm decisions, or employment.
-  - Delay features that operate mostly as isolated overlays until the core loop has strong observable effects.
-
-## Tier 1 - Deepen Existing Systems
-
-These extend what already exists in the sim and should feel natural immediately.
-
-- [x] Simulation health governors
-  - Detect stagnation and collapse patterns: no new launches, empty business ecosystems, aging lock, currency convergence, prolonged unemployment traps.
-  - Apply gentle corrective pressure: seeded entrepreneurs, temporary capital easing, migration relief, hiring incentives, or calibrated arrival boosts.
-  - [x] Log every governor intervention for observability and balancing.
-- [x] Inheritance disputes
-  - If multiple children are viable heirs and no clear successor exists, trigger disputes.
-  - Model favoritism, eldest-child bias, competence bias, and sibling rivalry.
-  - Give losing heirs resentment, distance from family, or rival-founder arcs.
-- [x] Company reputation
-  - Add a 0-100 reputation score per business.
-  - Reputation should affect hiring ease, deal flow, customer trust, pricing power, and resilience during scandal.
-  - Build reputation slowly through stability and erode it quickly through scandal, layoffs, corruption, or poor succession.
-- [x] Real family formation
-  - Expand marriage logic beyond age and proximity.
-  - Include class, religion or culture proxy, ambition compatibility, shared traits, fertility preference, and status motives.
-  - Add divorce, estrangement, second marriages, stepfamilies, and illegitimate inheritance complications.
-- [x] Better births and child outcomes
-  - Make fertility depend on age, wealth, local norms, education, housing costs, health, and marital stability.
-  - Let parental traits and household conditions influence children.
-  - Add sibling effects: rivalry, inheritance dilution, shared privilege, family businesses grooming one child over others.
-- [x] Retirement paths
-  - Differentiate graceful retirement, forced retirement, decline, illness retirement, and prestige-chairman style retirement.
-  - Let retired founders remain influential through advice, board roles, patronage, or family pressure.
-- [x] Richer deaths and estates
-  - Split estates between spouse, children, taxes, debt obligations, and businesses.
-  - Allow debt-ridden dynasties to collapse after the founder dies.
-  - Add contested wills, hidden heirs, and business fragmentation.
-- [x] Social influence networks
-  - Add mentors, rivals, close friends, elite circles, school ties, and nepotism chains.
-  - Let opportunities flow through social proximity as much as through merit.
-- [x] Personal reputation
-  - Track trustworthiness, prestige, notoriety, and scandal memory for each person.
-  - Let personal reputation shape hiring, marriage, investment access, and succession.
-
-## Tier 2 - Jobs, Skills, and Class Structure
-
-- [x] Worker lifecycle
-  - Child -> student -> worker -> manager -> executive -> founder -> retiree should all be possible paths.
-  - Not every wealthy person should become a founder.
-  - Most people should live as workers, managers, professionals, or dependents.
-- [x] Occupations
-  - Add occupational categories: factory worker, engineer, accountant, sales, operator, executive, owner, investor, unemployed.
-  - Let industries demand different occupation mixes.
-- [x] Skills
-  - Track management skill, technical skill, social skill, financial discipline, and creativity.
-  - Improve skills through education, work experience, and mentorship.
-  - Allow skill decline from age, burnout, or long unemployment.
-- [x] Wages and labor markets
-  - Set wages by occupation, country, industry demand, firm reputation, and labor scarcity.
-  - Add unemployment duration, wage pressure, labor mobility, and talent shortages.
-- [x] Promotions and poaching
-  - Firms should promote strong insiders and poach high-value staff from rivals.
-  - High-reputation firms should attract better talent.
-- [x] Unionization and labor unrest
-  - Add strike risk when wages lag, inequality spikes, or layoffs pile up.
-  - Let labor unrest reduce output and damage reputation.
-- [x] Elite reproduction
-  - Wealthy dynasties should reproduce privilege through education, networks, and asset ownership.
-  - But leave room for outsider rises and elite decay.
-
-## Tier 3 - Business and Corporate Depth
-
-- [x] Real firm structure
-  - Track departments, management quality, wage bill, operating costs, and hiring needs.
-  - Separate founder quality from firm quality so a great firm can outlive a mediocre heir.
-- [x] Industry-specific behavior
-  - Make each industry operate differently.
-  - Technology: high variance, talent-sensitive, scalable.
-  - Finance: confidence-sensitive, crisis-prone, leverage-heavy.
-  - Retail: margin-thin, labor-heavy, reputation-sensitive.
-  - Manufacturing: supply chain and energy dependent.
-  - Real estate: credit and rate sensitive.
-  - Healthcare: labor and regulation heavy.
-  - Media: reputation and narrative sensitive.
-  - Logistics: trade and fuel sensitive.
-  - Energy: geopolitical and commodity sensitive.
-  - Food and beverage: household-demand and logistics sensitive.
-- [x] Supply chains
-  - Give industries upstream dependencies and downstream customers.
-  - Let tariffs, wars, sanctions, and shortages cascade through linked sectors.
-- [x] Debt and credit
-  - Let firms borrow to expand.
-  - Track leverage, interest expense, debt maturity, rollover risk, and founder guarantees.
-  - Make downturns much deadlier for over-leveraged firms.
-- [x] Central banks
-  - Give each bloc an interest rate and inflation pressure.
-  - Let rate changes react to GDP trend, inflation, unemployment, and crises.
-  - Make rates affect lending, hiring, valuation, housing, and startup formation.
-- [x] Stock market
-  - Allow established firms to go public.
-  - Let citizens own shares, collect dividends, speculate, and diversify.
-  - Let retired or non-founder elites stay economically relevant through financial ownership.
-- [x] Mergers and acquisitions
-  - Allow strong firms to acquire weak competitors or suppliers.
-  - Let family dynasties consolidate sectors over generations.
-- [x] Board and governance systems
-  - Add boards, family control, outside investors, founder control decay, and succession politics.
-- [x] Bankruptcy stages
-  - Distinguish distress, restructuring, fire sale, bailout, and liquidation.
-  - Let creditors take assets and employees scatter.
-- [x] Innovation and copying
-  - Add R&D, imitation, technology diffusion, and first-mover advantage decay.
-- [x] Reputation and customer behavior
-  - Demand should respond to quality, trust, scandal, price, and brand history.
-
-## Tier 4 - Finance, Wealth, and Inequality
-
-- [x] Asset classes
-  - Separate cash, equity, business ownership, property, debt obligations, and inherited trusts.
-- [x] Wealth transmission
-  - Rich families should compound through ownership, not only founder income.
-  - Implementation status:
-    - [x] Estate and retirement transfers now route through household asset-class allocation (cash, equity, business ownership, property, trusts).
-    - [x] Inheritance receipts now accumulate per-person lifetime inherited wealth and transfer-count history for explainability.
-- [x] Consumer spending
-  - Households should consume by income class and local cost of living.
-  - Demand shocks should hit sectors differently.
-  - Implementation status:
-    - [x] Country consumer demand now derives from household class consumption propensity, financial stress, and local cost-of-living pressure.
-    - [x] Country profiles now retain industry spending-weight maps so demand composition can shift over time.
-    - [x] Business demand capacity and customer-revenue dynamics now apply sector-specific demand multipliers across local, mixed, and global market scopes.
-- [x] Property and housing
-  - Add rent, home ownership, commercial property, and housing bubbles.
-  - Housing pressure should affect migration, fertility, and savings.
-  - Implementation status:
-    - [x] Added country housing market signals (`housingCostPressure`, rent burden, homeownership rate, affordability index, price growth, market stress) derived from household conditions.
-    - [x] Wired housing pressure into birth/death dynamics and migration pressure so expensive or stressed housing markets suppress fertility and push out-migration.
-    - [x] Extended household snapshots and yearly asset processing with housing burden/ownership metrics, and tied housing stress to liquidity reserves, property allocation, and savings drag.
-- [x] Inequality metrics
-  - Add Gini per bloc, top 1 percent share, median household wealth, and intergenerational mobility.
-  - Implementation status:
-    - [x] Added yearly country inequality metrics (`topOneWealthShare`, `medianHouseholdWealthGU`, `intergenerationalMobilityIndex`) derived from household wealth and mobility outcomes.
-    - [x] Added bloc-level inequality rollups including weighted Gini, top 1% wealth share, median household wealth, and mobility index.
-    - [x] Wired inequality metrics into country and bloc policy evidence for explainability and scenario diagnostics.
-- [x] Social unrest from inequality
-  - High inequality should raise strike risk, populism, crime proxy, emigration, and institutional instability.
-  - Implementation status:
-    - [x] Added yearly country social-unrest indices (`strikeRiskIndex`, `populismIndex`, `crimeProxyIndex`, `emigrationPressureIndex`, `institutionalInstabilityIndex`, and aggregate `socialUnrestIndex`) derived from inequality, unemployment, mobility, and housing stress.
-    - [x] Wired emigration pressure into country migration push scoring and policy evidence so persistent inequality stress increases net out-migration pressure.
-    - [x] Wired country strike-risk conditions into business labor-unrest and strike probability dynamics, and added bloc-level social unrest rollups for policy diagnostics.
-- [x] Philanthropy and legacy
-  - Old wealthy dynasties may fund schools, hospitals, or prestige projects, improving local conditions while boosting reputation.
-  - Implementation status:
-    - [x] Added a yearly philanthropy-and-legacy phase where affluent/elite older dynastic households contribute part of their wealth to public projects.
-    - [x] Donations are split across education, health, and prestige channels and now feed country-level effects (`philanthropicCapitalAnnualGU`, `philanthropyImpactIndex`, `legacyProjectsIndex`) with policy evidence metrics.
-    - [x] Philanthropic activity now boosts donor prestige/trust, reduces local social pressure, and improves education/institution and mortality outcomes through bounded yearly relief effects.
-
-## Tier 5 - Countries, Institutions, and Geography
-
-- [x] Use country population data for weighting
-  - Replace hardcoded country importance where appropriate with population- and institution-aware weights.
-  - Implementation status:
-    - [x] Replaced hardcoded bloc country importance table in country selection with dynamic population-, institution-, and education-aware weighting.
-- [x] Population pressure model (Build 1-2 priority, not late-tier only)
-  - Add per-country population pressure that rises with growth/opportunity and falls with conflict/instability.
-  - Wire pressure directly into arrival frequency, fertility behavior, and migration intensity.
-  - Make visible demographic shifts emerge from world conditions rather than fixed caps.
-  - Implementation status:
-    - [x] Population pressure is now explicitly wired into birth/death target calculations in yearly demographic updates.
-    - [x] Population pressure now influences migration pull/push scoring and intra-bloc labor mobility intensity.
-    - [x] Arrival frequency and bloc targeting now use population-pressure-aware weighting instead of fixed chance + uniform bloc pick.
-- [x] Add country development profiles
-  - Track education quality, corruption, infrastructure, labor cost, social mobility, fertility norms, and business friendliness.
-  - Implementation status:
-    - [x] Added persistent profile fields for all seven development dimensions in country profile defaults/seeding.
-    - [x] Derived yearly development scores from macro, institutional, labor, housing, inequality, and mobility signals in country profile refresh.
-    - [x] Exposed development profile metrics in policy evidence and wired key dimensions into migration pull/push pressure scoring.
-- [x] Institutional quality
-  - Strong institutions should improve contract reliability, investment confidence, and firm survival.
-  - Weak institutions should increase corruption, volatility, and dynastic concentration.
-  - Implementation status:
-    - [x] Added institution-quality credit signals (`contractReliability`, `investmentConfidence`, `institutionVolatility`) into debt pricing, rollover odds, distress build, and bailout bias.
-    - [x] Wired institution and corruption conditions into founder launch odds/capitalization and weak-institution dynastic bias through higher nepotism leverage.
-    - [x] Applied institutional confidence and corruption effects to yearly governance ownership drift, increasing family concentration pressure in weaker institutional settings.
-- [x] Internal regional detail
-  - Expand beyond the current US state layer into provinces, states, or key subdivisions for other large countries.
-  - Use existing subdivision data where available.
-  - Implementation status:
-    - [x] Extended world city parsing to retain subdivision mappings and per-country subdivision groupings from `worldcities.csv`.
-    - [x] Added subdivision-aware city assignment for citizens (create/relocate/sync), preserving US state compatibility.
-    - [x] Updated inspector city directory to group non-US countries by subdivision when data exists, and added subdivision-aware location labels.
-- [x] Migration
-  - Add internal and cross-border migration for jobs, safety, education, marriage, and status.
-  - Brain drain and talent clustering should emerge naturally.
-- [x] Urban gravity
-  - Major cities or economic centers should attract firms, skilled workers, and wealth.
-  - Implementation status:
-    - [x] Extended yearly migration pressure to include jobs, safety, education, and marriage/status pull signals in addition to existing labor-market pressure.
-    - [x] Expanded mobility flows beyond intra-bloc labor reserve moves so cross-border migration candidates can respond to stronger opportunity and safety gaps.
-    - [x] Added internal migration into higher-gravity cities and exposed yearly internal mobility plus talent mobility evidence in country policy diagnostics.
-    - [x] Weighted city selection by city population, resident concentration, business concentration, and talent clustering so major urban centers increasingly attract firms, skilled workers, and wealth.
-- [x] Infrastructure
-  - Weak infrastructure should lower productivity, raise logistics cost, and reduce educational access.
-  - Implementation status:
-    - [x] Wired country infrastructure index into business throughput via infrastructure reliability and productivity factors in daily firm simulation.
-    - [x] Added infrastructure-linked logistics cost multipliers to operating costs, increasing cost pressure under weak infrastructure.
-    - [x] Added infrastructure access effects into education baseline estimation and yearly education progression, improving attainment in stronger-infrastructure countries.
-- [x] Natural resources
-  - Resource-rich countries should have energy or commodities advantages, plus volatility and rent-seeking risks.
-  - Implementation status:
-    - [x] Added persistent country resource profile fields (`naturalResourceEndowmentIndex`, `resourceRentSeekingRiskIndex`) and yearly derivation into policy evidence.
-    - [x] Wired resource endowment into sector advantage for Energy and selected commodity-sensitive industries.
-    - [x] Wired rent-seeking/resource-risk penalties into supply stress and operating-cost volatility to model instability costs of weak resource governance.
-- [x] Demographics
-  - Track aging populations, youth bulges, labor force pressure, and fertility decline.
-  - Implementation status:
-    - [x] Added persistent demographic profile fields (`demographicAgingIndex`, `demographicYouthBulgeIndex`, `demographicLaborForcePressureIndex`, `demographicFertilityDeclineIndex`).
-    - [x] Derived yearly demographic structure signals from fertility, mortality, education, institutions, and labor stress in country profile refresh.
-    - [x] Wired demographic indices into birth/death targets and labor-force participation in yearly population pressure updates.
-    - [x] Wired demographic pressure into migration pull/push scoring so youth bulges and labor force strain influence outflow risk while aging labor gaps increase attraction pressure.
-
-## Tier 6 - Politics, Geopolitics, and Start-Era Scenarios
-
-- [x] Elections
-  - Hold elections in democratic blocs on a schedule.
-  - Let outcomes influence tax, trade, labor, immigration, and business confidence.
-- [x] Sanctions
-  - Block trade, finance, and deal flow between targeted blocs.
-  - Force firms and countries to reroute supply chains over time.
-- [ ] Expanded trade wars
-  - Move beyond simple pressure spikes into targeted sector pain and retaliation loops.
-- [ ] Wars and conflicts
-  - Add full-scale wars, civil conflicts, insurgencies, and occupation or ceasefire phases.
-  - Drafting, destruction, refugee flows, sanctions, and postwar debt should all matter.
-- [ ] Treaty and peace outcomes
-  - After wars, apply reparations, reconstruction, debt, demographic scars, and geopolitical realignment.
-- [ ] Fixed-border start-era framework
-  - Official starts should all use the same modern country roster, map topology, and city/country identity rules.
-  - Scenario variation should come from seeded macro conditions, institutions, demographics, and firm/household history rather than border redraws.
-- [ ] Start-date preset pack
-  - `1998` default sandbox.
-  - `2000` early-globalization baseline.
-  - `2008` financial-crisis stress baseline.
-  - `2016` legitimacy, polarization, and coalition-stress baseline.
-  - `2020` supply-chain and labor-shock baseline.
-  - `Present Day` deterministic current-world snapshot.
-- [ ] Shallow world prehistory
-  - Seed pre-existing dynasties, mature firms, household class momentum, debt exposure, and institutional reputation so the world feels lived-in from day one.
-- [ ] Commodity shocks
-  - Oil shocks, food shocks, shipping disruptions, and financial crises should hit globally.
-- [ ] Disaster systems
-  - Pandemics, earthquakes, floods, droughts, and industrial disasters should reshape migration, productivity, and mortality.
-- [ ] Institutional drift
-  - Countries should improve or decay over time, not stay fixed forever.
-
-## Tier 7 - Endogenous Event Engine
-
-- [ ] Replace more random events with condition-driven ones.
-- [ ] Add event prerequisites, buildup meters, and aftereffects.
-- [ ] Make events remember history.
-  - Repeated scandals should permanently weaken trust.
-  - Repeated defaults should make capital flee.
-  - Repeated wars should scar demographics and investment.
-- [ ] Add cause chains
-  - Example: energy shock -> inflation -> rate hikes -> layoffs -> populism -> tariffs -> recession.
-- [ ] Add event rarity and signature
-  - Some runs should develop differently because the world finds a distinct path, not because of arbitrary dice rolls.
-
-## Tier 8 - Observational and Storytelling Tools
-
-These are crucial because the user is watching, not controlling.
-
-- [x] Event significance weighting and narrative pacing
-  - Score events by impact, rarity, legacy depth, and cross-generational consequence.
-  - Give major events differentiated presentation (priority placement, pause-worthy styling, stronger context).
-  - Keep routine events visible without crowding out structural and dynasty-defining moments.
-- [ ] Family tree viewer
-  - Visual lineage browser for parents, spouses, children, grandchildren, heirs, and branch splits.
-- [ ] World timeline
-  - Full chronicle of births, marriages, deaths, firm launches, bankruptcies, IPOs, elections, wars, sanctions, and scandals.
-- [ ] Follow this person
-  - Pin one citizen and keep their story visible as the world updates.
-- [ ] Follow this dynasty
-  - Track one family over generations.
-- [ ] Follow this company
-  - Watch leadership, hiring, scandals, debt, and ownership change over time.
-- [ ] Explainability panels
-  - "Why did this happen?" for promotions, business launches, bankruptcies, marriages, births, and succession outcomes.
-- [ ] Country and bloc diagnostics
-  - Show top employers, biggest dynasties, unemployment, median wealth, reputation leaders, migration in or out, and inequality.
-- [ ] Heatmap modes
-  - GDP per capita
-  - inequality
-  - unemployment
-  - population density
-  - business concentration
-  - conflict risk
-  - migration flows
-- [ ] Relationship overlays
-  - Show family networks, business ownership webs, trade links, and rivalries.
-- [ ] News categorization
-  - Distinguish structural events from gossip-like human events.
-  - Let the feed surface both macro history and intimate story beats.
-
-## Tier 9 - World Memory and Persistence
-
-- [x] Simulation save and load
-  - Preserve long-running worlds.
-  - Build this on top of the Build 0 versioned schema and migration path.
-- [ ] Deterministic seeds
-  - Same seed should reproduce the same broad history for debugging and comparison.
-- [ ] Scenario presets
-  - `1998` default sandbox
-  - `2000` early-globalization baseline
-  - `2008` post-credit-expansion crisis baseline
-  - `2016` legitimacy and coalition-stress baseline
-  - `2020` supply-chain and labor-shock baseline
-  - deterministic `Present Day` snapshot
-- [ ] Prehistory generation layers
-  - Phase 1: shallow inherited conditions for families, firms, countries, and blocs.
-  - Phase 2: deep lineage backfill and richer pre-sim narrative memory.
-- [ ] Snapshot and replay
-  - Save yearly snapshots and compare world states.
-- [ ] Era summaries
-  - Generate "The 2030s were defined by..." style summaries from event history.
-
-## Tier 10 - Model Quality, Performance, and Developer Tools
-
-- [ ] Simulation balancing tools
-  - Inspect average firm lifespan, dynasty survival, mobility rates, inequality levels, and unemployment.
-- [ ] Debug overlays
-  - View hidden values like stress, education, reputation, leverage, and institutional quality.
-- [ ] Profiling and scale testing
-  - Make sure deeper systems still run well with much larger populations.
-- [ ] Save compatibility and migration audits
-  - Validate schema migrations against old snapshots and replay data as models evolve.
-- [ ] Tests for simulation invariants
-  - No duplicate family links.
-  - No impossible ages.
-  - No dead people staying employed unless intentionally modeled.
-  - No orphaned business owners without ownership resolution.
-- [x] Event audit logging
-  - Store event causes, not just event text.
-
-## Tier Completion Summary
-
-- Core simulation depth shipped: Tier 1, Tier 2, Tier 3, Tier 4, and Tier 5 major pillars are complete.
-- Major observability foundation shipped: Event significance weighting and closure/baseline telemetry are active.
-- Remaining strategic depth: Tier 6+ geopolitics and start-era systems, deterministic/replay stack maturation, and advanced diagnostics.
-
-## Concrete Backlog by Phase and Build Order
-
-If you want a realistic implementation order, build in this sequence:
-
-Loop-first sequencing note:
-
-- [ ] Phase A: stabilize the economic loop (population, labor, wages, production, consumption, demand).
-- [ ] Phase B: make the loop reactive (prices, shortages, inflation, allocation pressure).
-- [ ] Phase C: deepen the loop (households, inequality, education, mobility, dynasties).
-- [ ] Phase D: expand the world response layer (countries, trade, policy, geopolitics, endogenous events).
-- [ ] Do not expand wars, sanctions, elections, or high-level world events until the core labor-demand-income-consumption loop remains stable and explainable over long runs.
-
-### Phase A - Loop Foundation
-
-- [x] Build 0: Versioned save schema + migration hooks + snapshot compatibility baseline
-- [x] Build 1: Trait mechanical pass + simulation health governors + population layer phase 1 + unemployment + wages + hiring
-- [x] Build 2: Education + skills + worker-to-founder pipeline + population layer phase 2 (birth and death pressure)
-
-### Phase B - Loop Reactivity
-
-- [x] Build 3: Household budgets + class mobility + fertility pressure + population layer phase 3 (migration pressure)
-- [x] Build 4: Inheritance disputes + family politics + personal reputation + population layer phase 4 (inequality feedback)
-- [x] Build 5: Company reputation + industry-specific behavior
-- [x] Build 6: Supply chains + debt + credit + bankruptcy stages
-- [x] Build 7: Central banks + inflation + rates + housing sensitivity
-
-### Phase C - Loop Complexity
-
-- [x] Build 8: Stock market + outside investors + M&A
-- [x] Build 9: Country institutions + migration + regional detail
-
-### Phase D - World Response and Observability
-
-- [ ] Build 10: Elections + sanctions + wars + treaty outcomes
-- [ ] Build 11: Explainability layer + family tree + timeline + follow modes + event significance weighting
-- [ ] Build 12: Save/load UX + deterministic seeds + replay + scenario presets
-
-## Tier 6 Readiness Split
-
-Use this as the execution gate before opening full Tier 6 scope.
-
-### Must Finish Before Tier 6 Starts
-
-- [x] Build design gate brief is written for the Tier 6 kickoff:
-  - [Tier 6 kickoff brief](requirements/tier6/kickoff-gate-brief.md)
-  - [stability and failure-mode checklist](requirements/tier6/stability-failure-checklist.md)
-  - [core-loop attachment matrix for Tier 6 mechanics](requirements/tier6/core-loop-attachment-matrix.md)
-- [x] Closure resilience margin is stable in headless runs (keep `overallPassing` true and widen low-margin guardrails, especially under-utilized layoff behavior).
-  - Latest `npm run closure` baseline (2026-03-26T23:20:46.048Z) is passing with `overallPassing=true`; gate `3.2` remains inside the guardrail at `0.200` in run 3, and the latest regression artifact (2026-03-26T23:17:08.766Z) also passes.
-- [x] Tier 6 starts in constrained slices (elections/sanctions first) before wars/conflict phases.
-  - Constrained Slice 1 scaffolding is active in `src/js/app/sim.js` with elections/sanctions yearly passes and conflict phase hard-disabled.
-  - Dedicated Slice 1 contract coverage now exists via `npm run test:tier6:slice1`, including election activation, sanction activation under bounded pressure, and snapshot round-trip retention.
-  - [Tier 6 constrained slice plan](requirements/tier6/slice-plan.md)
-
-### Can Run In Parallel While Tier 6 Begins
-
-- [ ] Tier 8 observability/story tools (family tree, timeline, follow modes, explainability panels, diagnostics overlays).
-- [ ] Tier 9 deterministic/replay stack maturation (deterministic seeds, snapshot/replay, era summaries).
-- [ ] Tier 10 quality/performance tooling (balancing dashboards, profiling/scale tests, migration audits, invariant tests).
-- [ ] Remaining Core Direction polish:
-  - reduce pure randomness with more condition-driven chains
-  - define and lock the "feels alive" finish line
-
-## Immediate Next Focus
-
-- [x] Tier 4: Asset classes
-  - Separate cash, equity, business ownership, property, debt obligations, and inherited trusts.
-  - This unlocks clearer wealth compounding and richer intergenerational outcomes.
-- [x] Tier 4: Wealth transmission
-  - Shift dynasty growth from founder income dependence toward ownership and portfolio effects.
-  - This will make inheritance, social mobility, and class persistence more realistic.
-- [ ] Closure resilience margin
-  - Keep the jsdom closure harness green while widening the narrowest guardrail margins, especially under-utilized layoff behavior.
-  - Treat regression drift in headless reports as a balancing task, not as a roadmap blocker for Tier 4 work.
-- [x] Corporate ladders (v1 leadership roster shipped)
-  - This bridge is in place and ready for deeper wealth and ownership modeling.
+Every feature must declare how it enters and exits this loop:
+
+1. Labor supply and skills.
+2. Production capacity and constraints.
+3. Income, wages, profits, transfers, and owner returns.
+4. Household spending, savings, debt, fertility, and migration pressure.
+5. Demand by sector, country, city, and bloc.
+6. Prices, shortages, inflation, logistics, and allocation pressure.
+7. Firm decisions: hiring, layoffs, expansion, liquidation, investment, location, succession.
+8. Employment closure back into households, countries, inequality, migration, and future demand.
+
+## Hard Simulation Constraints
+
+Depth must come from constraints and tradeoffs, not unconstrained accumulation.
+
+- Labor supply caps hiring and expansion.
+- Demand caps revenue and sector growth.
+- Capital, debt headroom, and liquidity cap investment and survival.
+- Resources, infrastructure, logistics, and trade access cap production.
+- Housing and cost of living cap migration absorption and household surplus.
+- Education, institutions, class position, and inheritance shape life chances.
+- Inequality feeds class mobility, social pressure, institutional drift, and political/geopolitical instability.
+- Global shocks must propagate unevenly through trade, migration, prices, firms, households, and countries.
+
+## Combined Route Direction
+
+NEXUS combines these routes into one coherent product:
+
+1. **Life Simulation** - people are born into families and conditions that shape education, work, marriage, migration, wealth, illness, aging, death, and legacy.
+2. **Business Dynasty Simulation** - founders, executives, employees, firms, sectors, reputation, scandals, succession, layoffs, and bankruptcy drive economic stories.
+3. **Macro Economy Simulation** - labor, production, income, demand, prices, credit, trade, inflation, housing, and firm decisions form the systemic engine.
+4. **Generational Family Simulation** - households carry wealth, debt, status, inheritance, rivalry, migration chains, education advantage, and class position across generations.
+5. **Geopolitical Shock Simulation** - elections, sanctions, trade wars, blocs, institutional pressure, and conflict risk emerge from conditions and reshape the economy.
+6. **Inequality and Class Mobility Simulation** - the world tracks who rises, who falls, who stays trapped, and why mobility differs by country, city, class, education, migration, and inheritance.
+7. **Global Multi-Country Simulation** - countries interact through trade, migration, capital, remittances, supply chains, commodity exposure, sanctions, and bloc relationships.
+8. **Emergent Storytelling** - stories are generated from real causal evidence.
+9. **World Chronicle Interface** - newspapers, decade reports, biographies, family sagas, company histories, and country reports make the world readable.
+10. **Watchlist Interface** - the player follows entities and receives meaningful updates without controlling them.
+11. **Causal Trace System** - raw traces are developer-facing; polished why-explanations are user-facing.
+
+## User-Facing Experience Pillars
+
+### World Chronicle
+
+A readable digest of the living world:
+
+- Global front page.
+- Country reports.
+- Industry reports.
+- Business section.
+- Family and inheritance section.
+- Inequality and class mobility section.
+- Migration and housing section.
+- Geopolitical pressure section.
+- Obituaries and legacy section.
+- Decade summaries.
+
+### Watchlists
+
+The player can follow:
+
+- People.
+- Families.
+- Companies.
+- Countries.
+- Cities or regions.
+- Industries.
+- Social classes.
+- Migration corridors.
+- Trade routes.
+- Blocs and geopolitical flashpoints.
+
+Watchlists personalize the world without giving the player control.
+
+### Why Explanations
+
+Every major surfaced outcome needs an inspectable explanation:
+
+- Why did this person migrate?
+- Why did this family rise or fall?
+- Why did this company hire, lay off, expand, collapse, or survive?
+- Why did inequality rise?
+- Why did class mobility improve or decay?
+- Why did this country lose talent?
+- Why did a shock spread globally?
+- Why did this region become unstable?
+
+## Developer-Facing Architecture Pillars
+
+- Deterministic simulation is mandatory.
+- No direct `Math.random` in simulation code.
+- Seeded PRNG state must persist through saves.
+- Systems are modular by domain, not piled into monoliths.
+- Source files should stay small enough to reason about; the target cap is 800 lines per file.
+- The tick order must be explicit and stable.
+- Each domain owns its own functions but reads/writes through a clear world contract.
+- New systems require design briefs, causal-loop attachment notes, stability risks, and test coverage.
+- Developer scenario harnesses exist only to validate stability, replay, and balance.
+- User-facing storytelling reads from structured events and causal traces.
+
+## Production Phases
+
+### Phase 0 - Repository Hygiene and Vision Lock
+
+Goal: make the repo trustworthy and align future work around the global autonomous vision.
+
+- [x] Replace the old feature-sprawl roadmap with this global autonomous roadmap.
+- [x] Add `READ_MY_NEW_ROADMAP.md` as the mandatory future-developer guide.
+- [x] Add a concise `README.md` that states what NEXUS is and is not.
+- [x] Add `CONTRIBUTING.md` with architecture and workflow expectations.
+- [x] Add `CODEOWNERS` placeholder ownership.
+- [x] Ensure generated dependencies and build outputs are ignored.
+- [x] Stop tracking `node_modules/` in git.
+- [ ] Move `worldcities.csv` out of normal git tracking or into verified Git LFS.
+- [ ] Verify clone size after dependency cleanup.
+
+Exit criteria: contributors understand the product direction before writing code, and the repository no longer treats installed dependencies as source.
+
+### Phase 1 - Architecture Reset
+
+Goal: prepare the codebase for AAA-scale simulation work.
+
+- [ ] Inventory every top-level function in `src/js/app/sim.js`.
+- [ ] Group current behavior into domains: core clock, business, labour, finance, demographics, society, geopolitics, events, persistence glue, and UI glue.
+- [x] Define the first-pass domain boundary contract for each module in `requirements/architecture/domain-boundary-plan.md`.
+- [ ] Create an explicit tick orchestrator that documents the causal order.
+- [ ] Move code out of the monolithic simulation file in small, tested slices.
+- [ ] Keep each new file below the 800-line target.
+- [ ] Preserve save compatibility during every extraction.
+- [ ] Keep existing regression and determinism checks green.
+
+Exit criteria: the main simulation entry point orchestrates modules rather than containing most of the simulation.
+
+### Phase 2 - Determinism Foundation
+
+Goal: make every run reproducible and every story auditable.
+
+- [ ] Introduce a single seeded PRNG on world state.
+- [ ] Replace direct simulation randomness with domain-specific RNG calls.
+- [ ] Fork RNG streams by domain so one feature does not desync unrelated systems.
+- [ ] Persist RNG state in saves.
+- [ ] Add lint/test enforcement against direct simulation `Math.random` usage.
+- [ ] Maintain golden-run state hashes for key horizons.
+
+Exit criteria: same seed plus same inputs produces byte-identical outcomes across save/load and replay.
+
+### Phase 3 - Global Core Loop Binding
+
+Goal: make the world economy interact as one system.
+
+- [ ] Enforce labor supply caps.
+- [ ] Enforce demand caps.
+- [ ] Enforce capital and liquidity caps.
+- [ ] Enforce logistics, resource, and trade-access caps.
+- [ ] Enforce housing and cost-of-living migration caps.
+- [ ] Make country and bloc conditions flow into firms and households.
+- [ ] Make firm and household outcomes flow back into country and bloc conditions.
+- [ ] Add property-style tests for each hard constraint.
+
+Exit criteria: global changes propagate through people, households, firms, countries, and blocs without decorative shortcuts.
+
+### Phase 4 - Inequality, Class Mobility, and Family Memory
+
+Goal: make social outcomes central, measurable, and story-visible.
+
+- [ ] Track class position per household and family lineage.
+- [ ] Track intergenerational mobility outcomes.
+- [ ] Connect education, inheritance, housing, migration, institutions, and labor markets to mobility.
+- [ ] Add family status timelines.
+- [ ] Add country-level mobility reports.
+- [ ] Add inequality-to-institution and inequality-to-social-pressure feedback.
+- [ ] Surface class mobility stories in the World Chronicle.
+
+Exit criteria: players can inspect why families rise, fall, or stay trapped across generations.
+
+### Phase 5 - Business and Labor Deepening
+
+Goal: make firms the main bridge between macro systems and household lives.
+
+- [ ] Strengthen founder, leadership, succession, employee, and reputation systems.
+- [ ] Tie firm hiring and layoffs to real demand, capital, labor, and logistics conditions.
+- [ ] Tie wages and employment to household finances and class mobility.
+- [ ] Add explainable company histories.
+- [ ] Surface firm collapses, expansions, scandals, and succession crises in the World Chronicle.
+
+Exit criteria: every major company story has visible economic and human consequences.
+
+### Phase 6 - Global Interdependence
+
+Goal: make countries meaningfully affect each other.
+
+- [ ] Model trade dependencies and rerouting pressure.
+- [ ] Model migration corridors and talent drift.
+- [ ] Model remittance flows.
+- [ ] Model global supply-chain exposure by sector.
+- [ ] Model bloc-level pressure and spillovers.
+- [ ] Connect global shocks to local household, firm, and country outcomes.
+
+Exit criteria: a shock in one region can create believable second- and third-order effects elsewhere.
+
+### Phase 7 - Geopolitical Pressure Without Player Control
+
+Goal: add world pressure systems while preserving autonomous observation.
+
+- [ ] Add elections or leadership transitions as pressure outcomes, not player choices.
+- [ ] Add sanctions and trade-war mechanics attached to trade, prices, firms, and households.
+- [ ] Add conflict-risk indicators before any direct conflict simulation.
+- [ ] Add institutional trust, instability, and policy-stance drift as consequences of material conditions.
+- [ ] Surface geopolitics through world reports and causal explanations.
+
+Exit criteria: geopolitics changes the economy and lives without becoming a strategy layer.
+
+### Phase 8 - Emergent Storytelling and World Chronicle
+
+Goal: make the simulation readable as history.
+
+- [ ] Create structured event types for major state changes.
+- [ ] Add event significance scoring.
+- [ ] Add biographies for people.
+- [ ] Add family sagas.
+- [ ] Add company histories.
+- [ ] Add country reports.
+- [ ] Add global newspaper-style summaries.
+- [ ] Add decade reports.
+- [ ] Connect each story to causal trace evidence.
+
+Exit criteria: the player can understand the world through stories generated from real simulation causes.
+
+### Phase 9 - Watchlists and Investigation
+
+Goal: let players personalize observation without controlling outcomes.
+
+- [ ] Add watchlists for people, families, firms, countries, cities, industries, migration routes, trade routes, and blocs.
+- [ ] Prioritize watchlisted events in the World Chronicle.
+- [ ] Add timeline views for watched entities.
+- [ ] Add why-panels for watched outcomes.
+- [ ] Add follow-descendants and follow-successor options.
+
+Exit criteria: players can follow their own slice of the world while the simulation remains autonomous.
+
+### Phase 10 - Performance, Scale, and Release Hardening
+
+Goal: make the global simulation shippable.
+
+- [ ] Define target world sizes and performance budgets.
+- [ ] Add performance regression checks.
+- [ ] Add memory regression checks.
+- [ ] Add save migration tests.
+- [ ] Add long-horizon stability tests.
+- [ ] Polish the core user surfaces: World Chronicle, watchlists, map, people, firms, countries, class mobility, and why panels.
+
+Exit criteria: a user can open the world, run history, follow entities, and understand major consequences without developer help.
+
+## Current Implementation Map
+
+- `src/js/app/sim.js` remains the legacy primary simulation engine until extracted.
+- `src/js/app/sim-core.js` should become the stable orchestration home.
+- `src/js/app/sim-business.js` owns business and firm behavior.
+- `src/js/app/sim-labour.js` owns labor-market behavior.
+- `src/js/app/sim-finance.js` owns finance, credit, capital, and liquidity behavior.
+- `src/js/app/sim-demographics.js` owns population, births, deaths, aging, and migration pressure.
+- `src/js/app/sim-society.js` owns inequality, class mobility, institutions, and social pressure.
+- `src/js/app/sim-geopolitics.js` owns sanctions, blocs, elections, conflict risk, and policy-stance drift.
+- `src/js/app/events.js` owns structured event creation and narrative evidence, not missing mechanics.
+- `src/js/app/state.js` owns selectors, derived aggregates, and cross-entity indexing.
+- `src/js/app/persistence.js` owns save schema, migrations, and compatibility.
+- `src/js/app/ui.js` is the legacy UI entry and should be split into World Chronicle, watchlists, map, inspectors, and why panels over time.
+- `src/js/app/data.js` owns exogenous baseline data and start presets.
+- `src/js/app/map.js` owns geographic presentation, not economic logic.
+
+## Build Gate Template
+
+Every new system must answer these questions before implementation:
+
+1. Which core-loop variables does it read?
+2. Which core-loop variables does it write?
+3. Which people, households, firms, countries, or blocs can be affected?
+4. How can it create upward effects from micro to macro?
+5. How can it create downward effects from macro to micro?
+6. What degenerate states can it cause?
+7. What soft governors prevent collapse or stagnation?
+8. What deterministic tests prove it works?
+9. What structured events or causal traces make it explainable?
+10. How will the World Chronicle summarize it for the user?
+
+## Final Product Promise
+
+NEXUS is successful when a player can watch decades of global history unfold, follow any person, family, company, country, class, or crisis, and understand how economic systems, inequality, migration, business decisions, institutions, and geopolitical shocks created the world they see.

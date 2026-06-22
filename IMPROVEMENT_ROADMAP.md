@@ -1,4 +1,7 @@
-# NEXUS — 100x Improvement Roadmap
+# Legacy Engineering Notes
+
+> Superseded for product direction by `ROADMAP.md` and `READ_MY_NEW_ROADMAP.md`. Use this file only as historical engineering context. If this file conflicts with the global autonomous roadmap, the new roadmap wins.
+
 
 This is an engineering and scope-discipline roadmap, not a feature roadmap.
 It exists to take NEXUS from "ambitious hobby codebase" to "shippable, auditable, deterministic simulation."
